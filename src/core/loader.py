@@ -28,13 +28,24 @@ def load_modules(root_dir="src/modules"):
                         and issubclass(obj, BaseModule)
                         and obj is not BaseModule
                     ):
+                        # Extract category and name
+                        category = os.path.relpath(root, root_dir).replace(os.sep, "/")
+                        friendly_name = getattr(obj, "info", {}).get("name", "").lower()
+
+                        # Inject category into info for the module to know where it is
+                        if hasattr(obj, "info"):
+                            obj.info["category"] = category
+
+                        if friendly_name:
+                            # Map by category/name
+                            if category != ".":
+                                category_name = f"{category}/{friendly_name}"
+                                found_modules[category_name] = obj
+
+                            # Map by short name
+                            found_modules[friendly_name] = obj
+
                         # Map by full module path (backward compat)
                         found_modules[module_path] = obj
 
-                        # Map by friendly name from module info
-                        friendly_name = getattr(obj, "info", {}).get("name", "").lower()
-                        if friendly_name:
-                            found_modules[friendly_name] = obj
-
     return found_modules
-
