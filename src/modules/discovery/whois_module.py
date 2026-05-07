@@ -5,7 +5,7 @@ from src.core.base_module import BaseModule
 
 
 class WhoisModule(BaseModule):
-    info = {
+    metadata = {
         "name": "Whois",
         "description": "Retrieves registration details, expiration dates, and nameservers for a domain.",
         "author": "Samuel Marques",
@@ -24,7 +24,7 @@ class WhoisModule(BaseModule):
         super().__init__()
 
         # Initialize options with default values
-        self.options = {k: v[0] for k, v in self.info["options"].items()}
+        self.options = {k: v[0] for k, v in self.metadata["options"].items()}
 
     def run(self):
         if not self.pre_run():

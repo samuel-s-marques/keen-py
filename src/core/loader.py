@@ -9,7 +9,7 @@ def load_modules(root_dir="src/modules"):
     """Load modules from a 'src/modules' directory.
 
     Returns a dict mapping both the full module path and the
-    lowercase friendly name (from the class's info attribute)
+    lowercase friendly name (from the class's metadata attribute)
     to the module class.
     """
     found_modules = {}
@@ -30,11 +30,13 @@ def load_modules(root_dir="src/modules"):
                     ):
                         # Extract category and name
                         category = os.path.relpath(root, root_dir).replace(os.sep, "/")
-                        friendly_name = getattr(obj, "info", {}).get("name", "").lower()
+                        friendly_name = (
+                            getattr(obj, "metadata", {}).get("name", "").lower()
+                        )
 
-                        # Inject category into info for the module to know where it is
-                        if hasattr(obj, "info"):
-                            obj.info["category"] = category
+                        # Inject category into metadata for the module to know where it is
+                        if hasattr(obj, "metadata"):
+                            obj.metadata["category"] = category
 
                         if friendly_name:
                             # Map by category/name

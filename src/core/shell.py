@@ -9,7 +9,6 @@ from src.core.loader import load_modules
 from src.utils.print_utils import error, info
 
 
-
 class Shell(Cmd):
     def __init__(self) -> None:
         super().__init__()
@@ -17,7 +16,6 @@ class Shell(Cmd):
         self.prompt = f"{stylize('keen', Style(color=Color.BLUE))} > "
         self.modules = load_modules()
         self.current_module = None
-
 
         banner = Figlet(font="slant").renderText("Keen")
         banner_styled = stylize(
@@ -52,7 +50,6 @@ class Shell(Cmd):
             if name.startswith(text.lower()) and "src.modules" not in name
         ]
 
-
     def do_use(self, arg: str):
         """Select a module to use. You can use the full path or just the module name (e.g. 'use whois')."""
         module_name = str(arg).strip().lower()
@@ -63,8 +60,8 @@ class Shell(Cmd):
 
         if module_name in self.modules:
             self.current_module = self.modules[module_name]()
-            category = self.current_module.info.get("category", "")
-            name = self.current_module.info.get("name", "").lower()
+            category = self.current_module.metadata.get("category", "")
+            name = self.current_module.metadata.get("name", "").lower()
 
             if category and category != ".":
                 display_path = f"{category}/{name}"
@@ -78,7 +75,6 @@ class Shell(Cmd):
             error(
                 f"Module '{module_name}' not found. Type 'list modules' to see available modules."
             )
-
 
     def do_set(self, arg: str) -> None:
         """Set a module option."""
@@ -108,7 +104,6 @@ class Shell(Cmd):
         self.current_module = None
         self.prompt = f"{stylize('keen', Style(color=Color.BLUE))} > "
 
-
     def do_show(self, arg: str) -> None:
         """Show available <modules | options | info>. Another alias to list."""
         if not arg:
@@ -124,7 +119,7 @@ class Shell(Cmd):
             self.do_list("modules")
         elif arg.lower() == "info":
             if self.current_module:
-                self.current_module.show_info()
+                self.current_module.show_metadata()
             else:
                 error("No module selected.")
         else:
@@ -155,7 +150,7 @@ class Shell(Cmd):
                     seen.add(cls)
                     count += 1
                     # key will be the first one inserted (category/name if it exists)
-                    desc = getattr(cls, "info", {}).get("description", "")
+                    desc = getattr(cls, "metadata", {}).get("description", "")
                     table.add_row(key, desc)
 
             info(f"Available modules ({count}):")

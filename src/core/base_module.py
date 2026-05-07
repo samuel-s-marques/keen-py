@@ -9,11 +9,11 @@ class BaseModule:
     """Base class for all modules.
 
     Attributes:
-        info (dict): Dictionary containing module information.
+        metadata (dict): Dictionary containing module metadata.
         options (dict): Dictionary containing module options.
     """
 
-    info = {
+    metadata = {
         "name": "Base",
         "description": "Base Module",
         "author": "Samuel Marques",
@@ -26,13 +26,13 @@ class BaseModule:
 
     def set_option(self, key, value) -> bool:
         # Search for the key in a case-insensitive way
-        for opt_key in self.info["options"]:
+        for opt_key in self.metadata["options"]:
             if opt_key.lower() == key.lower():
                 self.options[opt_key] = value
                 return True
         return False
 
-    def show_info(self) -> None:
+    def show_metadata(self) -> None:
         """Show information about the module."""
         table = Table(
             show_header=True,
@@ -46,7 +46,7 @@ class BaseModule:
         table.add_column("Property", justify="left", style="cyan", no_wrap=True)
         table.add_column("Value", justify="left", style="white")
 
-        for key, value in self.info.items():
+        for key, value in self.metadata.items():
             if key == "options":
                 continue
             table.add_row(key.capitalize(), str(value))
@@ -70,7 +70,7 @@ class BaseModule:
         table.add_column("Required", justify="center", style="magenta")
         table.add_column("Description", justify="left", style="white")
 
-        for key, value in self.info["options"].items():
+        for key, value in self.metadata["options"].items():
             # value = [default, required, description, validator]
             required = "Yes" if value[1] else "No"
             current_value = self.options.get(key, value[0])
@@ -87,7 +87,7 @@ class BaseModule:
 
     def check_required_options(self) -> bool:
         """Check if all required options are set."""
-        for key, value in self.info["options"].items():
+        for key, value in self.metadata["options"].items():
             if value[1] and not self.options.get(key, None):
                 error(f"Required option '{key}' is not set.")
                 return False
@@ -95,7 +95,7 @@ class BaseModule:
 
     def validate_options(self) -> bool:
         """Check if the module options are valid."""
-        for key, value in self.info["options"].items():
+        for key, value in self.metadata["options"].items():
             validator = value[3]
             if validator and not InputValidator.VALIDATORS[validator](
                 self.options.get(key, None)
