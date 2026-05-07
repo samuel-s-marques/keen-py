@@ -9,6 +9,7 @@ class WhoisModule(BaseModule):
         "name": "Whois",
         "description": "Retrieves registration details, expiration dates, and nameservers for a domain.",
         "author": "Samuel Marques",
+        "version": "1.0.0",
         "options": {
             "TARGET": [
                 "",
