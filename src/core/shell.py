@@ -18,9 +18,17 @@ class Shell(Cmd):
             Style(color=Color.CYAN),
         )
 
+    def complete_use(self, text, line, begidx, endidx):
+        """Tab-completion for the 'use' command."""
+        return [
+            name
+            for name in self.modules
+            if name.startswith(text.lower()) and "src.modules" not in name
+        ]
+
     def do_use(self, arg: str):
-        """Select a module to use."""
-        module_name = str(arg).strip()
+        """Select a module to use. You can use the full path or just the module name (e.g. 'use whois')."""
+        module_name = str(arg).strip().lower()
 
         if not module_name:
             error("Usage: use <module_name>")
@@ -28,9 +36,12 @@ class Shell(Cmd):
 
         if module_name in self.modules:
             self.current_module = self.modules[module_name]()
-            self.prompt = f"keen({module_name}) > "
+            display_name = self.current_module.info.get("name", module_name)
+            self.prompt = f"keen({display_name}) > "
         else:
-            error(f"Module {module_name} not found.")
+            error(
+                f"Module '{module_name}' not found. Type 'list modules' to see available modules."
+            )
 
     def do_set(self, arg: str) -> None:
         """Set a module option."""
@@ -40,10 +51,10 @@ class Shell(Cmd):
 
         try:
             key, value = arg.split(" ", 1)
-            if self.current_module.set_option(key.upper(), value):
-                info(f"{key} => {value}")
+            if self.current_module.set_option(key.lower(), value):
+                info(f"{key.upper()} => {value}")
             else:
-                error(f"Invalid option: {key}")
+                error(f"Invalid option: {key.upper()}")
         except ValueError:
             error("Usage: set <option> <value>")
 
@@ -73,8 +84,13 @@ class Shell(Cmd):
                 error("No module selected.")
         elif arg.lower() == "modules":
             self.do_list("modules")
+        elif arg.lower() == "info":
+            if self.current_module:
+                self.current_module.show_info()
+            else:
+                error("No module selected.")
         else:
-            error("Usage: show options | modules")
+            error("Usage: show options | modules | info")
 
     def do_list(self, arg: str) -> None:
         """List available <modules | options>. Another alias to show."""
@@ -83,10 +99,21 @@ class Shell(Cmd):
             return
 
         if arg.lower() == "modules":
-            info(f"Available modules ({len(self.modules)}):")
+            # Deduplicate: multiple keys can point to the same class
+            seen = set()
+            unique_modules = []
+            for key, cls in self.modules.items():
+                if cls not in seen:
+                    seen.add(cls)
+                    unique_modules.append((key, cls))
 
-            for module in self.modules:
-                info(module)
+            info(f"Available modules ({len(unique_modules)}):")
+
+            for key, cls in unique_modules:
+                mod_info = getattr(cls, "info", {})
+                name = mod_info.get("name", key)
+                desc = mod_info.get("description", "")
+                info(f"  {name:<20} {desc}")
         elif arg.lower() == "options":
             if self.current_module:
                 self.current_module.print_options()
