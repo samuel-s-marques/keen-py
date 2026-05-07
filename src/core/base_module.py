@@ -17,6 +17,7 @@ class BaseModule:
         "name": "Base",
         "description": "Base Module",
         "author": "Samuel Marques",
+        "version": "1.0.0",
         "options": {},
     }
 
