@@ -1,3 +1,4 @@
+from src.utils.print_utils import error
 from tabulate import tabulate
 
 from src.utils.print_utils import info
@@ -11,20 +12,42 @@ class BaseModule:
         options (dict): Dictionary containing module options.
     """
 
+    info = {
+        "name": "Base",
+        "description": "Base Module",
+        "author": "Samuel Marques",
+        "options": {},
+    }
+
     def __init__(self) -> None:
-        self.info = {
-            "name": "Base",
-            "description": "Base Module",
-            "author": "Samuel Marques",
-            "options": {},
-        }
         self.options = {}
 
     def set_option(self, key, value) -> bool:
-        if key in self.info["options"]:
-            self.options[key] = value
-            return True
+        # Search for the key in a case-insensitive way
+        for opt_key in self.info["options"]:
+            if opt_key.lower() == key.lower():
+                self.options[opt_key] = value
+                return True
         return False
+
+    def show_info(self) -> None:
+        """Show information about the module."""
+        info(f"Information for {self.info['name']}:")
+        table = []
+
+        for key, value in self.info.items():
+            table.append([key.capitalize(), value])
+
+        print(
+            tabulate(
+                table,
+                headers=["Option", "Value"],
+                tablefmt="grid",
+                colalign=("left", "left"),
+                missingval="N/A",
+            )
+            + "\n"
+        )
 
     def print_options(self) -> None:
         info(f"Options for {self.info['name']}:")
@@ -37,7 +60,9 @@ class BaseModule:
             tabulate(
                 table,
                 headers=["Option", "Value", "Required", "Description"],
-                tablefmt="pretty",
+                tablefmt="grid",
+                colalign=("left", "left", "left", "left"),
+                missingval="N/A",
             )
             + "\n"
         )
@@ -47,3 +72,11 @@ class BaseModule:
         This method should be implemented by each module.
         """
         raise NotImplementedError("Each module must implement its own 'run' method.")
+
+    def check_required_options(self) -> bool:
+        """Check if all required options are set."""
+        for key, value in self.info["options"].items():
+            if value[1] and not self.options.get(key, None):
+                error(f"Required option '{key}' is not set.")
+                return False
+        return True
