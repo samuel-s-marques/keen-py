@@ -10,6 +10,7 @@ Keen, as in keen observation, is a reconnaissance and OSINT tool for ethical hac
 - [ ] Add notifications (Telegram, Discord, Email) for job completion/failure
 - [ ] Add PDF and documents generation capabilities
 - [ ] Add plugins
+    - [ ] Add plugin system
     - [ ] DNS enumeration
     - [ ] Subdomain enumeration
     - [ ] Port scanning
