@@ -1,4 +1,3 @@
-from src.utils.print_utils import info
 import whois
 
 from src.utils.print_utils import error
@@ -11,7 +10,12 @@ class WhoisModule(BaseModule):
         "description": "Retrieves registration details, expiration dates, and nameservers for a domain.",
         "author": "Samuel Marques",
         "options": {
-            "TARGET": ["", True, "The domain name to lookup (e.g. google.com)."],
+            "TARGET": [
+                "",
+                True,
+                "The domain name to lookup (e.g. google.com).",
+                "domain",
+            ],
         },
     }
 
@@ -22,7 +26,7 @@ class WhoisModule(BaseModule):
         self.options = {k: v[0] for k, v in self.info["options"].items()}
 
     def run(self):
-        if not self.check_required_options():
+        if not self.pre_run():
             return
 
         target = self.options.get("TARGET")
