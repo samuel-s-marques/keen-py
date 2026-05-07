@@ -2,7 +2,7 @@ from rich.console import Console
 from rich.table import Table
 
 from src.utils.validator import InputValidator
-from src.utils.print_utils import error, info
+from src.utils.print_utils import error
 
 
 class BaseModule:
