@@ -6,26 +6,26 @@ from src.core.base_module import BaseModule
 
 
 class WhoisModule(BaseModule):
+    info = {
+        "name": "Whois",
+        "description": "Retrieves registration details, expiration dates, and nameservers for a domain.",
+        "author": "Samuel Marques",
+        "options": {
+            "TARGET": ["", True, "The domain name to lookup (e.g. google.com)."],
+        },
+    }
+
     def __init__(self) -> None:
         super().__init__()
-        self.info = {
-            "name": "Whois",
-            "description": "Retrieves registration details, expiration dates, and nameservers for a domain.",
-            "author": "Samuel Marques",
-            "options": {
-                "TARGET": ["", True, "The domain name to lookup (e.g. google.com)."],
-            },
-        }
 
         # Initialize options with default values
         self.options = {k: v[0] for k, v in self.info["options"].items()}
 
     def run(self):
-        target = self.options.get("TARGET")
+        if not self.check_required_options():
+            return
 
-        if not target:
-            error("TARGET option is required.")
-            return None
+        target = self.options.get("TARGET")
 
         try:
             w = whois.whois(target)
