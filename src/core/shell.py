@@ -18,8 +18,14 @@ class Shell(Cmd):
             Style(color=Color.CYAN),
         )
 
-    def do_use(self, module_name: str):
+    def do_use(self, arg: str):
         """Select a module to use."""
+        module_name = str(arg).strip()
+
+        if not module_name:
+            error("Usage: use <module_name>")
+            return
+
         if module_name in self.modules:
             self.current_module = self.modules[module_name]()
             self.prompt = f"keen({module_name}) > "
@@ -77,7 +83,7 @@ class Shell(Cmd):
             return
 
         if arg.lower() == "modules":
-            info(f"Available modules ({len(self.modules)}):\n")
+            info(f"Available modules ({len(self.modules)}):")
 
             for module in self.modules:
                 info(module)
