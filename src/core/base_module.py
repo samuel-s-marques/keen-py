@@ -1,7 +1,8 @@
-from src.utils.print_utils import error
-from tabulate import tabulate
+from rich.console import Console
+from rich.table import Table
 
-from src.utils.print_utils import info
+from src.utils.validator import InputValidator
+from src.utils.print_utils import error, info
 
 
 class BaseModule:
@@ -32,40 +33,50 @@ class BaseModule:
 
     def show_info(self) -> None:
         """Show information about the module."""
-        info(f"Information for {self.info['name']}:")
-        table = []
+        table = Table(
+            show_header=True,
+            header_style="bold blue",
+            title="Module Information",
+            title_style="bold cyan",
+            show_lines=True,
+            expand=True,
+        )
+
+        table.add_column("Property", justify="left", style="cyan", no_wrap=True)
+        table.add_column("Value", justify="left", style="white")
 
         for key, value in self.info.items():
-            table.append([key.capitalize(), value])
+            if key == "options":
+                continue
+            table.add_row(key.capitalize(), str(value))
 
-        print(
-            tabulate(
-                table,
-                headers=["Option", "Value"],
-                tablefmt="grid",
-                colalign=("left", "left"),
-                missingval="N/A",
-            )
-            + "\n"
-        )
+        console = Console()
+        console.print(table)
 
     def print_options(self) -> None:
-        info(f"Options for {self.info['name']}:")
-        table = []
+        """Show the module options."""
+        table = Table(
+            show_header=True,
+            header_style="bold blue",
+            title="Module Options",
+            title_style="bold cyan",
+            show_lines=True,
+            expand=True,
+        )
+
+        table.add_column("Option", justify="left", style="cyan", no_wrap=True)
+        table.add_column("Current Value", justify="left", style="white")
+        table.add_column("Required", justify="center", style="magenta")
+        table.add_column("Description", justify="left", style="white")
 
         for key, value in self.info["options"].items():
-            table.append([key, value[0], value[1], value[2]])
+            # value = [default, required, description, validator]
+            required = "Yes" if value[1] else "No"
+            current_value = self.options.get(key, value[0])
+            table.add_row(key, str(current_value), required, str(value[2]))
 
-        print(
-            tabulate(
-                table,
-                headers=["Option", "Value", "Required", "Description"],
-                tablefmt="grid",
-                colalign=("left", "left", "left", "left"),
-                missingval="N/A",
-            )
-            + "\n"
-        )
+        console = Console()
+        console.print(table)
 
     def run(self) -> None:
         """
@@ -79,4 +90,25 @@ class BaseModule:
             if value[1] and not self.options.get(key, None):
                 error(f"Required option '{key}' is not set.")
                 return False
+        return True
+
+    def validate_options(self) -> bool:
+        """Check if the module options are valid."""
+        for key, value in self.info["options"].items():
+            validator = value[3]
+            if validator and not InputValidator.VALIDATORS[validator](
+                self.options.get(key, None)
+            ):
+                error(f"Invalid value for {key.upper()}. It should be a {validator}.")
+                return False
+        return True
+
+    def pre_run(self) -> bool:
+        """Pre-run checks."""
+        if not self.check_required_options():
+            return False
+
+        if not self.validate_options():
+            return False
+
         return True
