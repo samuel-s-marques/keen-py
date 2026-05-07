@@ -39,3 +39,12 @@ Keen, as in keen observation, is a reconnaissance and OSINT tool for ethical hac
   - [ ] Dehashed API
   - [ ] DarkBeast API
   - [ ] Have I Been Pwned API
+- [ ] Add API key management
+- [ ] Add documentation
+  - [ ] Add module creation guide
+  - [ ] Add API integration guide
+  - [ ] Add features guide
+  - [ ] Add installation guide
+  - [ ] Add usage guide
+- [ ] Add modules
+  - [x] WHOIS
