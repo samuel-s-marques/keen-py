@@ -1,3 +1,6 @@
+from src.utils.print_utils import info
+
+
 class BaseModule:
     """Base class for all modules.
 
@@ -20,6 +23,11 @@ class BaseModule:
             self.options[key] = value
             return True
         return False
+
+    def print_options(self) -> None:
+        info(f"Options for {self.info['name']}:")
+        for key, value in self.info["options"].items():
+            info(f"{key}: {value}")
 
     def run(self) -> None:
         """
