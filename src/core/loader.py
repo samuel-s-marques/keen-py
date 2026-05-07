@@ -2,6 +2,7 @@ import importlib
 import os
 import inspect
 
+
 def load_modules(root_dir="src/modules"):
     """Load modules from a 'src/modules' directory."""
     found_modules = {}
