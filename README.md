@@ -1,4 +1,14 @@
 # keen-py
+
+```
+    __ __
+   / //_/__  ___  ____ 
+  / ,< / _ \/ _ \/ __ \
+ / /| /  __/  __/ / / /
+/_/ |_\___/\___/_/ /_/ 
+
+```
+
 Keen, as in keen observation, is a reconnaissance and OSINT tool for ethical hacking and penetration testing.
 
 ## To Do
