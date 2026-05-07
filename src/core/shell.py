@@ -1,9 +1,10 @@
 from cmd2 import Cmd, Color, stylize
 from rich.style import Style
 from pyfiglet import Figlet
+import os
 
 from src.core.loader import load_modules
-from src.utils.print_utils import error, info, success, warn
+from src.utils.print_utils import error, info
 
 
 class Shell(Cmd):
@@ -72,9 +73,9 @@ class Shell(Cmd):
         self.prompt = "keen > "
 
     def do_show(self, arg: str) -> None:
-        """Show available <modules | options>. Another alias to list."""
+        """Show available <modules | options | info>. Another alias to list."""
         if not arg:
-            error("Usage: show <options | modules>")
+            error("Usage: show <options | modules | info>")
             return
 
         if arg.lower() == "options":
@@ -90,7 +91,7 @@ class Shell(Cmd):
             else:
                 error("No module selected.")
         else:
-            error("Usage: show options | modules | info")
+            error("Usage: show <options | modules | info>")
 
     def do_list(self, arg: str) -> None:
         """List available <modules | options>. Another alias to show."""
@@ -121,3 +122,7 @@ class Shell(Cmd):
                 error("No module selected.")
         else:
             error("Usage: list <modules | options>")
+
+    def do_clear(self, arg: str) -> None:
+        """Clear the screen."""
+        os.system("cls" if os.name == "nt" else "clear")
