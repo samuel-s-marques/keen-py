@@ -1,3 +1,5 @@
+from tabulate import tabulate
+
 from src.utils.print_utils import info
 
 
@@ -26,8 +28,19 @@ class BaseModule:
 
     def print_options(self) -> None:
         info(f"Options for {self.info['name']}:")
+        table = []
+
         for key, value in self.info["options"].items():
-            info(f"{key}: {value}")
+            table.append([key, value[0], value[1], value[2]])
+
+        print(
+            tabulate(
+                table,
+                headers=["Option", "Value", "Required", "Description"],
+                tablefmt="pretty",
+            )
+            + "\n"
+        )
 
     def run(self) -> None:
         """
