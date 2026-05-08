@@ -24,7 +24,7 @@ class SubdomainModule(BaseModule):
             "METHOD": [
                 "all",
                 False,
-                "Method to use (bruteforce, dns, passive, online, all).",
+                "Method to use (bruteforce, dns, passive, all).",
                 "",
             ],
             "WORDLIST": [
@@ -56,7 +56,6 @@ class SubdomainModule(BaseModule):
                     self._find_by_dns,
                     self._find_by_bruteforce,
                     self._find_by_passive,
-                    self._find_online,
                 ]
                 with concurrent.futures.ProcessPoolExecutor() as executor:
                     futures = {
@@ -72,8 +71,6 @@ class SubdomainModule(BaseModule):
                             error(
                                 f"Method {futures[future]} generated an exception: {exc}"
                             )
-            elif method.lower() == "online":
-                subdomains = self._find_online(target)
             elif method.lower() == "dns":
                 subdomains = self._find_by_dns(target)
             elif method.lower() == "bruteforce":
@@ -172,10 +169,7 @@ class SubdomainModule(BaseModule):
             return None
 
     def _find_by_passive(self, target: str) -> set:
-        return set()
-
-    def _find_online(self, target: str) -> set:
-        """Get domains from online sources."""
+        """Get domains from passive sources."""
         subdomains = set()
 
         with concurrent.futures.ProcessPoolExecutor() as executor:
