@@ -3,6 +3,9 @@ import re
 import concurrent.futures
 import socket
 import os
+import dns.resolver
+import dns.zone
+import dns.query
 
 from src.utils.print_utils import error, info
 from src.core.base_module import BaseModule
@@ -110,7 +113,73 @@ class SubdomainModule(BaseModule):
         return subdomains
 
     def _find_by_dns(self, target: str) -> set:
-        return set()
+        """Find subdomains using DNS techniques (AXFR, SRV)."""
+        subdomains = set()
+
+        # Zone Transfer (AXFR)
+        try:
+            ns_answers = dns.resolver.resolve(target, "NS")
+            for ns in ns_answers:
+                ns_str = str(ns.target).rstrip(".")
+                try:
+                    # Attempt AXFR
+                    xfr = dns.query.xfr(ns_str, target, timeout=10)
+                    zone = dns.zone.from_xfr(xfr)
+                    if zone:
+                        for name, node in zone.nodes.items():
+                            hostname = (
+                                f"{name}.{target}" if str(name) != "@" else target
+                            )
+                            subdomains.add(str(hostname).rstrip("."))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Common SRV records
+        srv_records = [
+            "_sip._tcp",
+            "_sip._udp",
+            "_sip._tls",
+            "_autodiscover._tcp",
+            "_xmpp-server._tcp",
+            "_xmpp-client._tcp",
+            "_ldap._tcp",
+            "_gc._msdcs",
+            "_kerberos._tcp",
+            "_kpasswd._tcp",
+            "_vlmcs._tcp",
+            "_jabber._tcp",
+            "_h323ls._udp",
+            "_h323cs._tcp",
+        ]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {
+                executor.submit(self._check_srv, f"{srv}.{target}"): srv
+                for srv in srv_records
+            }
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                    if result:
+                        subdomains |= result
+                except Exception:
+                    pass
+
+        return subdomains
+
+    def _check_srv(self, srv_target: str) -> set:
+        """Helper to check a specific SRV record."""
+        found = set()
+        try:
+            answers = dns.resolver.resolve(srv_target, "SRV")
+            for rdata in answers:
+                hostname = str(rdata.target).rstrip(".")
+                found.add(hostname)
+        except Exception:
+            pass
+        return found
 
     def _find_by_bruteforce(self, target: str) -> set:
         """Get values from wordlist and check if the subdomain exists."""
