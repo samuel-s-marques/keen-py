@@ -58,3 +58,4 @@ Keen, as in keen observation, is a reconnaissance and OSINT tool for ethical hac
   - [ ] Add usage guide
 - [ ] Add modules
   - [x] WHOIS
+  - [x] Subdomain enumeration
