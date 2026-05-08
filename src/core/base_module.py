@@ -28,6 +28,9 @@ class BaseModule:
         # Search for the key in a case-insensitive way
         for opt_key in self.metadata["options"]:
             if opt_key.lower() == key.lower():
+                # Strip quotes if the value is a string
+                if isinstance(value, str):
+                    value = value.strip("\"'")
                 self.options[opt_key] = value
                 return True
         return False
