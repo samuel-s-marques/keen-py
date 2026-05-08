@@ -1,6 +1,8 @@
 import requests
 import re
 import concurrent.futures
+import socket
+import os
 
 from src.utils.print_utils import error, info
 from src.core.base_module import BaseModule
@@ -114,13 +116,60 @@ class SubdomainModule(BaseModule):
         return set()
 
     def _find_by_bruteforce(self, target: str) -> set:
-        wordlist = self.options.get("WORDLIST")
+        """Get values from wordlist and check if the subdomain exists."""
+        wordlist_path = self.options.get("WORDLIST")
 
-        if not wordlist:
-            error("Wordlist is required for bruteforce method.")
+        if not wordlist_path or not os.path.exists(wordlist_path):
+            error(
+                "Wordlist is required and must be a valid file for bruteforce method."
+            )
             return set()
 
-        return set()
+        subdomains = set()
+
+        try:
+            with open(wordlist_path, "r", encoding="utf-8", errors="ignore") as f:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+                    batch_size = 1000
+                    batch = []
+
+                    for line in f:
+                        sub = line.strip()
+                        if sub:
+                            batch.append(f"{sub}.{target}")
+
+                        if len(batch) >= batch_size:
+                            self._process_batch(executor, batch, subdomains)
+                            batch = []
+
+                    if batch:
+                        self._process_batch(executor, batch, subdomains)
+
+        except Exception as e:
+            error(f"Error during bruteforce: {str(e)}")
+
+        return subdomains
+
+    def _process_batch(self, executor, batch: list, subdomains: set) -> None:
+        """Helper to process a batch of subdomains."""
+        futures = {
+            executor.submit(self._check_subdomain, domain): domain for domain in batch
+        }
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                res = future.result()
+                if res:
+                    subdomains.add(res)
+            except Exception:
+                pass
+
+    def _check_subdomain(self, subdomain: str) -> str | None:
+        """Check if a subdomain exists using DNS resolution."""
+        try:
+            socket.gethostbyname(subdomain)
+            return subdomain
+        except socket.gaierror:
+            return None
 
     def _find_by_passive(self, target: str) -> set:
         return set()
