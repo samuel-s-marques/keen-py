@@ -1,10 +1,8 @@
 import httpx
 import asyncio
 from holehe import core as holehe_core
-from holehe import modules as holehe_modules
 
 from src.utils.print_utils import error, success
-from src.utils.validator import InputValidator
 from src.core.base_module import BaseModule
 
 
@@ -34,6 +32,9 @@ class HoleheModule(BaseModule):
             return
 
         target: str = str(self.options.get("TARGET"))
+        await self.holehe(target)
+
+    async def holehe(self, target: str) -> None:
         output = []
 
         # pyrefly: ignore [missing-attribute]
