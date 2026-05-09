@@ -5,6 +5,7 @@ from rich.table import Table
 from rich.style import Style
 from pyfiglet import Figlet
 import os
+import asyncio
 
 from src.core.loader import load_modules
 from src.utils.print_utils import error, info
@@ -96,7 +97,7 @@ class Shell(Cmd):
         """Execute the current module."""
         if self.current_module:
             info("Executing...")
-            self.current_module.run()
+            asyncio.run(self.current_module.run())
         else:
             error("No module selected.")
 

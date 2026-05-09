@@ -1,4 +1,5 @@
 import subprocess
+import asyncio
 
 from src.utils.print_utils import info
 from src.utils.print_utils import error
@@ -26,15 +27,15 @@ class SherlockModule(BaseModule):
 
         self.options = {k: v[0] for k, v in self.metadata["options"].items()}
 
-    def run(self) -> None:
+    async def run(self) -> None:
         if not self.pre_run():
             return
 
         target: str = str(self.options.get("TARGET"))
-        self.sherlock(target)
+        await self.sherlock(target)
 
-    def sherlock(self, target: str, timeout: str = "5"):
-        cmd = [
+    async def sherlock(self, target: str, timeout: str = "5"):
+        cmd: list[str] = [
             "python",
             "vendors/sherlock/sherlock_project/sherlock.py",
             target,
@@ -43,10 +44,15 @@ class SherlockModule(BaseModule):
         ]
 
         info(f"Lauching external Sherlock process for {target}...")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
 
-        if result.returncode != 0:
+        if process.returncode != 0:
             error("Sherlock process failed to execute.")
             return
 
-        print(result.stdout)
+        print(stdout.decode("utf-8"))

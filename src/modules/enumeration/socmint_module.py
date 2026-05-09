@@ -30,7 +30,7 @@ class SOCMINTModule(BaseModule):
 
         self.options = {k: v[0] for k, v in self.metadata["options"].items()}
 
-    def run(self) -> None:
+    async def run(self) -> None:
         if not self.pre_run():
             return
 
@@ -55,28 +55,28 @@ class SOCMINTModule(BaseModule):
 
         match target_type:
             case "email":
-                self._check_email(target)
+                await self._check_email(target)
             case "username":
-                self._check_username(target)
+                await self._check_username(target)
             case "name":
-                self._check_name(target)
+                await self._check_name(target)
             case "domain":
-                self._check_domain(target)
+                await self._check_domain(target)
             case _:
                 error(
                     "Invalid type. Please choose one of 'username', 'name', 'domain', or 'auto'."
                 )
                 return
 
-    def _check_email(self, target: str) -> None:
+    async def _check_email(self, target: str) -> None:
         pass
 
-    def _check_username(self, target: str) -> None:
+    async def _check_username(self, target: str) -> None:
         sherlock = SherlockModule()
-        sherlock.sherlock(target)
+        await sherlock.sherlock(target)
 
-    def _check_name(self, target: str) -> None:
+    async def _check_name(self, target: str) -> None:
         pass
 
-    def _check_domain(self, target: str) -> None:
+    async def _check_domain(self, target: str) -> None:
         pass

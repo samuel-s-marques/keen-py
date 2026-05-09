@@ -83,7 +83,7 @@ class BaseModule:
         console: Console = Console()
         console.print(table)
 
-    def run(self) -> None:
+    async def run(self) -> None:
         """
         This method should be implemented by each module.
         """
