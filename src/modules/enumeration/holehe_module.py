@@ -48,6 +48,18 @@ class HoleheModule(BaseModule):
         await asyncio.gather(*tasks, return_exceptions=True)
         await client.aclose()
 
+        # Holehe results (for parsing later) TODO: Parse results
+        """
+        {
+            "name": "example",
+            "rateLimit": false,
+            "exists": true,
+            "emailrecovery": "ex****e@gmail.com",
+            "phoneNumber": "0*******78",
+            "others": null
+        }
+        """
+
         # Display results (only registered ones)
         registered = [item["name"] for item in output if item.get("exists")]
         if registered:
