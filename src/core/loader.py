@@ -27,6 +27,7 @@ def load_modules(root_dir: str = "src/modules") -> dict:
                         inspect.isclass(obj)
                         and issubclass(obj, BaseModule)
                         and obj is not BaseModule
+                        and obj.__module__ == mod.__name__
                     ):
                         # Extract category and name
                         category = os.path.relpath(root, root_dir).replace(os.sep, "/")
