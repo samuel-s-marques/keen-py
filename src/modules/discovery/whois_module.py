@@ -27,12 +27,17 @@ class WhoisModule(BaseModule):
         # Initialize options with default values
         self.options = {k: v[0] for k, v in self.metadata["options"].items()}
 
-    def run(self) -> None:
+    async def run(self) -> None:
         if not self.pre_run():
             return
 
         target: str = str(self.options.get("TARGET")).lower()
 
+        await self.loading(
+            f"Executing WHOIS query on {target}...", self.execute, target
+        )
+
+    async def execute(self, target: str) -> None:
         try:
             w: dict[str, Any] = whois.whois(target)
 

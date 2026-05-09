@@ -32,7 +32,7 @@ class HoleheModule(BaseModule):
             return
 
         target: str = str(self.options.get("TARGET"))
-        await self.holehe(target)
+        await self.loading(f"Executing holehe scan on {target}...", self.holehe, target)
 
     async def holehe(self, target: str) -> None:
         output = []

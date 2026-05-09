@@ -56,13 +56,29 @@ class SOCMINTModule(BaseModule):
 
         match target_type:
             case "email":
-                await self._check_email(target)
+                await self.loading(
+                    f"Checking {target} on social media...",
+                    self._check_email,
+                    target,
+                )
             case "username":
-                await self._check_username(target)
+                await self.loading(
+                    f"Scanning {target} on social media...",
+                    self._check_username,
+                    target,
+                )
             case "name":
-                await self._check_name(target)
+                await self.loading(
+                    f"Searching for {target} on social media...",
+                    self._check_name,
+                    target,
+                )
             case "domain":
-                await self._check_domain(target)
+                await self.loading(
+                    f"Researching {target} on the web...",
+                    self._check_domain,
+                    target,
+                )
             case _:
                 error(
                     "Invalid type. Please choose one of 'username', 'name', 'domain', or 'auto'."

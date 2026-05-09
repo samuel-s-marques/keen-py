@@ -31,7 +31,9 @@ class SherlockModule(BaseModule):
             return
 
         target: str = str(self.options.get("TARGET"))
-        await self.sherlock(target)
+        await self.loading(
+            f"Executing Sherlock scan on {target}...", self.sherlock, target
+        )
 
     async def sherlock(self, target: str, timeout: str = "5"):
         cmd: list[str] = [
