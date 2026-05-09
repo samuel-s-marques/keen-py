@@ -1,8 +1,9 @@
+from typing import Literal
 from rich.console import Console
 from rich.table import Table
 
-from src.utils.validator import InputValidator
-from src.utils.print_utils import error
+from utils.validator import InputValidator
+from utils.print_utils import error
 
 
 class BaseModule:
@@ -24,7 +25,7 @@ class BaseModule:
     def __init__(self) -> None:
         self.options = {}
 
-    def set_option(self, key, value) -> bool:
+    def set_option(self, key: str, value: any) -> bool:
         # Search for the key in a case-insensitive way
         for opt_key in self.metadata["options"]:
             if opt_key.lower() == key.lower():
@@ -54,7 +55,7 @@ class BaseModule:
                 continue
             table.add_row(key.capitalize(), str(value))
 
-        console = Console()
+        console: Console = Console()
         console.print(table)
 
     def print_options(self) -> None:
@@ -75,11 +76,11 @@ class BaseModule:
 
         for key, value in self.metadata["options"].items():
             # value = [default, required, description, validator]
-            required = "Yes" if value[1] else "No"
+            required: Literal["Yes", "No"] = "Yes" if value[1] else "No"
             current_value = self.options.get(key, value[0])
             table.add_row(key, str(current_value), required, str(value[2]))
 
-        console = Console()
+        console: Console = Console()
         console.print(table)
 
     def run(self) -> None:
