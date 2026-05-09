@@ -1,7 +1,7 @@
 import whois
 
-from src.utils.print_utils import error
-from src.core.base_module import BaseModule
+from utils.print_utils import error
+from core.base_module import BaseModule
 
 
 class WhoisModule(BaseModule):
@@ -26,14 +26,14 @@ class WhoisModule(BaseModule):
         # Initialize options with default values
         self.options = {k: v[0] for k, v in self.metadata["options"].items()}
 
-    def run(self):
+    def run(self) -> None:
         if not self.pre_run():
             return
 
-        target = self.options.get("TARGET")
+        target: str = str(self.options.get("TARGET")).lower()
 
         try:
-            w = whois.whois(target)
+            w: whois.WhoisEntry = whois.whois(target)
 
             for key, value in w.items():
                 if value:
