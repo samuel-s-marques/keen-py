@@ -1,3 +1,5 @@
+from typing import Any
+from typing import Callable
 from typing import Literal
 from rich.console import Console
 from rich.table import Table
@@ -103,8 +105,6 @@ class BaseModule:
             validator = value[3]
             option_value: str = str(self.options.get(key, None))
 
-            print("Option value: " + option_value)
-
             if validator and not InputValidator.VALIDATORS[validator](option_value):
                 error(f"Invalid value for {key.upper()}. It should be a {validator}.")
                 return False
@@ -119,3 +119,10 @@ class BaseModule:
             return False
 
         return True
+
+    async def loading(self, title: str, task: Callable, *args, **kwargs) -> Any:
+        """Show loading animation."""
+        with Console().status(f"[bold green]{title}") as status:
+            result: Any = await task(*args, **kwargs)
+            status.update(f"[bold green]{title}")
+            return result
