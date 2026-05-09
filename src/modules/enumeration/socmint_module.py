@@ -2,6 +2,7 @@ from src.utils.print_utils import error
 from src.utils.validator import InputValidator
 from src.core.base_module import BaseModule
 from src.modules.enumeration.sherlock_module import SherlockModule
+from src.modules.enumeration.holehe_module import HoleheModule
 
 
 class SOCMINTModule(BaseModule):
@@ -69,7 +70,8 @@ class SOCMINTModule(BaseModule):
                 return
 
     async def _check_email(self, target: str) -> None:
-        pass
+        holehe = HoleheModule()
+        await holehe.holehe(target)
 
     async def _check_username(self, target: str) -> None:
         sherlock = SherlockModule()
