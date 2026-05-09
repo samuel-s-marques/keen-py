@@ -7,8 +7,8 @@ import dns.resolver
 import dns.zone
 import dns.query
 
-from src.utils.print_utils import error, info
-from src.core.base_module import BaseModule
+from utils.print_utils import error, info
+from core.base_module import BaseModule
 
 
 class SubdomainModule(BaseModule):
@@ -49,13 +49,20 @@ class SubdomainModule(BaseModule):
         if not self.pre_run():
             return
 
-        target = self.options.get("TARGET")
-        method = self.options.get("METHOD")
+        target: str = str(self.options.get("TARGET")).lower()
+        method: str = str(self.options.get("METHOD")).lower()
+
+        if method not in ["all", "dns", "bruteforce", "passive"]:
+            error(
+                "Invalid method. Please choose one of 'all', 'dns', 'bruteforce', or 'passive'."
+            )
+            return
+
+        subdomains: set[str] = set()
 
         try:
-            if method.lower() == "all":
-                subdomains = set()
-                methods_to_run = [
+            if method == "all":
+                methods_to_run: list[callable] = [
                     self._find_by_dns,
                     self._find_by_bruteforce,
                     self._find_by_passive,
@@ -74,11 +81,11 @@ class SubdomainModule(BaseModule):
                             error(
                                 f"Method {futures[future]} generated an exception: {exc}"
                             )
-            elif method.lower() == "dns":
+            elif method == "dns":
                 subdomains = self._find_by_dns(target)
-            elif method.lower() == "bruteforce":
+            elif method == "bruteforce":
                 subdomains = self._find_by_bruteforce(target)
-            elif method.lower() == "passive":
+            elif method == "passive":
                 subdomains = self._find_by_passive(target)
 
             info(f"Found {len(subdomains)} subdomains:")
@@ -88,12 +95,14 @@ class SubdomainModule(BaseModule):
             error(f"Error: {str(e)}")
             return
 
-    def _find_by_crt(self, target: str) -> set:
+    def _find_by_crt(self, target: str) -> set[str]:
         """Get domains from crt.sh free API."""
-        subdomains = set()
+        subdomains: set[str] = set()
 
         try:
-            r = requests.get(f"https://crt.sh/?q=%25.{target}&output=json", timeout=60)
+            r: requests.Response = requests.get(
+                f"https://crt.sh/?q=%25.{target}&output=json", timeout=60
+            )
 
             if r.status_code != 200:
                 return set()
@@ -101,9 +110,9 @@ class SubdomainModule(BaseModule):
             certs = r.json()
 
             for cert in certs:
-                name = cert.get("name_value", "")
+                name: str = cert.get("name_value", "")
                 for line in name.split("\n"):
-                    line = line.strip().lower()
+                    line: str = line.strip().lower()
                     if line and "*" not in line:
                         subdomains.add(line)
 
@@ -112,9 +121,9 @@ class SubdomainModule(BaseModule):
 
         return subdomains
 
-    def _find_by_dns(self, target: str) -> set:
+    def _find_by_dns(self, target: str) -> set[str]:
         """Find subdomains using DNS techniques (AXFR, SRV)."""
-        subdomains = set()
+        subdomains: set[str] = set()
 
         # Zone Transfer (AXFR)
         try:
