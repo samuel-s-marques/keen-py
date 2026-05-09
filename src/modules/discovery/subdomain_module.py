@@ -1,3 +1,4 @@
+from src.utils.user_agents import UserAgents
 import requests
 import re
 import concurrent.futures
@@ -113,7 +114,9 @@ class SubdomainModule(BaseModule):
 
         try:
             r: requests.Response = requests.get(
-                f"https://crt.sh/?q=%25.{target}&output=json", timeout=60
+                f"https://crt.sh/?q=%25.{target}&output=json",
+                timeout=60,
+                headers={"User-Agent": UserAgents.get()},
             )
 
             if r.status_code != 200:
@@ -284,7 +287,9 @@ class SubdomainModule(BaseModule):
 
         try:
             r = requests.get(
-                f"https://anubisdb.com/anubis/subdomains/{target}", timeout=60
+                f"https://anubisdb.com/anubis/subdomains/{target}",
+                timeout=60,
+                headers={"User-Agent": UserAgents.get()},
             )
 
             if r.status_code != 200:
@@ -305,7 +310,9 @@ class SubdomainModule(BaseModule):
 
         try:
             r = requests.get(
-                f"https://rapiddns.io/subdomain/{target}?full=1", timeout=30
+                f"https://rapiddns.io/subdomain/{target}?full=1",
+                timeout=30,
+                headers={"User-Agent": UserAgents.get()},
             )
 
             if r.status_code != 200:
