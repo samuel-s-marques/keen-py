@@ -1,7 +1,9 @@
+import httpx
+import asyncio
 from holehe import core as holehe_core
 from holehe import modules as holehe_modules
 
-from src.utils.print_utils import error
+from src.utils.print_utils import error, success
 from src.utils.validator import InputValidator
 from src.core.base_module import BaseModule
 
@@ -27,15 +29,27 @@ class HoleheModule(BaseModule):
 
         self.options = {k: v[0] for k, v in self.metadata["options"].items()}
 
-    def run(self) -> None:
+    async def run(self) -> None:
         if not self.pre_run():
             return
-
-        print("oi")
 
         target: str = str(self.options.get("TARGET"))
         output = []
 
         # pyrefly: ignore [missing-attribute]
-        modules = holehe_modules.import_submodules("holehe.modules")
-        print(len(modules))
+        modules = holehe_core.import_submodules("holehe.modules")
+        websites = holehe_core.get_functions(modules)
+
+        client = httpx.AsyncClient(timeout=10)
+        tasks = [website(target, client, output) for website in websites]
+
+        # Run all module checks concurrently
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await client.aclose()
+
+        # Display results (only registered ones)
+        registered = [item["name"] for item in output if item.get("exists")]
+        if registered:
+            success(f"Email registered on: {', '.join(registered)}")
+        else:
+            error(f"No registrations found or target '{target}' is invalid.")
