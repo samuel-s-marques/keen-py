@@ -2,10 +2,10 @@ import importlib
 import os
 import inspect
 
-from core.base_module import BaseModule
+from src.core.base_module import BaseModule
 
 
-def load_modules(root_dir: str = "src/modules") -> dict[str, any]:
+def load_modules(root_dir: str = "src/modules") -> dict:
     """Load modules from a 'src/modules' directory.
 
     Returns a dict mapping both the full module path and the

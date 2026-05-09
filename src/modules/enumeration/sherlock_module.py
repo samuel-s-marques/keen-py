@@ -1,7 +1,8 @@
 import subprocess
-from utils.print_utils import info
-from utils.print_utils import error
-from core.base_module import BaseModule
+
+from src.utils.print_utils import info
+from src.utils.print_utils import error
+from src.core.base_module import BaseModule
 
 
 class SherlockModule(BaseModule):

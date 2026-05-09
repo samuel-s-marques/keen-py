@@ -2,8 +2,8 @@ from typing import Literal
 from rich.console import Console
 from rich.table import Table
 
-from utils.validator import InputValidator
-from utils.print_utils import error
+from src.utils.validator import InputValidator
+from src.utils.print_utils import error
 
 
 class BaseModule:
@@ -25,7 +25,7 @@ class BaseModule:
     def __init__(self) -> None:
         self.options = {}
 
-    def set_option(self, key: str, value: any) -> bool:
+    def set_option(self, key: str, value) -> bool:
         # Search for the key in a case-insensitive way
         for opt_key in self.metadata["options"]:
             if opt_key.lower() == key.lower():
@@ -101,9 +101,11 @@ class BaseModule:
         """Check if the module options are valid."""
         for key, value in self.metadata["options"].items():
             validator = value[3]
-            if validator and not InputValidator.VALIDATORS[validator](
-                self.options.get(key, None)
-            ):
+            option_value: str = str(self.options.get(key, None))
+
+            print("Option value: " + option_value)
+
+            if validator and not InputValidator.VALIDATORS[validator](option_value):
                 error(f"Invalid value for {key.upper()}. It should be a {validator}.")
                 return False
         return True

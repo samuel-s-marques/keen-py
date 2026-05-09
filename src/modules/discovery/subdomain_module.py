@@ -7,8 +7,8 @@ import dns.resolver
 import dns.zone
 import dns.query
 
-from utils.print_utils import error, info
-from core.base_module import BaseModule
+from src.utils.print_utils import error, info
+from src.core.base_module import BaseModule
 
 
 class SubdomainModule(BaseModule):
@@ -62,7 +62,7 @@ class SubdomainModule(BaseModule):
 
         try:
             if method == "all":
-                methods_to_run: list[callable] = [
+                methods_to_run: list = [
                     self._find_by_dns,
                     self._find_by_bruteforce,
                     self._find_by_passive,
@@ -139,7 +139,7 @@ class SubdomainModule(BaseModule):
                             hostname = (
                                 f"{name}.{target}" if str(name) != "@" else target
                             )
-                            subdomains.add(str(hostname).rstrip("."))
+                            subdomains.add(hostname.rstrip("."))
                 except Exception:
                     pass
         except Exception:

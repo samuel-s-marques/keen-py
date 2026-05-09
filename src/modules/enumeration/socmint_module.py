@@ -1,7 +1,7 @@
-from utils.print_utils import error
-from utils.validator import InputValidator
-from core.base_module import BaseModule
-from modules.enumeration.sherlock_module import SherlockModule
+from src.utils.print_utils import error
+from src.utils.validator import InputValidator
+from src.core.base_module import BaseModule
+from src.modules.enumeration.sherlock_module import SherlockModule
 
 
 class SOCMINTModule(BaseModule):

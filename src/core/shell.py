@@ -6,8 +6,8 @@ from rich.style import Style
 from pyfiglet import Figlet
 import os
 
-from core.loader import load_modules
-from utils.print_utils import error, info
+from src.core.loader import load_modules
+from src.utils.print_utils import error, info
 
 
 class Shell(Cmd):
@@ -53,7 +53,7 @@ class Shell(Cmd):
 
     def do_use(self, arg: str):
         """Select a module to use. You can use the full path or just the module name (e.g. 'use whois')."""
-        module_name: str = str(arg).strip().lower()
+        module_name: str = arg.strip().lower()
 
         if not module_name:
             error("Usage: use <module_name>")

@@ -1,7 +1,8 @@
+from typing import Any
 import whois
 
-from utils.print_utils import error
-from core.base_module import BaseModule
+from src.utils.print_utils import error
+from src.core.base_module import BaseModule
 
 
 class WhoisModule(BaseModule):
@@ -33,12 +34,10 @@ class WhoisModule(BaseModule):
         target: str = str(self.options.get("TARGET")).lower()
 
         try:
-            w: whois.WhoisEntry = whois.whois(target)
+            w: dict[str, Any] = whois.whois(target)
 
             for key, value in w.items():
                 if value:
                     print(f"{key}: {value}")
-
-            return w
         except Exception as e:
             error(f"WHOIS lookup failed: {str(e)}")
