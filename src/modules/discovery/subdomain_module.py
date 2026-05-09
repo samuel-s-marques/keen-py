@@ -45,7 +45,7 @@ class SubdomainModule(BaseModule):
         # Initialize options with default values
         self.options = {k: v[0] for k, v in self.metadata["options"].items()}
 
-    def run(self) -> None:
+    async def run(self) -> None:
         if not self.pre_run():
             return
 
@@ -82,11 +82,23 @@ class SubdomainModule(BaseModule):
                                 f"Method {futures[future]} generated an exception: {exc}"
                             )
             elif method == "dns":
-                subdomains = self._find_by_dns(target)
+                subdomains = await self.loading(
+                    f"Executing DNS subdomain discovery on {target}...",
+                    self._find_by_dns,
+                    target,
+                )
             elif method == "bruteforce":
-                subdomains = self._find_by_bruteforce(target)
+                subdomains = await self.loading(
+                    f"Executing bruteforce subdomain discovery on {target}...",
+                    self._find_by_bruteforce,
+                    target,
+                )
             elif method == "passive":
-                subdomains = self._find_by_passive(target)
+                subdomains = await self.loading(
+                    f"Executing passive subdomain discovery on {target}...",
+                    self._find_by_passive,
+                    target,
+                )
 
             info(f"Found {len(subdomains)} subdomains:")
             for subdomain in subdomains:
