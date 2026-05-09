@@ -74,7 +74,7 @@ class InputValidator:
             bool: True if email address is valid, False otherwise.
         """
 
-        pattern = r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$"
+        pattern = r"^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$"
         return re.match(pattern, email.lower()) is not None
 
     VALIDATORS = {
