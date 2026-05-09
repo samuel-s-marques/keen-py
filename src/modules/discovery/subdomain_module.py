@@ -108,8 +108,8 @@ class SubdomainModule(BaseModule):
             error(f"Error: {str(e)}")
             return
 
-    def _find_by_crt(self, target: str) -> set[str]:
-        """Get domains from crt.sh free API."""
+    def find_by_crt(self, target: str) -> set[str]:
+        """Get subdomains from crt.sh free API."""
         subdomains: set[str] = set()
 
         try:
@@ -267,7 +267,7 @@ class SubdomainModule(BaseModule):
 
         with concurrent.futures.ProcessPoolExecutor() as executor:
             futures = [
-                executor.submit(self._find_by_crt, target),
+                executor.submit(self.find_by_crt, target),
                 executor.submit(self._find_by_anubis, target),
                 executor.submit(self._find_by_rapiddns, target),
             ]
