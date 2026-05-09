@@ -1,9 +1,11 @@
 import asyncio
 import dns.resolver
+import random
+import string
 from rich.table import Table
 from rich.console import Console
 
-from src.utils.print_utils import info, success
+from src.utils.print_utils import info, success, warn
 from src.core.base_module import BaseModule
 
 
@@ -39,6 +41,7 @@ class DnsModule(BaseModule):
         )
 
     async def execute(self, target: str) -> None:
+        await self.get_wildcard_records(target)
         records: list[str] = [
             "NONE",
             "A",
@@ -160,3 +163,27 @@ class DnsModule(BaseModule):
             success(f"Discovered {len(results)} record types for {target}.")
         else:
             info(f"No DNS records found for {target}.")
+
+    async def get_wildcard_records(self, target: str) -> None:
+        """Detect if the target domain has a wildcard DNS record."""
+        # Generate a random subdomain that is unlikely to exist
+        random_sub = "".join(
+            random.choices(string.ascii_lowercase + string.digits, k=12)
+        )
+        test_domain = f"{random_sub}.{target}"
+
+        try:
+            # Check for A records
+            answers = await asyncio.to_thread(
+                dns.resolver.resolve, test_domain, "A", lifetime=5
+            )
+            if answers:
+                ips = [str(rdata) for rdata in answers]
+                warn(
+                    f"Wildcard record detected! {test_domain} resolves to: {', '.join(ips)}"
+                )
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.Timeout):
+            # This is expected if there is NO wildcard
+            pass
+        except Exception:
+            pass

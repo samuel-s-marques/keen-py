@@ -122,3 +122,4 @@ TODO:
   - [x] Subdomain enumeration
   - [x] Holehe
   - [x] Sherlock
+  - [x] DNS enumeration
