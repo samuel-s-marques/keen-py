@@ -2,6 +2,7 @@ import asyncio
 import dns.resolver
 import random
 import string
+import ipaddress
 from rich.table import Table
 from rich.console import Console
 
@@ -162,6 +163,45 @@ class DnsModule(BaseModule):
             console = Console()
             console.print(table)
             success(f"Discovered {len(results)} record types for {target}.")
+
+            # ASN Intelligence
+            ips = []
+            for record_type, data in results:
+                if record_type in ["A", "AAAA"]:
+                    ips.extend(data)
+
+            unique_ips = list(set(ips))
+            if unique_ips:
+                asn_results = []
+                for ip in unique_ips[:5]:  # Limit to avoid excessive queries
+                    asn_data = await self.get_asn_info(ip)
+                    if asn_data:
+                        asn_results.append(asn_data)
+
+                if asn_results:
+                    asn_table = Table(
+                        show_header=True,
+                        header_style="bold blue",
+                        title=f"ASN Intelligence for {target}",
+                        title_style="bold cyan",
+                        show_lines=True,
+                        expand=True,
+                    )
+                    asn_table.add_column("IP Address", style="cyan")
+                    asn_table.add_column("ASN", style="magenta")
+                    asn_table.add_column("BGP Prefix", style="white")
+                    asn_table.add_column("Provider", style="green")
+                    asn_table.add_column("Country", style="white")
+
+                    for res in asn_results:
+                        asn_table.add_row(
+                            res["ip"],
+                            res["asn"],
+                            res["prefix"],
+                            res["provider"],
+                            res["country"],
+                        )
+                    console.print(asn_table)
         else:
             info(f"No DNS records found for {target}.")
 
@@ -260,3 +300,45 @@ class DnsModule(BaseModule):
             success(f"DNSSEC is enabled for {target}.")
         else:
             info(f"DNSSEC is not enabled for {target}.")
+
+    async def get_asn_info(self, ip: str) -> dict | None:
+        """Retrieve ASN intelligence for an IP using Team Cymru DNS service."""
+        try:
+            addr = ipaddress.ip_address(ip)
+            if addr.version == 4:
+                reversed_ip = ".".join(reversed(ip.split(".")))
+                query = f"{reversed_ip}.origin.asn.cymru.com"
+            else:  # IPv6
+                # Expanded nibbles for IPv6 origin6 lookup
+                nibbles = addr.exploded.replace(":", "")
+                reversed_nibbles = ".".join(reversed(nibbles))
+                query = f"{reversed_nibbles}.origin6.asn.cymru.com"
+
+            answers = await asyncio.to_thread(dns.resolver.resolve, query, "TXT")
+            # Format: "15169 | 8.8.8.0/24 | US | arin | 2001-01-24"
+            data = str(answers[0]).strip('"').split(" | ")
+            if len(data) < 3:
+                return None
+
+            asn = data[0].strip()
+            prefix = data[1].strip()
+            country = data[2].strip()
+
+            # Get ASN Name/Description
+            name_query = f"AS{asn}.asn.cymru.com"
+            name_answers = await asyncio.to_thread(
+                dns.resolver.resolve, name_query, "TXT"
+            )
+            # Format: "15169 | US | arin | 2001-01-24 | GOOGLE, US"
+            name_data = str(name_answers[0]).strip('"').split(" | ")
+            provider = name_data[4].strip() if len(name_data) > 4 else "Unknown"
+
+            return {
+                "ip": ip,
+                "asn": asn,
+                "prefix": prefix,
+                "country": country,
+                "provider": provider,
+            }
+        except Exception:
+            return None
