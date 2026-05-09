@@ -1,3 +1,4 @@
+from pyfiglet import FigletString
 from cmd2 import Cmd, Color, stylize
 from rich.console import Console
 from rich.table import Table
@@ -5,8 +6,8 @@ from rich.style import Style
 from pyfiglet import Figlet
 import os
 
-from src.core.loader import load_modules
-from src.utils.print_utils import error, info
+from core.loader import load_modules
+from utils.print_utils import error, info
 
 
 class Shell(Cmd):
@@ -17,22 +18,22 @@ class Shell(Cmd):
         self.modules = load_modules()
         self.current_module = None
 
-        banner = Figlet(font="slant").renderText("Keen")
-        banner_styled = stylize(
+        banner: FigletString = Figlet(font="slant").renderText("Keen")
+        banner_styled: str = stylize(
             banner,
             Style(
                 color=Color.BLUE,
             ),
         )
 
-        version_styled = stylize(
+        version_styled: str = stylize(
             f"Version: {self.version}",
             Style(
                 color=Color.YELLOW,
             ),
         )
 
-        welcome_styled = stylize(
+        welcome_styled: str = stylize(
             "Welcome to Keen, an information gathering tool.",
             Style(
                 color=Color.GREEN,
@@ -52,7 +53,7 @@ class Shell(Cmd):
 
     def do_use(self, arg: str):
         """Select a module to use. You can use the full path or just the module name (e.g. 'use whois')."""
-        module_name = str(arg).strip().lower()
+        module_name: str = str(arg).strip().lower()
 
         if not module_name:
             error("Usage: use <module_name>")
