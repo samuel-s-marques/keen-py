@@ -1,4 +1,3 @@
-import subprocess
 import asyncio
 
 from src.utils.print_utils import info
