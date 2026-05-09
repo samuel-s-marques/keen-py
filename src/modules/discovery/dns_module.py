@@ -42,6 +42,7 @@ class DnsModule(BaseModule):
 
     async def execute(self, target: str) -> None:
         await self.get_wildcard_records(target)
+        await self.check_dnssec(target)
         records: list[str] = [
             "NONE",
             "A",
@@ -187,3 +188,75 @@ class DnsModule(BaseModule):
             pass
         except Exception:
             pass
+
+    async def check_dnssec(self, target: str) -> None:
+        """Analyze DNSSEC for the target domain."""
+        algorithms = {
+            1: "RSAMD5",
+            3: "DSA",
+            5: "RSASHA1",
+            7: "RSASHA1-NSEC3-SHA1",
+            8: "RSASHA256",
+            10: "RSASHA512",
+            13: "ECDSAP256SHA256",
+            14: "ECDSAP384SHA384",
+            15: "ED25519",
+            16: "ED448",
+        }
+
+        digest_types = {
+            1: "SHA-1",
+            2: "SHA-256",
+            3: "GOST R 34.11-94",
+            4: "SHA-384",
+        }
+
+        results = []
+
+        try:
+            # Check for DNSKEY
+            dnskeys = await asyncio.to_thread(
+                dns.resolver.resolve, target, "DNSKEY", lifetime=5
+            )
+            for key in dnskeys:
+                key_type = "KSK" if key.flags == 257 else "ZSK"
+                algo = algorithms.get(key.algorithm, f"Unknown ({key.algorithm})")
+                results.append(["DNSKEY", f"{key_type} | {algo} | Tag: {key.key_tag()}"])
+        except Exception:
+            pass
+
+        try:
+            # Check for DS
+            ds_records = await asyncio.to_thread(
+                dns.resolver.resolve, target, "DS", lifetime=5
+            )
+            for ds in ds_records:
+                algo = algorithms.get(ds.algorithm, f"Unknown ({ds.algorithm})")
+                digest = digest_types.get(
+                    ds.digest_type, f"Unknown ({ds.digest_type})"
+                )
+                results.append(["DS", f"{algo} | {digest} | Tag: {ds.key_tag}"])
+        except Exception:
+            pass
+
+        if results:
+            table = Table(
+                show_header=True,
+                header_style="bold blue",
+                title=f"DNSSEC Analysis for {target}",
+                title_style="bold cyan",
+                show_lines=True,
+                expand=True,
+            )
+
+            table.add_column("Record", justify="left", style="cyan", no_wrap=True)
+            table.add_column("Details", justify="left", style="white")
+
+            for record_type, details in results:
+                table.add_row(record_type, details)
+
+            console = Console()
+            console.print(table)
+            success(f"DNSSEC is enabled for {target}.")
+        else:
+            info(f"DNSSEC is not enabled for {target}.")
