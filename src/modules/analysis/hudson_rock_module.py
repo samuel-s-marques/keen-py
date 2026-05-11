@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich import box
 
 from src.utils.user_agents import UserAgents
-from src.utils.print_utils import error, success, warn
+from src.utils.print_utils import error, success
 from src.core.base_module import BaseModule
 
 
@@ -50,57 +50,88 @@ class HudsonRockModule(BaseModule):
 
                 data = r.json()
                 self.display_hudson_rock_results(email, data)
-                
+
         except Exception as e:
             error(f"Error checking Hudson Rock: {e}")
 
     def display_hudson_rock_results(self, email: str, data: dict) -> None:
         console = Console()
-        
+
         message = data.get("message")
         stealers = data.get("stealers", [])
-        
+
         if not stealers:
             success(f"No infostealer infections found for {email}.")
             return
-            
+
         # Main Warning Panel
-        console.print(Panel(
-            f"[bold red]WARNING: Information Stealer Infection Detected![/bold red]\n\n"
-            f"[white]{message}[/white]",
-            title=f"[bold red]Hudson Rock: {email}[/bold red]",
-            border_style="red",
-            box=box.HEAVY
-        ))
-        
+        console.print(
+            Panel(
+                f"[bold red]WARNING: Information Stealer Infection Detected![/bold red]\n\n"
+                f"[white]{message}[/white]",
+                title=f"[bold red]Hudson Rock: {email}[/bold red]",
+                border_style="red",
+                box=box.HEAVY,
+            )
+        )
+
         # Summary Table
         summary_table = Table(box=box.SIMPLE, show_header=False, expand=True)
         summary_table.add_column("Key", style="cyan", width=30)
         summary_table.add_column("Value", style="white")
-        
+
         summary_table.add_row("Total Stealers Found", str(len(stealers)))
-        summary_table.add_row("Total Corporate Services Affected", str(data.get("total_corporate_services", 0)))
-        summary_table.add_row("Total User Services Affected", str(data.get("total_user_services", 0)))
-        
-        console.print(Panel(summary_table, title="[bold blue]Overall Summary[/bold blue]", border_style="blue"))
+        summary_table.add_row(
+            "Total Corporate Services Affected",
+            str(data.get("total_corporate_services", 0)),
+        )
+        summary_table.add_row(
+            "Total User Services Affected", str(data.get("total_user_services", 0))
+        )
+
+        console.print(
+            Panel(
+                summary_table,
+                title="[bold blue]Overall Summary[/bold blue]",
+                border_style="blue",
+            )
+        )
 
         # Detail Stealers
         for index, stealer in enumerate(stealers, start=1):
             stealer_table = Table(box=box.HORIZONTALS, expand=True)
             stealer_table.add_column("Property", style="cyan", width=25)
             stealer_table.add_column("Details", style="white")
-            
-            stealer_table.add_row("Date Compromised", stealer.get("date_compromised", "Unknown"))
-            stealer_table.add_row("Computer Name", stealer.get("computer_name", "Unknown"))
-            stealer_table.add_row("Operating System", stealer.get("operating_system", "Unknown"))
-            stealer_table.add_row("Malware Path", stealer.get("malware_path", "Unknown"))
+
+            stealer_table.add_row(
+                "Date Compromised", stealer.get("date_compromised", "Unknown")
+            )
+            stealer_table.add_row(
+                "Computer Name", stealer.get("computer_name", "Unknown")
+            )
+            stealer_table.add_row(
+                "Operating System", stealer.get("operating_system", "Unknown")
+            )
+            stealer_table.add_row(
+                "Malware Path", stealer.get("malware_path", "Unknown")
+            )
             stealer_table.add_row("IP Address", stealer.get("ip", "Unknown"))
-            
+
             # Passwords and Logins
-            top_passwords = ", ".join(p for p in stealer.get("top_passwords", []) if p) or "None"
-            top_logins = ", ".join(l for l in stealer.get("top_logins", []) if l) or "None"
-            
+            top_passwords = (
+                ", ".join(p for p in stealer.get("top_passwords", []) if p) or "None"
+            )
+            top_logins = (
+                ", ".join(l for l in stealer.get("top_logins", []) if l) or "None"
+            )
+
             stealer_table.add_row("Top Passwords (Masked)", top_passwords)
             stealer_table.add_row("Top Logins", top_logins)
-            
-            console.print(Panel(stealer_table, title=f"[bold yellow]Infection #{index}[/bold yellow]", border_style="yellow"))
+
+            console.print(
+                Panel(
+                    stealer_table,
+                    title=f"[bold yellow]Infection #{index}[/bold yellow]",
+                    border_style="yellow",
+                )
+            )
