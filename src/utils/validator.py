@@ -1,5 +1,6 @@
 import re
 import ipaddress
+import phonenumbers
 
 
 class InputValidator:
@@ -87,8 +88,12 @@ class InputValidator:
         Returns:
             bool: True if phone number is valid, False otherwise.
         """
-        pattern = r"^\+?[1-9]\d{1,14}$"
-        return re.match(pattern, number) is not None
+
+        try:
+            parsed = phonenumbers.parse(number, None)
+            return phonenumbers.is_valid_number(parsed)
+        except Exception:
+            return False
 
     VALIDATORS = {
         "domain": is_valid_domain,
