@@ -48,42 +48,59 @@ class GitHubModule(BaseModule):
         await self.client.aclose()
 
     async def execute(self, target: str) -> None:
-        # 1. Get User Profile
-        user_data = await self.loading(
-            f"Fetching profile for {target}...", self.get_user_info, target
-        )
-        if not user_data:
-            return
-
-        self.print_user_info(user_data)
-
-        # 2. Get Orgs
-        orgs = await self.loading(
-            f"Fetching organizations for {target}...", self.get_orgs, target
-        )
-        if orgs:
-            info(f"Organizations: {', '.join([org['login'] for org in orgs])}")
-
-        # 3. Get Repos
-        repos = await self.loading(
-            f"Fetching repositories for {target}...", self.get_repos, target
-        )
-        if repos:
-            info(f"Public Repositories Found: {len(repos)}")
-            stars = sum(repo.get("stargazers_count", 0) for repo in repos)
-            if stars > 0:
-                info(f"Total Stars: {stars}")
-
-        # 4. Get Events and Extract Emails
-        emails = await self.loading(
-            "Searching for emails in public events...", self.extract_emails, target
-        )
-        if emails:
-            success(f"Found {len(emails)} email(s) in commit history:")
-            for email in emails:
-                success(f"  - {email}")
+        if not hasattr(self, "client"):
+            headers = {
+                "User-Agent": UserAgents.get(),
+                "Accept": "application/vnd.github+json",
+            }
+            token = str(self.options.get("GITHUB_TOKEN", "")).strip()
+            if token:
+                headers["Authorization"] = f"token {token}"
+            self.client = httpx.AsyncClient(headers=headers, follow_redirects=True)
+            close_client = True
         else:
-            warn("No emails found in public commit history.")
+            close_client = False
+
+        try:
+            # 1. Get User Profile
+            user_data = await self.loading(
+                f"Fetching profile for {target}...", self.get_user_info, target
+            )
+            if not user_data:
+                return
+
+            self.print_user_info(user_data)
+
+            # 2. Get Orgs
+            orgs = await self.loading(
+                f"Fetching organizations for {target}...", self.get_orgs, target
+            )
+            if orgs:
+                info(f"Organizations: {', '.join([org['login'] for org in orgs])}")
+
+            # 3. Get Repos
+            repos = await self.loading(
+                f"Fetching repositories for {target}...", self.get_repos, target
+            )
+            if repos:
+                info(f"Public Repositories Found: {len(repos)}")
+                stars = sum(repo.get("stargazers_count", 0) for repo in repos)
+                if stars > 0:
+                    info(f"Total Stars: {stars}")
+
+            # 4. Get Events and Extract Emails
+            emails = await self.loading(
+                "Searching for emails in public events...", self.extract_emails, target
+            )
+            if emails:
+                success(f"Found {len(emails)} email(s) in commit history:")
+                for email in emails:
+                    success(f"  - {email}")
+            else:
+                warn("No emails found in public commit history.")
+        finally:
+            if close_client:
+                await self.client.aclose()
 
     async def get_user_info(self, target: str) -> Dict[str, Any] | None:
         try:
