@@ -1,9 +1,6 @@
-from src.utils.print_utils import success
-from src.utils.print_utils import info
-from src.utils.print_utils import warn, error
+from src.utils.print_utils import warn, error, success
 from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
-import asyncio
 import requests
 
 from src.core.base_module import BaseModule
