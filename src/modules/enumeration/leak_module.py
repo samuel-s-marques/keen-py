@@ -62,6 +62,9 @@ class LeakModule(BaseModule):
                 await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
                 )
+                await self.loading(
+                    f"Checking {target} on BreachVIP...", self.check_breachvip, target
+                )
             case "email":
                 await self.loading(
                     f"Checking {target} on HIBP...", self.check_HIBP, target
@@ -69,9 +72,15 @@ class LeakModule(BaseModule):
                 await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
                 )
+                await self.loading(
+                    f"Checking {target} on BreachVIP...", self.check_breachvip, target
+                )
             case "phone":
                 await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
+                )
+                await self.loading(
+                    f"Checking {target} on BreachVIP...", self.check_breachvip, target
                 )
             case _:
                 error(
@@ -107,6 +116,64 @@ class LeakModule(BaseModule):
 
         except Exception as e:
             error(f"Error checking Have I Been Pwned: {e}")
+
+    async def check_breachvip(self, target: str) -> None:
+        try:
+            payload: dict = {
+                "term": target,
+                "fields": ["username", "email", "phone"],
+                "categories": [],
+                "wildcard": False,
+                "case_sensitive": False,
+            }
+            headers = {
+                "User-Agent": UserAgents.get(),
+                "Content-Type": "application/json",
+            }
+
+            r = requests.post(
+                "https://breach.vip/api/search", headers=headers, json=payload
+            )
+
+            if r.status_code == 403:
+                warn("BreachVIP returned 403. Attempting via proxy...")
+                r = requests.post(
+                    "https://swolesome.pages.dev/api/proxy",
+                    headers=headers,
+                    json=payload,
+                )
+
+            try:
+                res = r.json()
+            except ValueError:
+                error(
+                    f"Error checking BreachVIP: Invalid JSON response (Status {r.status_code})"
+                )
+                return
+
+            if r.status_code != 200:
+                error(f"Error checking BreachVIP: {res.get('error', 'Unknown Error')}")
+                return
+
+            results = res.get("results", [])
+            for result in results:
+                source = result.get("source", "Unknown")
+                categories = result.get("categories", "Unknown")
+
+                extra_data = []
+                for k, v in result.items():
+                    if k not in ["source", "categories"] and v:
+                        extra_data.append(f"{k}: {v}")
+
+                extra_str = (
+                    f" - Extra info: {', '.join(extra_data)}" if extra_data else ""
+                )
+
+                success(
+                    f"{target} was found in {source} data breach with {categories} categories{extra_str}"
+                )
+        except Exception as e:
+            error(f"Error checking BreachVIP: {e}")
 
     async def check_leak_check(self, target: str) -> None:
         api_key = self.options.get("LEAKCHECK_APIKEY")
