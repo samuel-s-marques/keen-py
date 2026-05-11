@@ -85,8 +85,6 @@ TODO:
 - [ ] Add PDF and documents generation capabilities
 - [ ] Add plugins
     - [ ] Add plugin system
-    - [ ] DNS enumeration
-    - [ ] Subdomain enumeration
     - [ ] Port scanning
     - [ ] Vulnerability scanning
     - [ ] Web scraping
