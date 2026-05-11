@@ -56,7 +56,7 @@ DISPOSABLE_DOMAINS = {
 }
 
 
-class EmailModule(BaseModule):
+class EmailVerificationModule(BaseModule):
     metadata = {
         "name": "Email_Verification",
         "description": "Verifies email address validity, reachability, MX records, and categorizes it.",
