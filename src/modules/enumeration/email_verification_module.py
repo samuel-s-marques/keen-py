@@ -259,7 +259,9 @@ class EmailVerificationModule(BaseModule):
             api_key = self.options.get("APILAYER_EMAIL_VER_APIKEY")
 
             if not api_key:
-                warn("API Key not found. Skipping API verification.")
+                warn(
+                    "ApiLayer Email Verification API Key not found. Skipping API verification."
+                )
                 return None
 
             r = requests.get(
