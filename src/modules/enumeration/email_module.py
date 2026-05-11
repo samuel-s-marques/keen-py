@@ -1,7 +1,9 @@
+from src.utils.user_agents import UserAgents
 import asyncio
 import smtplib
 import socket
 import dns.resolver
+import requests
 from rich.table import Table
 from rich.console import Console
 
@@ -73,6 +75,13 @@ class EmailModule(BaseModule):
                 "Timeout for connections in seconds.",
                 "",
             ],
+            # TODO: Add automatic API key management
+            "APILAYER_EMAIL_VER_APIKEY": [
+                "",
+                False,
+                "Optional API Key for APILayer Email Verification to get email verification results.",
+                "",
+            ],
         },
     }
 
@@ -126,10 +135,12 @@ class EmailModule(BaseModule):
                 )
                 api_res = await self.api_verify_fallback(email)
                 if api_res:
-                    deliverable = api_res.get("deliverable", deliverable)
-                    inbox_full = api_res.get("inbox_full", inbox_full)
-                    disabled = api_res.get("disabled", disabled)
-                    catch_all = api_res.get("catch_all", catch_all)
+                    deliverable = api_res.get("is_deliverable", deliverable)
+                    inbox_full = api_res.get("is_inbox_full", inbox_full)
+                    disabled = api_res.get("is_disabled", disabled)
+                    catch_all = api_res.get("is_catch_all", catch_all)
+                    is_role = api_res.get("is_role_account", is_role)
+                    is_disposable = api_res.get("is_disposable", is_disposable)
         else:
             warn(f"No MX records found for {domain}. Deliverability is unlikely.")
 
@@ -243,9 +254,30 @@ class EmailModule(BaseModule):
 
     async def api_verify_fallback(self, email: str) -> dict | None:
         """Fallback API verification stub when local IP is blocked."""
-        # TODO: Implement real API integration (e.g., Hunter.io, Abstract API)
-        info(f"API fallback verification stub called for {email}")
-        return None
+        try:
+            # TODO: Automatically get API key from config file
+            api_key = self.options.get("APILAYER_EMAIL_VER_APIKEY")
+
+            if not api_key:
+                warn("API Key not found. Skipping API verification.")
+                return None
+
+            r = requests.get(
+                f"https://api.apilayer.com/email_verification/{email}",
+                headers={
+                    "apikey": api_key,
+                    "User-Agent": UserAgents.get(),
+                },
+                timeout=15,
+            )
+
+            if r.status_code != 200:
+                return None
+
+            return r.json()
+        except Exception as e:
+            error(f"API verification failed: {e}")
+            return None
 
     def calculate_score(
         self,
