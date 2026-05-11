@@ -1,0 +1,16 @@
+beautifulsoup4==4.14.3
+cmd2==3.5.1
+colorama==0.4.6
+defusedxml==0.7.1
+dnspython==2.8.0
+holehe==1.61
+httpx==0.28.1
+jsonschema==4.26.0
+pandas==3.0.2
+pyfiglet==1.0.4
+python_whois==0.9.6
+requests==2.33.1
+requests_futures==1.0.2
+rich==15.0.0
+tomli==2.4.1
+phonenumbers==8.13.52

@@ -1,5 +1,6 @@
 import re
 import ipaddress
+import phonenumbers
 
 
 class InputValidator:
@@ -60,7 +61,7 @@ class InputValidator:
             bool: True if URL is valid, False otherwise.
         """
 
-        pattern = r"^https?:\\/\\/(?:www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b(?:[-a-zA-Z0-9()@:%_\\+.~#?&\\/=]*)$"
+        pattern = r"^https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&/=]*)$"
         return re.match(pattern, url.lower()) is not None
 
     @staticmethod
@@ -74,8 +75,25 @@ class InputValidator:
             bool: True if email address is valid, False otherwise.
         """
 
-        pattern = r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$"
+        pattern = r"^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$"
         return re.match(pattern, email.lower()) is not None
+
+    @staticmethod
+    def is_valid_phone_number(number: str) -> bool:
+        """Validate phone number.
+
+        Args:
+            number (str): Phone number to validate.
+
+        Returns:
+            bool: True if phone number is valid, False otherwise.
+        """
+
+        try:
+            parsed = phonenumbers.parse(number, None)
+            return phonenumbers.is_valid_number(parsed)
+        except Exception:
+            return False
 
     VALIDATORS = {
         "domain": is_valid_domain,
@@ -83,4 +101,5 @@ class InputValidator:
         "cidr": is_valid_cidr,
         "url": is_valid_url,
         "email": is_valid_email,
+        "phone": is_valid_phone_number,
     }

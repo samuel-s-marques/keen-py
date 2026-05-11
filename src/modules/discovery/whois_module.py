@@ -1,3 +1,4 @@
+from typing import Any
 import whois
 
 from src.utils.print_utils import error
@@ -5,10 +6,11 @@ from src.core.base_module import BaseModule
 
 
 class WhoisModule(BaseModule):
-    info = {
+    metadata = {
         "name": "Whois",
         "description": "Retrieves registration details, expiration dates, and nameservers for a domain.",
         "author": "Samuel Marques",
+        "version": "1.0.0",
         "options": {
             "TARGET": [
                 "",
@@ -23,21 +25,24 @@ class WhoisModule(BaseModule):
         super().__init__()
 
         # Initialize options with default values
-        self.options = {k: v[0] for k, v in self.info["options"].items()}
+        self.options = {k: v[0] for k, v in self.metadata["options"].items()}
 
-    def run(self):
+    async def run(self) -> None:
         if not self.pre_run():
             return
 
-        target = self.options.get("TARGET")
+        target: str = str(self.options.get("TARGET")).lower()
 
+        await self.loading(
+            f"Executing WHOIS query on {target}...", self.execute, target
+        )
+
+    async def execute(self, target: str) -> None:
         try:
-            w = whois.whois(target)
+            w: dict[str, Any] = whois.whois(target)
 
             for key, value in w.items():
                 if value:
                     print(f"{key}: {value}")
-
-            return w
         except Exception as e:
             error(f"WHOIS lookup failed: {str(e)}")
