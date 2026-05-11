@@ -96,7 +96,7 @@ class Shell(Cmd):
     def do_run(self, arg: str):
         """Execute the current module."""
         if self.current_module:
-            info("Executing...")
+            info("Executing...\n")
             asyncio.run(self.current_module.run())
         else:
             error("No module selected.")
