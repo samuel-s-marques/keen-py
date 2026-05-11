@@ -13,3 +13,4 @@ requests==2.33.1
 requests_futures==1.0.2
 rich==15.0.0
 tomli==2.4.1
+phonenumbers==8.13.52
