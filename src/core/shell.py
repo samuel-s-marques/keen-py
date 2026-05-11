@@ -9,11 +9,13 @@ import asyncio
 
 from src.core.loader import load_modules
 from src.utils.print_utils import error, info
+from src.utils.logger import set_debug_mode
 
 
 class Shell(Cmd):
-    def __init__(self) -> None:
+    def __init__(self, debug_mode: bool = False) -> None:
         super().__init__()
+        self.debug_mode = debug_mode
         self.version = "1.0.0"
         self.prompt = f"{stylize('keen', Style(color=Color.BLUE))} > "
         self.modules = load_modules()
@@ -79,14 +81,30 @@ class Shell(Cmd):
             )
 
     def do_set(self, arg: str) -> None:
-        """Set a module option."""
-        if not self.current_module:
-            error("No module selected. Use 'use <module>' first.")
-            return
-
+        """Set a module option or a global setting (e.g., debug)."""
         try:
             key, value = arg.split(" ", 1)
-            if self.current_module.set_option(key.lower(), value):
+            key_lower = key.lower()
+            value_lower = value.lower()
+
+            if key_lower == "debug":
+                if value_lower in ["true", "on", "1"]:
+                    self.debug_mode = True
+                    set_debug_mode(True)
+                    info("Global debug mode ENABLED.")
+                elif value_lower in ["false", "off", "0"]:
+                    self.debug_mode = False
+                    set_debug_mode(False)
+                    info("Global debug mode DISABLED.")
+                else:
+                    error("Invalid value for debug. Use true/false.")
+                return
+
+            if not self.current_module:
+                error("No module selected. Use 'use <module>' first to set module options.")
+                return
+
+            if self.current_module.set_option(key_lower, value):
                 info(f"{key.upper()} => {value}")
             else:
                 error(f"Invalid option: {key.upper()}")

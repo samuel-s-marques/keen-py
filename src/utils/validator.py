@@ -89,6 +89,9 @@ class InputValidator:
             bool: True if phone number is valid, False otherwise.
         """
 
+        if not number.startswith("+"):
+            number = "+" + number
+
         try:
             parsed = phonenumbers.parse(number, None)
             return phonenumbers.is_valid_number(parsed)

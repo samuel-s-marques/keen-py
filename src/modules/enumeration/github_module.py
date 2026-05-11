@@ -62,7 +62,7 @@ class GitHubModule(BaseModule):
             close_client = False
 
         try:
-            # 1. Get User Profile
+            # Get User Profile
             user_data = await self.loading(
                 f"Fetching profile for {target}...", self.get_user_info, target
             )
@@ -71,14 +71,14 @@ class GitHubModule(BaseModule):
 
             self.print_user_info(user_data)
 
-            # 2. Get Orgs
+            # Get Orgs
             orgs = await self.loading(
                 f"Fetching organizations for {target}...", self.get_orgs, target
             )
             if orgs:
                 info(f"Organizations: {', '.join([org['login'] for org in orgs])}")
 
-            # 3. Get Repos
+            # Get Repos
             repos = await self.loading(
                 f"Fetching repositories for {target}...", self.get_repos, target
             )
@@ -88,7 +88,7 @@ class GitHubModule(BaseModule):
                 if stars > 0:
                     info(f"Total Stars: {stars}")
 
-            # 4. Get Events and Extract Emails
+            # Get Events and Extract Emails
             emails = await self.loading(
                 "Searching for emails in public events...", self.extract_emails, target
             )

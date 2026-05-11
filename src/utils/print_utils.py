@@ -1,18 +1,13 @@
-from cmd2 import Color, stylize
-from rich.style import Style
-
+from loguru import logger
 
 def success(message: str) -> None:
-    print(stylize(f"[+] {message}", Style(color=Color.GREEN)))
-
+    logger.opt(depth=1).success(message)
 
 def info(message: str) -> None:
-    print(stylize(f"[*] {message}", Style(color=Color.BLUE)))
-
+    logger.opt(depth=1).info(message)
 
 def error(message: str) -> None:
-    print(stylize(f"[-] {message}\n", Style(color=Color.RED)))
-
+    logger.opt(depth=1).error(message)
 
 def warn(message: str) -> None:
-    print(stylize(f"[!] {message}\n", Style(color=Color.YELLOW)))
+    logger.opt(depth=1).warning(message)
