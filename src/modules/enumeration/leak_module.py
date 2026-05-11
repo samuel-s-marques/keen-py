@@ -28,6 +28,7 @@ class LeakModule(BaseModule):
             # TODO: Add automatic API key management
             "HIBP_APIKEY": ["", False, "API Key for Have I Been Pwned.", ""],
             "LEAKCHECK_APIKEY": ["", False, "API Key for LeakCheck.", ""],
+            "DEHASHED_APIKEY": ["", False, "API Key for DeHashed.", ""],
         },
     }
 
@@ -65,6 +66,9 @@ class LeakModule(BaseModule):
                 await self.loading(
                     f"Checking {target} on BreachVIP...", self.check_breachvip, target
                 )
+                await self.loading(
+                    f"Checking {target} on DeHashed...", self.check_dehashed, target
+                )
             case "email":
                 await self.loading(
                     f"Checking {target} on HIBP...", self.check_HIBP, target
@@ -75,12 +79,18 @@ class LeakModule(BaseModule):
                 await self.loading(
                     f"Checking {target} on BreachVIP...", self.check_breachvip, target
                 )
+                await self.loading(
+                    f"Checking {target} on DeHashed...", self.check_dehashed, target
+                )
             case "phone":
                 await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
                 )
                 await self.loading(
                     f"Checking {target} on BreachVIP...", self.check_breachvip, target
+                )
+                await self.loading(
+                    f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
             case _:
                 error(
@@ -237,3 +247,74 @@ class LeakModule(BaseModule):
 
         except Exception as e:
             error(f"Error checking LeakCheck: {e}")
+
+    async def check_dehashed(self, target: str) -> None:
+        api_key = self.options.get("DEHASHED_APIKEY")
+
+        if not api_key:
+            warn("API Key not found for DeHashed. Skipping API verification.")
+            return
+
+        try:
+            payload: dict = {
+                "query": target,
+                "page": 1,
+                "size": 25,
+                "wildcard": False,
+                "regex": False,
+                "de_dupe": True,
+            }
+            headers = {
+                "DeHashed-Api-Key": api_key,
+                "Content-Type": "application/json",
+            }
+            r = requests.post(
+                "https://api.dehashed.com/v2/search", headers=headers, data=payload
+            )
+            res = r.json()
+
+            if r.status_code != 200:
+                error(f"Error checking DeHashed: {res.get('error', 'Unknown Error')}")
+                return
+
+            entries = res.get("entries", [])
+
+            if not entries:
+                return
+
+            for entry in entries:
+                database = entry.get("database_name", "Unknown")
+
+                # Fields to show from DeHashed response
+                display_fields = [
+                    "email",
+                    "username",
+                    "password",
+                    "hashed_password",
+                    "name",
+                    "phone",
+                    "address",
+                    "ip_address",
+                    "dob",
+                ]
+
+                details = []
+                for field in display_fields:
+                    value = entry.get(field)
+                    if value:
+                        if isinstance(value, list):
+                            clean_values = [str(v) for v in value if v]
+                            if clean_values:
+                                details.append(
+                                    f"{field.replace('_', ' ').title()}: {', '.join(clean_values)}"
+                                )
+                        else:
+                            details.append(
+                                f"{field.replace('_', ' ').title()}: {value}"
+                            )
+
+                details_str = " | ".join(details)
+                success(f"[{database}] {details_str}")
+
+        except Exception as e:
+            error(f"Error checking DeHashed: {e}")
