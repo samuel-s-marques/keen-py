@@ -77,7 +77,7 @@ TODO:
 
 ## To Do
 - [ ] Implement full CLI framework
-- [ ] Create a proper logging system
+- [x] Create a proper logging system
 - [ ] Save ".keen" files for data persistence and sharing
 - [ ] Add tests
 - [ ] Add web interface
@@ -104,10 +104,9 @@ TODO:
 - [ ] Integrate IntelligenceX
 - [ ] Implement leak checking
   - [ ] Breach Directory API
-  - [ ] LeakCheck API
-  - [ ] Dehashed API
-  - [ ] DarkBeast API
-  - [ ] Have I Been Pwned API
+  - [x] LeakCheck API
+  - [x] Dehashed API
+  - [x] Have I Been Pwned API
 - [ ] Add API key management
 - [ ] Add documentation
   - [ ] Add module creation guide
