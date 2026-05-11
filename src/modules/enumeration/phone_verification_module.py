@@ -28,7 +28,7 @@ class PhoneVerificationModule(BaseModule):
                 "",
                 False,
                 "Optional API Key for APILayer Phone Verification to get detailed results.",
-                "phone",
+                "",
             ],
         },
     }
