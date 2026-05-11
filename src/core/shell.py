@@ -107,9 +107,9 @@ class Shell(Cmd):
         self.prompt = f"{stylize('keen', Style(color=Color.BLUE))} > "
 
     def do_show(self, arg: str) -> None:
-        """Show available <modules | options | info>. Another alias to list."""
+        """Show available <modules | options | info | banner>."""
         if not arg:
-            error("Usage: show <options | modules | info>")
+            error("Usage: show <options | modules | info | banner>")
             return
 
         if arg.lower() == "options":
@@ -124,8 +124,10 @@ class Shell(Cmd):
                 self.current_module.show_metadata()
             else:
                 error("No module selected.")
+        elif arg.lower() == "banner":
+            print(self.intro)
         else:
-            error("Usage: show <options | modules | info>")
+            error("Usage: show <options | modules | info | banner>")
 
     def do_list(self, arg: str) -> None:
         """List available <modules | options>. Another alias to show."""
