@@ -25,7 +25,9 @@ class BaseModule:
     }
 
     def __init__(self) -> None:
+        from loguru import logger
         self.options = {}
+        self.logger = logger.bind(module=self.metadata["name"])
 
     def set_option(self, key: str, value) -> bool:
         # Search for the key in a case-insensitive way
