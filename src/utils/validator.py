@@ -77,10 +77,24 @@ class InputValidator:
         pattern = r"^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$"
         return re.match(pattern, email.lower()) is not None
 
+    @staticmethod
+    def is_valid_phone_number(number: str) -> bool:
+        """Validate phone number.
+
+        Args:
+            number (str): Phone number to validate.
+
+        Returns:
+            bool: True if phone number is valid, False otherwise.
+        """
+        pattern = r"^\+?[1-9]\d{1,14}$"
+        return re.match(pattern, number) is not None
+
     VALIDATORS = {
         "domain": is_valid_domain,
         "ip": is_valid_ip,
         "cidr": is_valid_cidr,
         "url": is_valid_url,
         "email": is_valid_email,
+        "phone": is_valid_phone_number,
     }
