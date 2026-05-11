@@ -1,3 +1,5 @@
+from src.utils.print_utils import success
+from src.utils.print_utils import info
 from src.utils.print_utils import warn, error
 from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
@@ -28,6 +30,7 @@ class LeakModule(BaseModule):
             ],
             # TODO: Add automatic API key management
             "HIBP_APIKEY": ["", False, "API Key for Have I Been Pwned.", ""],
+            "LEAKCHECK_APIKEY": ["", False, "API Key for LeakCheck.", ""],
         },
     }
 
@@ -59,15 +62,20 @@ class LeakModule(BaseModule):
 
         match target_type:
             case "username":
-                # TODO: Implement username checking
-                pass
+                await self.loading(
+                    f"Checking {target} on LeakCheck...", self.check_leak_check, target
+                )
             case "email":
                 await self.loading(
                     f"Checking {target} on HIBP...", self.check_HIBP, target
                 )
+                await self.loading(
+                    f"Checking {target} on LeakCheck...", self.check_leak_check, target
+                )
             case "phone":
-                # TODO: Implement phone number checking
-                pass
+                await self.loading(
+                    f"Checking {target} on LeakCheck...", self.check_leak_check, target
+                )
             case _:
                 error(
                     "Invalid type. Please choose one of 'username', 'email', 'phone', or 'auto'."
@@ -82,13 +90,13 @@ class LeakModule(BaseModule):
         api_key = self.options.get("HIBP_APIKEY")
 
         if not api_key:
-            warn("API Key not found. Skipping API verification.")
+            warn("API Key not found for Have I Been Pwned. Skipping API verification.")
             return None
 
         try:
             r = requests.get(
                 f"https://haveibeenpwned.com/api/v3/breachedAccount/{target}",
-                headers={"User-Agent": UserAgents.get(), "hibp-api-key": api_key},
+                headers={"User-Agent": "keen-py/1.0.0", "hibp-api-key": api_key},
             )
 
             if r.status_code != 200:
@@ -106,3 +114,66 @@ class LeakModule(BaseModule):
 
         except Exception as e:
             error(f"Error checking Have I Been Pwned: {e}")
+
+    async def check_leak_check(self, target: str) -> None:
+        api_key = self.options.get("LEAKCHECK_APIKEY")
+
+        if not api_key:
+            warn("API Key not found for LeakCheck. Using public API.")
+
+        try:
+            headers = {
+                "User-Agent": UserAgents.get(),
+                "Accept": "application/json",
+            }
+
+            if api_key:
+                headers["X-API-Key"] = api_key
+
+            url = f"https://leakcheck.io/api/public?check={target}"
+
+            if api_key:
+                url = f"https://leakcheck.io/api/v2/query/{target}"
+
+            r = requests.get(url, headers=headers)
+
+            if r.status_code == 403:
+                error("Limit exceeded for LeakCheck. Try again later.")
+                return
+
+            if r.status_code != 200:
+                error(f"Error checking LeakCheck: {r.status_code}")
+                return
+
+            res = r.json()
+
+            if not res.get("success"):
+                error(f"Error checking LeakCheck: {res.get('message')}")
+                return
+
+            if api_key:
+                results: list[dict] = res.get("result", [])
+                for result in results:
+                    source = result.get("source", {})
+                    name = source.get("name", "Unknown")
+                    date = source.get("breach_date", "Unknown")
+
+                    fields = result.get("fields", [])
+                    fields_str = (
+                        f" - Leaked fields: {', '.join(fields)}" if fields else ""
+                    )
+
+                    success(
+                        f"{target} was found in {name} data breach at {date}{fields_str}"
+                    )
+
+            else:
+                results: list[dict] = res.get("sources", [])
+                for result in results:
+                    name = result.get("name", "Unknown")
+                    date = result.get("date", "Unknown")
+
+                    success(f"{target} was found in {name} data breach at {date}")
+
+        except Exception as e:
+            error(f"Error checking LeakCheck: {e}")
