@@ -22,6 +22,7 @@ class SOCMINTModule(BaseModule):
                 "auto",
                 False,
                 "The type of the target (username, name, domain, auto).",
+                "",
             ],
         },
     }
