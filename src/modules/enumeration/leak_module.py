@@ -103,10 +103,6 @@ class LeakModule(BaseModule):
                 error(f"{target} not found in any data breach.")
                 return
 
-            if "Attention Required" in r.text:
-                error(f"{target} - Rate limit exceeded. Please try again later.")
-                return
-
             breaches = r.json()
 
             for breach in breaches:
