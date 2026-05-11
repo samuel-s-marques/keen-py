@@ -7,7 +7,7 @@ import requests
 from rich.table import Table
 from rich.console import Console
 
-from src.utils.print_utils import error, info, success, warn
+from src.utils.print_utils import error, success, warn
 from src.core.base_module import BaseModule
 from src.utils.validator import InputValidator
 
@@ -58,7 +58,7 @@ DISPOSABLE_DOMAINS = {
 
 class EmailModule(BaseModule):
     metadata = {
-        "name": "Email_Enumeration",
+        "name": "Email_Verification",
         "description": "Verifies email address validity, reachability, MX records, and categorizes it.",
         "author": "Samuel Marques",
         "version": "1.0.0",
