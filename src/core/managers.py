@@ -18,6 +18,23 @@ class ConfigManager(DatabaseEngine):
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS preferences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT UNIQUE,
+                value TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS workspaces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                path TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         self.conn.commit()
 
     def get_api_key(self, service: str) -> str | None:
