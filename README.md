@@ -16,13 +16,12 @@ Keen, as in keen observation, is a reconnaissance and OSINT tool for ethical hac
 This module process files or data you've already captured. You can check if discovered credentials appear in known breaches, or analyze data such as EXIF (GPS, camera type, metadata from images) and APKs/IPAs (find endpoints, hardcoded credentials, etc.).
 
 Available modules:
-None for now.
+- HudsonRock: If target email is associated with infostealers
+- LeakCheck: If email or password was leaked through LeakCheck, DeHashed, Have I Been Pwned and BreachVIP
 
 TODO:
-- [ ] Add credentials breach checking
 - [ ] Add EXIF data extraction
 - [ ] Add APK/IPA parsing
-- [ ] Add graph database integration for data persistence and sharing (.keen files)
 
 ### Discovery
 This module focuses on identifying the infrastructure and "surface area" of a target. Think infrastructure, servers, domains, subdomains, etc. 
@@ -76,11 +75,25 @@ TODO:
 - [ ] Add vulnerability scanning
 
 ## To Do
-- [ ] Implement full CLI framework
+- [x] Implement full CLI framework
 - [x] Create a proper logging system
-- [ ] Save ".keen" files for data persistence and sharing
+- [x] Save ".keen" files for data persistence and sharing
 - [ ] Add tests
 - [ ] Add web interface
+  - [ ] Multi-threading (distributed workers)
+  - [ ] API dashboard
+  - [ ] Real-time job tracking
+  - [ ] Report generation (PDF, JSON/STIX2, HTML interactive map)
+  - [ ] REST API for automation
+  - [ ] Automation via UI (.keen-playbook recipes)
+  - [ ] Automatic target suggestion system
+  - [ ] Plugin marketplace
+  - [ ] Multi-language support (i18n)
+  - [ ] Mapping and camera integration (Geolocation)
+  - [ ] Integration with malshare and similar services
+  - [ ] Integration with MISP and similar services
+  - [ ] Collaboration features (shared workspaces, role-based access)
+  - [ ] Advanced threat intelligence (OSINT correlation, darknet monitoring)
 - [ ] Add notifications (Telegram, Discord, Email) for job completion/failure
 - [ ] Add PDF and documents generation capabilities
 - [ ] Add plugins
@@ -107,7 +120,7 @@ TODO:
   - [x] LeakCheck API
   - [x] Dehashed API
   - [x] Have I Been Pwned API
-- [ ] Add API key management
+- [x] Add API key management
 - [ ] Add documentation
   - [ ] Add module creation guide
   - [ ] Add API integration guide
