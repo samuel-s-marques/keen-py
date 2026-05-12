@@ -201,8 +201,36 @@ class ConfigManager(DatabaseEngine):
         self.conn.commit()
 
     def delete_workspace(self, name: str) -> None:
+        ws = self.get_workspace(name)
+        if ws and os.path.exists(ws["path"]):
+            try:
+                os.remove(ws["path"])
+            except OSError:
+                pass
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM workspaces WHERE name = ?", (name,))
+        self.conn.commit()
+
+    def rename_workspace(self, old_name: str, new_name: str) -> None:
+        ws = self.get_workspace(old_name)
+        if not ws:
+            raise ValueError(f"Workspace {old_name} not found.")
+        
+        old_path = ws["path"]
+        new_path = os.path.join(os.path.dirname(old_path), f"{new_name}.db")
+        new_path = os.path.normpath(new_path).replace("\\", "/")
+        
+        if os.path.exists(new_path):
+            raise ValueError(f"A workspace file for {new_name} already exists.")
+            
+        if os.path.exists(old_path):
+            os.rename(old_path, new_path)
+            
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE workspaces SET name = ?, path = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
+            (new_name, new_path, old_name),
+        )
         self.conn.commit()
 
     # Preferences CRUD helper methods
