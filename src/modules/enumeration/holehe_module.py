@@ -96,7 +96,7 @@ class HoleheModule(BaseModule):
             "metadata": {
                 "stix2": stix2_email,
                 "misp": misp_email,
-            }
+            },
         }
 
         nodes: list[dict[str, Any]] = [primary_node]
@@ -114,27 +114,33 @@ class HoleheModule(BaseModule):
             service_node = {
                 "type": "organization",
                 "value": service_name,
-                "metadata": {"type": "service"}
+                "metadata": {"type": "service"},
             }
             if service_node not in nodes:
                 nodes.append(service_node)
 
-            edges.append({
-                "source": email,
-                "target": service_name,
-                "relationship": "registered-on"
-            })
+            edges.append(
+                {
+                    "source": email,
+                    "target": service_name,
+                    "relationship": "registered-on",
+                }
+            )
 
             # Process recovery email if exists
             recovery_email = item.get("emailrecovery")
-            if recovery_email and recovery_email.strip() and not recovery_email.startswith("null"):
+            if (
+                recovery_email
+                and recovery_email.strip()
+                and not recovery_email.startswith("null")
+            ):
                 rec_email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, recovery_email)
                 rec_stix = {
                     "type": "email-addr",
                     "id": f"email-addr--{rec_email_uuid}",
                     "spec_version": "2.1",
                     "value": recovery_email,
-                    "comment": "Masked recovery email found via Holehe"
+                    "comment": "Masked recovery email found via Holehe",
                 }
                 rec_node = {
                     "type": "email-addr",
@@ -142,21 +148,27 @@ class HoleheModule(BaseModule):
                     "metadata": {
                         "stix2": rec_stix,
                         "misp": {"type": "email-dst", "value": recovery_email},
-                        "masked": True
-                    }
+                        "masked": True,
+                    },
                 }
                 if rec_node not in nodes:
                     nodes.append(rec_node)
 
-                edges.append({
-                    "source": email,
-                    "target": recovery_email,
-                    "relationship": "recovery-email"
-                })
+                edges.append(
+                    {
+                        "source": email,
+                        "target": recovery_email,
+                        "relationship": "recovery-email",
+                    }
+                )
 
             # Process recovery phone if exists
             recovery_phone = item.get("phoneNumber")
-            if recovery_phone and recovery_phone.strip() and not recovery_phone.startswith("null"):
+            if (
+                recovery_phone
+                and recovery_phone.strip()
+                and not recovery_phone.startswith("null")
+            ):
                 STIX_PHONE_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa1")
                 phone_uuid = uuid.uuid5(STIX_PHONE_NAMESPACE, recovery_phone)
                 phone_stix = {
@@ -164,7 +176,7 @@ class HoleheModule(BaseModule):
                     "id": f"x-phone-number--{phone_uuid}",
                     "spec_version": "2.1",
                     "value": recovery_phone,
-                    "comment": "Masked recovery phone found via Holehe"
+                    "comment": "Masked recovery phone found via Holehe",
                 }
                 phone_node = {
                     "type": "x-phone-number",
@@ -172,17 +184,19 @@ class HoleheModule(BaseModule):
                     "metadata": {
                         "stix2": phone_stix,
                         "misp": {"type": "phone-number", "value": recovery_phone},
-                        "masked": True
-                    }
+                        "masked": True,
+                    },
                 }
                 if phone_node not in nodes:
                     nodes.append(phone_node)
 
-                edges.append({
-                    "source": email,
-                    "target": recovery_phone,
-                    "relationship": "recovery-phone"
-                })
+                edges.append(
+                    {
+                        "source": email,
+                        "target": recovery_phone,
+                        "relationship": "recovery-phone",
+                    }
+                )
 
         new_results = {
             "nodes": nodes,
