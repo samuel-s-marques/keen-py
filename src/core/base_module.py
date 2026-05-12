@@ -26,8 +26,10 @@ class BaseModule:
 
     def __init__(self) -> None:
         from loguru import logger
+
         self.options = {}
         self.logger = logger.bind(module=self.metadata["name"])
+        self.shell = None
 
     def set_option(self, key: str, value) -> bool:
         # Search for the key in a case-insensitive way
@@ -131,7 +133,7 @@ class BaseModule:
                     service_names = [key, key.lower()]
                     for suffix in ["_apikey", "_api_key"]:
                         if key.lower().endswith(suffix):
-                            short_name = key.lower()[:-len(suffix)]
+                            short_name = key.lower()[: -len(suffix)]
                             service_names.append(short_name)
 
                     api_key = None
@@ -149,3 +151,9 @@ class BaseModule:
             result: Any = await task(*args, **kwargs)
             status.update(f"[bold green]{title}")
             return result
+
+    async def post_run(self, results: dict) -> None:
+        """
+        Ingestion engine. Automatically save nodes and edges
+        to the active workspace after a module finishes.
+        """
