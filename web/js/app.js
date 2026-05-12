@@ -556,6 +556,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function drawGraph(nodes, edges) {
+        let allHavePositions = nodes.length > 0;
+        
         const visNodes = nodes.map(n => {
             let icon = '\uf111'; // fa-circle default
             let color = '#8b92a5';
@@ -566,7 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (n.type.includes('phone')) { icon = '\uf095'; color = '#00e676'; }
             else if (n.type.includes('organization')) { icon = '\uf1ad'; color = '#ffb300'; }
 
-            return {
+            const visNode = {
                 id: n.id || n.value,
                 label: n.value,
                 group: n.type,
@@ -580,6 +582,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#f0f2f8' }
             };
+            
+            if (n.x !== null && n.x !== undefined && n.y !== null && n.y !== undefined) {
+                visNode.x = n.x;
+                visNode.y = n.y;
+            } else {
+                allHavePositions = false;
+            }
+            
+            return visNode;
         });
 
         const visEdges = edges.map(e => ({
@@ -601,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
             edges: { smooth: false },
             layout: { improvedLayout: false },
             physics: {
-                enabled: true,
+                enabled: !allHavePositions,
                 barnesHut: { gravitationalConstant: -3000 },
                 stabilization: { iterations: 150 }
             },
@@ -637,6 +648,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 },
                 addEdge: function(edgeData, callback) {
+                    const btnAddEdge = document.getElementById('btn-add-edge');
+                    if (btnAddEdge) btnAddEdge.classList.remove('active');
+                    networkCanvas.style.cursor = 'default';
                     const rel = prompt("Enter relationship (e.g. resolves-to, belongs-to):");
                     if (rel) {
                         edgeData.label = rel;
@@ -669,11 +683,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         network = new vis.Network(networkCanvas, data, options);
 
+        function savePositions() {
+            if (!activeWorkspace || !network) return;
+            const positions = network.getPositions();
+            const formattedPositions = {};
+            for (const [id, pos] of Object.entries(positions)) {
+                formattedPositions[id] = { x: pos.x, y: pos.y };
+            }
+            fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/positions`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ positions: formattedPositions })
+            });
+        }
+
         // Freeze physics once initial stabilization is done to save CPU
         network.once("stabilizationIterationsDone", function () {
             network.setOptions({ physics: { enabled: false } });
             const btnPhy = document.getElementById('btn-toggle-physics');
             if(btnPhy) btnPhy.classList.remove('active');
+            savePositions();
+        });
+
+        network.on("dragEnd", function() {
+            savePositions();
         });
 
         // Setup Layout & Action Buttons
@@ -713,6 +746,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 physics: { enabled: false }
             });
             btnPhysics.classList.remove('active');
+            setTimeout(savePositions, 500);
         };
 
         if(btnCircle) btnCircle.onclick = () => {
@@ -735,6 +769,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             data.nodes.update(updates);
             network.fit();
+            setTimeout(savePositions, 500);
         };
 
         if(btnPhysics) btnPhysics.onclick = () => {
@@ -749,23 +784,42 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         if(btnAddEdge) btnAddEdge.onclick = () => {
-            network.addEdgeMode();
+            if (btnAddEdge.classList.contains('active')) {
+                btnAddEdge.classList.remove('active');
+                networkCanvas.style.cursor = 'default';
+                network.disableEditMode();
+            } else {
+                btnAddEdge.classList.add('active');
+                networkCanvas.style.cursor = 'crosshair';
+                network.addEdgeMode();
+            }
         };
 
         network.on('oncontext', function (params) {
             params.event.preventDefault();
             const nodeId = this.getNodeAt(params.pointer.DOM);
+            const edgeId = this.getEdgeAt(params.pointer.DOM);
+            
             if (nodeId) {
                 const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
                 if (selectedNode) {
-                    showContextMenu(params.event.pageX, params.event.pageY, selectedNode);
+                    showContextMenu(params.event.pageX, params.event.pageY, selectedNode, null);
                 }
+            } else if (edgeId) {
+                showContextMenu(params.event.pageX, params.event.pageY, null, edgeId);
             } else {
                 contextMenu.classList.add('hidden');
             }
         });
 
         network.on('click', function (params) {
+            if (btnAddEdge && btnAddEdge.classList.contains('active')) {
+                // If user clicks without drawing an edge, abort edge mode
+                btnAddEdge.classList.remove('active');
+                networkCanvas.style.cursor = 'default';
+                network.disableEditMode();
+            }
+            
             contextMenu.classList.add('hidden');
             if (params.nodes.length > 0) {
                 const nodeId = params.nodes[0];
@@ -775,11 +829,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && btnAddEdge && btnAddEdge.classList.contains('active')) {
+                btnAddEdge.classList.remove('active');
+                networkCanvas.style.cursor = 'default';
+                network.disableEditMode();
+            }
+        });
     }
 
-    function showContextMenu(x, y, node) {
-        const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
+    function showContextMenu(x, y, node, edgeId = null) {
         contextMenuItems.innerHTML = '';
+        
+        if (edgeId !== null) {
+            const deleteEdgeItem = document.createElement('div');
+            deleteEdgeItem.className = 'context-menu-item';
+            deleteEdgeItem.style.color = 'var(--error)';
+            deleteEdgeItem.innerHTML = `<i class="fa-solid fa-trash"></i> Delete Edge`;
+            deleteEdgeItem.onclick = (e) => {
+                e.stopPropagation();
+                contextMenu.classList.add('hidden');
+                if (confirm("Delete this edge?")) {
+                    fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${edgeId}`, { method: 'DELETE' })
+                        .then(() => selectWorkspace(activeWorkspace))
+                        .catch(() => alert("Failed to delete edge."));
+                }
+            };
+            contextMenuItems.appendChild(deleteEdgeItem);
+            
+            contextMenu.style.left = `${x}px`;
+            contextMenu.style.top = `${y}px`;
+            contextMenu.classList.remove('hidden');
+            return;
+        }
+
+        const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
         
         let found = false;
 
