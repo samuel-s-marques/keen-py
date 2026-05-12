@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const terminalBody = document.getElementById('terminal-body');
     const btnClearTerm = document.getElementById('btn-clear-term');
 
+    const contextMenu = document.getElementById('context-menu');
+    const contextMenuItems = document.getElementById('context-menu-items');
+
     // Modals
     const modalNewWs = document.getElementById('modal-new-workspace');
     const btnNewWs = document.getElementById('btn-new-workspace');
@@ -54,6 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchModules();
 
     // Event Listeners
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.context-menu')) {
+            contextMenu.classList.add('hidden');
+        }
+    });
+
     btnNewWs.addEventListener('click', () => modalNewWs.classList.add('active'));
     closeModals.forEach(btn => btn.addEventListener('click', () => {
         modalNewWs.classList.remove('active');
@@ -210,6 +219,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Functions ---
 
+    function formatModuleName(key, mod) {
+        let cat = mod.category ? mod.category : "Uncategorized";
+        cat = cat.charAt(0).toUpperCase() + cat.slice(1);
+        cat = cat.replace(/[_-]/g, ' ');
+        const name = mod.name ? mod.name.replace(/[_-]/g, ' ') : key;
+        return `${cat} - ${name}`;
+    }
+
     function buildModuleDropdown(compatibleValidators = [], prefillValue = null) {
         moduleSelect.innerHTML = '<option value="" disabled selected>-- Choose a module --</option>';
         
@@ -236,7 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const opt = document.createElement('option');
             opt.value = key;
-            opt.textContent = `${mod.name} (${key})`;
+            opt.textContent = formatModuleName(key, mod);
 
             if (isMatch) {
                 if (!firstMatch) firstMatch = key;
@@ -363,6 +380,67 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function showContextMenu(x, y, node) {
+        const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
+        contextMenuItems.innerHTML = '';
+        
+        let found = false;
+
+        for (const key of Object.keys(modulesData).sort()) {
+            const mod = modulesData[key];
+            let isMatch = false;
+
+            if (validators.length > 0 && mod.options) {
+                for (const [optName, optValue] of Object.entries(mod.options)) {
+                    if (validators.includes(optValue[3])) {
+                        isMatch = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isMatch) {
+                found = true;
+                const item = document.createElement('div');
+                item.className = 'context-menu-item';
+                item.innerHTML = `<i class="fa-solid fa-play"></i> ${formatModuleName(key, mod)}`;
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    contextMenu.classList.add('hidden');
+                    // Select node and module
+                    handleNodeSelection(node);
+                    moduleSelect.value = key;
+                    moduleSelect.dispatchEvent(new Event('change'));
+                    
+                    // Auto-fill target
+                    setTimeout(() => {
+                        const inputs = moduleForm.querySelectorAll('input');
+                        for (const input of inputs) {
+                            const optVal = modulesData[key].options[input.name];
+                            if (optVal && validators.includes(optVal[3])) {
+                                input.value = node.value;
+                            }
+                        }
+                    }, 50);
+                };
+                contextMenuItems.appendChild(item);
+            }
+        }
+
+        if (!found) {
+            const empty = document.createElement('div');
+            empty.className = 'context-menu-item';
+            empty.style.cursor = 'default';
+            empty.style.color = 'var(--text-secondary)';
+            empty.textContent = 'No compatible modules';
+            contextMenuItems.appendChild(empty);
+        }
+
+        contextMenu.style.left = `${x}px`;
+        contextMenu.style.top = `${y}px`;
+        contextMenu.classList.remove('hidden');
+    }
+
     function drawGraph(nodes, edges) {
         const visNodes = nodes.map(n => {
             let icon = '\uf111'; // fa-circle default
@@ -416,10 +494,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         network = new vis.Network(networkCanvas, data, options);
 
+        network.on('oncontext', function (params) {
+            params.event.preventDefault();
+            const nodeId = this.getNodeAt(params.pointer.DOM);
+            if (nodeId) {
+                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
+                if (selectedNode) {
+                    showContextMenu(params.event.pageX, params.event.pageY, selectedNode);
+                }
+            } else {
+                contextMenu.classList.add('hidden');
+            }
+        });
+
         network.on('click', function (params) {
+            contextMenu.classList.add('hidden');
             if (params.nodes.length > 0) {
                 const nodeId = params.nodes[0];
-                // Sometimes ID is the value, sometimes it's STIX ID. 
                 const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
                 if (selectedNode) {
                     handleNodeSelection(selectedNode);
