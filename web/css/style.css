@@ -15,6 +15,18 @@
     --font-mono: 'Fira Code', monospace;
 }
 
+:root[data-theme="light"] {
+    --bg-main: #f4f6f8;
+    --bg-panel: rgba(255, 255, 255, 0.8);
+    --bg-panel-hover: rgba(240, 242, 245, 0.9);
+    --border-color: rgba(0, 0, 0, 0.1);
+    --text-primary: #1a1c23;
+    --text-secondary: #5a6270;
+    --accent-cyan: #0088cc;
+    --accent-blue: #0055ff;
+    --accent-magenta: #cc00cc;
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -188,11 +200,33 @@ body {
     box-shadow: 0 4px 15px rgba(0, 114, 255, 0.1);
 }
 
+.workspace-header-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
 .workspace-name {
     font-weight: 600;
     font-size: 1.05rem;
     margin-bottom: 4px;
     color: var(--text-primary);
+}
+
+.workspace-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.workspace-item:hover .workspace-actions {
+    opacity: 1;
+}
+
+.workspace-actions .icon-btn {
+    font-size: 0.85rem;
+    padding: 2px;
 }
 
 .workspace-desc {
@@ -593,4 +627,29 @@ select:focus, input:focus {
 .context-menu-item:hover {
     background: var(--bg-panel-hover);
     color: var(--accent-cyan);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .main-layout {
+        flex-direction: column;
+        overflow-y: auto;
+    }
+    .sidebar, .right-panel {
+        width: 100%;
+        border-right: none;
+        border-left: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .sidebar {
+        height: auto;
+        max-height: 40vh;
+    }
+    .right-panel {
+        height: auto;
+    }
+    .center-panel {
+        min-height: 60vh;
+        border-bottom: 1px solid var(--border-color);
+    }
 }
