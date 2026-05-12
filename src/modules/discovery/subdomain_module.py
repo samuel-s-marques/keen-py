@@ -1,3 +1,4 @@
+from typing import Any
 from src.utils.user_agents import UserAgents
 import requests
 import re
@@ -104,6 +105,10 @@ class SubdomainModule(BaseModule):
             info(f"Found {len(subdomains)} subdomains:")
             for subdomain in subdomains:
                 print(subdomain)
+
+            # Trigger save results
+            results_dict = {"subdomains": list(subdomains)}
+            await self._save_results(target, results_dict)
         except Exception as e:
             error(f"Error: {str(e)}")
             return
@@ -327,3 +332,83 @@ class SubdomainModule(BaseModule):
             pass
 
         return subdomains
+
+    async def _save_results(self, target: str, results: dict) -> None:
+        import uuid
+
+        subdomains = results.get("subdomains", [])
+
+        # STIX 2.1 Standard Domain-Name Object
+        STIX_DOMAIN_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa7")
+        domain_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, target)
+
+        stix2_domain = {
+            "type": "domain-name",
+            "id": f"domain-name--{domain_uuid}",
+            "spec_version": "2.1",
+            "value": target,
+        }
+
+        misp_domain = {
+            "type": "domain",
+            "value": target,
+        }
+
+        primary_node = {
+            "type": "domain-name",
+            "value": target,
+            "metadata": {
+                "stix2": stix2_domain,
+                "misp": misp_domain,
+                "subdomains_count": len(subdomains),
+            },
+        }
+
+        nodes: list[dict[str, Any]] = [primary_node]
+        edges: list[dict[str, Any]] = []
+
+        # Map each subdomain
+        for sub in subdomains:
+            sub_cleaned = sub.strip().lower()
+            if not sub_cleaned:
+                continue
+
+            sub_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, sub_cleaned)
+            stix2_sub = {
+                "type": "domain-name",
+                "id": f"domain-name--{sub_uuid}",
+                "spec_version": "2.1",
+                "value": sub_cleaned,
+            }
+
+            misp_sub = {
+                "type": "domain",
+                "value": sub_cleaned,
+            }
+
+            sub_node = {
+                "type": "domain-name",
+                "value": sub_cleaned,
+                "metadata": {
+                    "stix2": stix2_sub,
+                    "misp": misp_sub,
+                },
+            }
+
+            if sub_node not in nodes:
+                nodes.append(sub_node)
+
+            edges.append(
+                {
+                    "source": target,
+                    "target": sub_cleaned,
+                    "relationship": "has-subdomain",
+                }
+            )
+
+        new_results = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        await self.post_run(new_results)
