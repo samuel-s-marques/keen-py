@@ -165,3 +165,35 @@ class BaseModule:
         Ingestion engine. Automatically save nodes and edges
         to the active workspace after a module finishes.
         """
+        workspace = self.workspace
+        if not workspace:
+            self.logger.warning(
+                "No active workspace selected. Module results were not saved."
+            )
+            return
+
+        node_map = {}
+        for node in results.get("nodes", []):
+            node_id = workspace.get_or_add_node(
+                node_type=node["type"],
+                value=node["value"],
+                metadata=node.get("metadata", {}),
+            )
+            node_map[node["value"]] = node_id
+
+        for edge in results.get("edges", []):
+            source_id = node_map.get(edge["source"])
+            target_id = node_map.get(edge["target"])
+
+            if not source_id:
+                source_id = workspace.get_node_id(edge["source"])
+
+            if not target_id:
+                target_id = workspace.get_node_id(edge["target"])
+
+            if source_id and target_id:
+                workspace.add_edge(
+                    source_id=source_id,
+                    target_id=target_id,
+                    relationship=edge.get("relationship", "RELATED"),
+                )
