@@ -1,3 +1,4 @@
+from typing import Any
 from src.utils.print_utils import warn, error, success
 from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
@@ -57,56 +58,69 @@ class LeakModule(BaseModule):
             else:
                 target_type = "username"
 
+        all_leaks = []
         match target_type:
             case "username":
-                await self.loading(
+                lc = await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
                 )
-                await self.loading(
+                bv = await self.loading(
                     f"Checking {target} on BreachVIP...", self.check_breachvip, target
                 )
-                await self.loading(
+                dh = await self.loading(
                     f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
+                all_leaks.extend(lc or [])
+                all_leaks.extend(bv or [])
+                all_leaks.extend(dh or [])
             case "email":
-                await self.loading(
+                hb = await self.loading(
                     f"Checking {target} on HIBP...", self.check_HIBP, target
                 )
-                await self.loading(
+                lc = await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
                 )
-                await self.loading(
+                bv = await self.loading(
                     f"Checking {target} on BreachVIP...", self.check_breachvip, target
                 )
-                await self.loading(
+                dh = await self.loading(
                     f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
+                all_leaks.extend(hb or [])
+                all_leaks.extend(lc or [])
+                all_leaks.extend(bv or [])
+                all_leaks.extend(dh or [])
             case "phone":
-                await self.loading(
+                lc = await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
                 )
-                await self.loading(
+                bv = await self.loading(
                     f"Checking {target} on BreachVIP...", self.check_breachvip, target
                 )
-                await self.loading(
+                dh = await self.loading(
                     f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
+                all_leaks.extend(lc or [])
+                all_leaks.extend(bv or [])
+                all_leaks.extend(dh or [])
             case _:
                 error(
                     "Invalid type. Please choose one of 'username', 'email', 'phone', or 'auto'."
                 )
                 return
 
-    async def check_HIBP(self, target: str) -> None:
+        await self._save_results(target, {"type": target_type, "leaks": all_leaks})
+
+    async def check_HIBP(self, target: str) -> list[dict]:
         if not InputValidator.is_valid_email(target):
             error(f"Invalid email address: {target}")
-            return
+            return []
 
         api_key = self.options.get("HIBP_APIKEY")
 
         if not api_key:
             warn("API Key not found for Have I Been Pwned. Skipping API verification.")
-            return None
+            return []
 
         try:
             r = requests.get(
@@ -116,17 +130,28 @@ class LeakModule(BaseModule):
 
             if r.status_code != 200:
                 error(f"{target} not found in any data breach.")
-                return
+                return []
 
             breaches = r.json()
-
+            output_results = []
             for breach in breaches:
                 print(f"[{target}] was found in {breach['Name']} data breach")
+                output_results.append(
+                    {
+                        "source": "HIBP",
+                        "breach_name": breach.get("Name"),
+                        "date": breach.get("BreachDate"),
+                        "categories": breach.get("DataClasses", []),
+                        "extra_info": {},
+                    }
+                )
+            return output_results
 
         except Exception as e:
             error(f"Error checking Have I Been Pwned: {e}")
+            return []
 
-    async def check_breachvip(self, target: str) -> None:
+    async def check_breachvip(self, target: str) -> list[dict]:
         try:
             payload: dict = {
                 "term": target,
@@ -158,13 +183,14 @@ class LeakModule(BaseModule):
                 error(
                     f"Error checking BreachVIP: Invalid JSON response (Status {r.status_code})"
                 )
-                return
+                return []
 
             if r.status_code != 200:
                 error(f"Error checking BreachVIP: {res.get('error', 'Unknown Error')}")
-                return
+                return []
 
             results = res.get("results", [])
+            output_results = []
             for result in results:
                 source = result.get("source", "Unknown")
                 categories = result.get("categories", "Unknown")
@@ -181,10 +207,27 @@ class LeakModule(BaseModule):
                 success(
                     f"{target} was found in {source} data breach with {categories} categories{extra_str}"
                 )
+                output_results.append(
+                    {
+                        "source": "BreachVIP",
+                        "breach_name": source,
+                        "date": None,
+                        "categories": (
+                            [categories] if isinstance(categories, str) else categories
+                        ),
+                        "extra_info": {
+                            k: v
+                            for k, v in result.items()
+                            if k not in ["source", "categories"] and v
+                        },
+                    }
+                )
+            return output_results
         except Exception as e:
             error(f"Error checking BreachVIP: {e}")
+            return []
 
-    async def check_leak_check(self, target: str) -> None:
+    async def check_leak_check(self, target: str) -> list[dict]:
         api_key = self.options.get("LEAKCHECK_APIKEY")
 
         if not api_key:
@@ -208,18 +251,19 @@ class LeakModule(BaseModule):
 
             if r.status_code == 403:
                 error("Limit exceeded for LeakCheck. Try again later.")
-                return
+                return []
 
             if r.status_code != 200:
                 error(f"Error checking LeakCheck: {r.status_code}")
-                return
+                return []
 
             res = r.json()
 
             if not res.get("success"):
                 error(f"Error checking LeakCheck: {res.get('message')}")
-                return
+                return []
 
+            output_results = []
             if api_key:
                 results: list[dict] = res.get("result", [])
                 for result in results:
@@ -235,6 +279,15 @@ class LeakModule(BaseModule):
                     success(
                         f"{target} was found in {name} data breach at {date}{fields_str}"
                     )
+                    output_results.append(
+                        {
+                            "source": "LeakCheck",
+                            "breach_name": name,
+                            "date": date,
+                            "categories": fields,
+                            "extra_info": {},
+                        }
+                    )
 
             else:
                 results: list[dict] = res.get("sources", [])
@@ -243,16 +296,27 @@ class LeakModule(BaseModule):
                     date = result.get("date", "Unknown")
 
                     success(f"{target} was found in {name} data breach at {date}")
+                    output_results.append(
+                        {
+                            "source": "LeakCheck",
+                            "breach_name": name,
+                            "date": date,
+                            "categories": [],
+                            "extra_info": {},
+                        }
+                    )
+            return output_results
 
         except Exception as e:
             error(f"Error checking LeakCheck: {e}")
+            return []
 
-    async def check_dehashed(self, target: str) -> None:
+    async def check_dehashed(self, target: str) -> list[dict]:
         api_key = self.options.get("DEHASHED_APIKEY")
 
         if not api_key:
             warn("API Key not found for DeHashed. Skipping API verification.")
-            return
+            return []
 
         try:
             payload: dict = {
@@ -274,13 +338,14 @@ class LeakModule(BaseModule):
 
             if r.status_code != 200:
                 error(f"Error checking DeHashed: {res.get('error', 'Unknown Error')}")
-                return
+                return []
 
             entries = res.get("entries", [])
 
             if not entries:
-                return
+                return []
 
+            output_results = []
             for entry in entries:
                 database = entry.get("database_name", "Unknown")
 
@@ -315,5 +380,164 @@ class LeakModule(BaseModule):
                 details_str = " | ".join(details)
                 success(f"[{database}] {details_str}")
 
+                output_results.append(
+                    {
+                        "source": "DeHashed",
+                        "breach_name": database,
+                        "date": None,
+                        "categories": [
+                            field for field in display_fields if entry.get(field)
+                        ],
+                        "extra_info": {
+                            field: entry.get(field)
+                            for field in display_fields
+                            if entry.get(field)
+                        },
+                    }
+                )
+            return output_results
+
         except Exception as e:
             error(f"Error checking DeHashed: {e}")
+            return []
+
+    async def _save_results(self, target: str, results: dict) -> None:
+        import uuid
+
+        target_type = results.get("type", "email")
+        leaks = results.get("leaks", [])
+
+        # Primary Target Node Construction
+        stix2_target: dict = {}
+        misp_target: dict = {}
+
+        if target_type == "email":
+            STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
+            target_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, target)
+            stix2_target = {
+                "type": "email-addr",
+                "id": f"email-addr--{target_uuid}",
+                "spec_version": "2.1",
+                "value": target,
+            }
+            misp_target = {
+                "type": "email-dst",
+                "value": target,
+            }
+            primary_node = {
+                "type": "email-addr",
+                "value": target,
+                "metadata": {
+                    "stix2": stix2_target,
+                    "misp": misp_target,
+                    "leaks_count": len(leaks),
+                },
+            }
+        elif target_type == "phone":
+            STIX_PHONE_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa1")
+            target_uuid = uuid.uuid5(STIX_PHONE_NAMESPACE, target)
+            stix2_target = {
+                "type": "x-phone-number",
+                "id": f"x-phone-number--{target_uuid}",
+                "spec_version": "2.1",
+                "value": target,
+            }
+            misp_target = {
+                "type": "phone-number",
+                "value": target,
+            }
+            primary_node = {
+                "type": "x-phone-number",
+                "value": target,
+                "metadata": {
+                    "stix2": stix2_target,
+                    "misp": misp_target,
+                    "leaks_count": len(leaks),
+                },
+            }
+        else:  # username
+            STIX_ACCOUNT_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa6")
+            target_uuid = uuid.uuid5(STIX_ACCOUNT_NAMESPACE, f"username:{target}")
+            stix2_target = {
+                "type": "user-account",
+                "id": f"user-account--{target_uuid}",
+                "spec_version": "2.1",
+                "account_login": target,
+                "account_type": "username",
+            }
+            misp_target = {
+                "type": "text",
+                "value": target,
+            }
+            primary_node = {
+                "type": "user-account",
+                "value": f"username:{target}",
+                "metadata": {
+                    "stix2": stix2_target,
+                    "misp": misp_target,
+                    "leaks_count": len(leaks),
+                },
+            }
+
+        nodes: list[dict[str, Any]] = [primary_node]
+        edges: list[dict[str, Any]] = []
+
+        # Map Leak Nodes
+        STIX_BREACH_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa8")
+        for leak in leaks:
+            breach_name = leak.get("breach_name", "Unknown")
+            source = leak.get("source", "Unknown")
+            date = leak.get("date")
+            categories = leak.get("categories", [])
+            extra_info = leak.get("extra_info", {})
+
+            # Standard STIX 2.1 custom observable for a data breach
+            breach_uuid = uuid.uuid5(STIX_BREACH_NAMESPACE, f"{source}:{breach_name}")
+            stix2_breach = {
+                "type": "x-data-breach",
+                "id": f"x-data-breach--{breach_uuid}",
+                "spec_version": "2.1",
+                "name": breach_name,
+                "description": f"Target was compromised in {breach_name} breach (reported by {source})",
+                "source": source,
+                "breach_date": date,
+                "categories": categories,
+            }
+
+            misp_breach = {
+                "type": "leak-source",
+                "value": f"{source} ({breach_name})",
+            }
+
+            breach_node = {
+                "type": "x-data-breach",
+                "value": f"{source}:{breach_name}",
+                "metadata": {
+                    "stix2": stix2_breach,
+                    "misp": misp_breach,
+                    "categories": categories,
+                    "extra_info": extra_info,
+                    "breach_date": date,
+                },
+            }
+
+            if breach_node not in nodes:
+                nodes.append(breach_node)
+
+            source_val = (
+                target if target_type in ["email", "phone"] else f"username:{target}"
+            )
+            edges.append(
+                {
+                    "source": source_val,
+                    "target": f"{source}:{breach_name}",
+                    "relationship": "compromised-in",
+                }
+            )
+
+        new_results = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        await self.post_run(new_results)
