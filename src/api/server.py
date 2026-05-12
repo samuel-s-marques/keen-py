@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import uvicorn
 from typing import Optional, Dict, Any
+import io
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -41,6 +42,25 @@ class ModuleRunRequest(BaseModel):
     options: Dict[str, Any] = {}
 
 
+class EdgeCreate(BaseModel):
+    source_id: str
+    target_id: str
+    relationship: str
+
+
+class ConfigUnlock(BaseModel):
+    password: str
+
+
+class APIKeyCreate(BaseModel):
+    service: str
+    api_key: str
+
+
+class WorkspaceRename(BaseModel):
+    new_name: str
+
+
 class APIShellContext:
     def __init__(self, workspace: WorkspaceManager | None = None):
         self.workspace = workspace
@@ -55,9 +75,6 @@ class QueueSink:
             self.queue.put_nowait(str(message))
         except Exception:
             pass
-
-
-import io
 
 
 class QueueStdoutRedirector(io.TextIOBase):
@@ -155,6 +172,73 @@ def get_workspace_edges(name: str):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
+global_config = ConfigManager("~/.keen/config.db")
+
+
+@app.post("/api/config/unlock")
+def unlock_config(req: ConfigUnlock):
+    if global_config.unlock(req.password):
+        return {"success": True}
+    return JSONResponse(status_code=401, content={"error": "Invalid password"})
+
+
+@app.get("/api/config/keys")
+def get_config_keys():
+    if not global_config.is_unlocked():
+        return JSONResponse(status_code=401, content={"error": "Config locked"})
+    return global_config.get_all_api_keys()
+
+
+@app.post("/api/config/keys")
+def set_config_key(req: APIKeyCreate):
+    if not global_config.is_unlocked():
+        return JSONResponse(status_code=401, content={"error": "Config locked"})
+    global_config.set_api_key(req.service.lower(), req.api_key)
+    return {"success": True}
+
+
+@app.delete("/api/workspaces/{name}")
+def delete_workspace(name: str):
+    global_config.delete_workspace(name)
+    return {"success": True}
+
+
+@app.put("/api/workspaces/{name}")
+def rename_workspace(name: str, req: WorkspaceRename):
+    try:
+        global_config.rename_workspace(name, req.new_name)
+        return {"success": True, "new_name": req.new_name}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+@app.post("/api/workspaces/{name}/edges")
+def create_workspace_edge(name: str, req: EdgeCreate):
+    w = global_config.get_workspace(name)
+    if not w:
+        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
+    try:
+        wm = WorkspaceManager(w["path"], name=name)
+
+        source_id = req.source_id
+        if not source_id.isdigit():
+            source_id = wm.get_node_id(source_id)
+        target_id = req.target_id
+        if not target_id.isdigit():
+            target_id = wm.get_node_id(target_id)
+
+        if not source_id or not target_id:
+            return JSONResponse(
+                status_code=400, content={"error": "Invalid node references"}
+            )
+
+        wm.add_edge(int(source_id), int(target_id), req.relationship)
+        wm.conn.close()
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 @app.get("/api/modules")
 def get_modules():
     modules = load_modules()
@@ -229,7 +313,7 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
             await websocket.close()
             return
 
-        # 4. Setup Log Streaming
+        # Setup Log Streaming
         log_queue = asyncio.Queue()
         queue_sink = QueueSink(log_queue)
 
@@ -242,7 +326,7 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
 
         stdout_redirector = QueueStdoutRedirector(log_queue)
 
-        # 5. Run Module
+        # Run Module
         async def run_module_task():
             # Redirect stdout to our queue so rich/print go to WS
             with contextlib.redirect_stdout(stdout_redirector):
@@ -254,7 +338,7 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
 
         module_task = asyncio.create_task(run_module_task())
 
-        # 6. Stream logs down to WS concurrently
+        # Stream logs down to WS concurrently
         while not module_task.done() or not log_queue.empty():
             try:
                 # Wait for next log with timeout to occasionally check task completion
