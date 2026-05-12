@@ -413,7 +413,6 @@ class Shell(Cmd):
                 return
             name = args[1]
             w = self.config.get_workspace(name)
-            print(w)
             if not w:
                 error(f"Workspace '{name}' not found.")
                 return
