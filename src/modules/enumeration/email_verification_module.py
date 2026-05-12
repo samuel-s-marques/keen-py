@@ -75,11 +75,10 @@ class EmailVerificationModule(BaseModule):
                 "Timeout for connections in seconds.",
                 "",
             ],
-            # TODO: Add automatic API key management
             "APILAYER_EMAIL_VER_APIKEY": [
                 "",
                 False,
-                "Optional API Key for APILayer Email Verification to get email verification results.",
+                "API Key for APILayer Email Verification to get email verification results.",
                 "",
             ],
         },
@@ -255,7 +254,6 @@ class EmailVerificationModule(BaseModule):
     async def api_verify_fallback(self, email: str) -> dict | None:
         """Fallback API verification stub when local IP is blocked."""
         try:
-            # TODO: Automatically get API key from config file
             api_key = self.options.get("APILAYER_EMAIL_VER_APIKEY")
 
             if not api_key:

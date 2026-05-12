@@ -122,6 +122,27 @@ class BaseModule:
 
         return True
 
+    def load_api_keys(self, config_manager) -> None:
+        """Automatically load matching API keys from the configuration manager."""
+        for key in self.metadata.get("options", {}):
+            if key.endswith("_APIKEY") or key.endswith("_API_KEY"):
+                # If the option is not currently set or is empty/falsy, try to fetch it
+                if not self.options.get(key):
+                    service_names = [key, key.lower()]
+                    for suffix in ["_apikey", "_api_key"]:
+                        if key.lower().endswith(suffix):
+                            short_name = key.lower()[:-len(suffix)]
+                            service_names.append(short_name)
+
+                    api_key = None
+                    for svc in service_names:
+                        api_key = config_manager.get_api_key(svc)
+                        if api_key:
+                            break
+
+                    if api_key:
+                        self.options[key] = api_key
+
     async def loading(self, title: str, task: Callable, *args, **kwargs) -> Any:
         """Show loading animation."""
         with Console().status(f"[bold green]{title}") as status:

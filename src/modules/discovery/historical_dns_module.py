@@ -24,11 +24,10 @@ class HistoricalDnsModule(BaseModule):
                 "The domain name to analyze (e.g., google.com).",
                 "domain",
             ],
-            # TODO: Add automatic API key management
             "SECURITYTRAILS_API_KEY": [
                 "",
                 False,
-                "Optional API Key for SecurityTrails to get more comprehensive historical data.",
+                "API Key for SecurityTrails to get more comprehensive historical data.",
                 "",
             ],
         },
