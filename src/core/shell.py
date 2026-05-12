@@ -290,6 +290,7 @@ class Shell(Cmd):
         if module_name in self.modules:
             module_class = self.modules[module_name]
             self.current_module = module_class()
+            self.current_module.shell = self
 
             # Check if this module uses API keys
             has_api_key_opts = any(
@@ -345,6 +346,7 @@ class Shell(Cmd):
     def do_run(self, arg: str):
         """Execute the current module."""
         if self.current_module:
+            self.current_module.shell = self
             info("Executing...\n")
             asyncio.run(self.current_module.run())
         else:
