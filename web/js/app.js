@@ -1,9 +1,29 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Theme setup
+    const btnThemeToggle = document.getElementById('btn-theme-toggle');
+    const savedTheme = localStorage.getItem('keen-theme') || 'dark';
+    if (savedTheme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+    }
+    btnThemeToggle.addEventListener('click', () => {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        if (currentTheme === 'light') {
+            document.documentElement.removeAttribute('data-theme');
+            localStorage.setItem('keen-theme', 'dark');
+        } else {
+            document.documentElement.setAttribute('data-theme', 'light');
+            localStorage.setItem('keen-theme', 'light');
+        }
+        if (activeWorkspace) selectWorkspace(activeWorkspace); // Redraw graph to apply theme
+    });
+
     // State
     let activeWorkspace = null;
     let modulesData = {};
     let activeSocket = null;
     let network = null;
+    let isConfigUnlocked = false;
+    let configKeys = {};
 
     const NODE_TO_VALIDATOR_MAP = {
         'email-addr': ['email'],
@@ -46,6 +66,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCreateWs = document.getElementById('btn-create-ws');
     const inputWsName = document.getElementById('input-ws-name');
     const inputWsDesc = document.getElementById('input-ws-desc');
+    
+    const modalRenameWs = document.getElementById('modal-rename-workspace');
+    const btnConfirmRenameWs = document.getElementById('btn-confirm-rename-ws');
+    const inputRenameWs = document.getElementById('input-rename-ws');
+
+    const modalSettings = document.getElementById('modal-settings');
+    const btnSettings = document.getElementById('btn-settings');
+    const btnUnlockSettings = document.getElementById('btn-unlock-settings');
+    const inputMasterPassword = document.getElementById('input-master-password');
+    const settingsLocked = document.getElementById('settings-locked');
+    const settingsUnlocked = document.getElementById('settings-unlocked');
+    const btnSaveApiKey = document.getElementById('btn-save-api-key');
+    const apiKeysList = document.getElementById('api-keys-list');
+
     const closeModals = document.querySelectorAll('.close-modal');
 
     // API Base
@@ -56,18 +90,95 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchWorkspaces();
     fetchModules();
 
-    // Event Listeners
+    // Global Click Listener
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.context-menu')) {
             contextMenu.classList.add('hidden');
         }
     });
 
+    // Modals Handling
     btnNewWs.addEventListener('click', () => modalNewWs.classList.add('active'));
+    btnSettings.addEventListener('click', () => {
+        modalSettings.classList.add('active');
+        if (isConfigUnlocked) fetchApiKeys();
+    });
+    
     closeModals.forEach(btn => btn.addEventListener('click', () => {
         modalNewWs.classList.remove('active');
+        modalSettings.classList.remove('active');
+        modalRenameWs.classList.remove('active');
     }));
+
+    // Settings API Keys
+    btnUnlockSettings.addEventListener('click', async () => {
+        const password = inputMasterPassword.value;
+        const res = await fetch(`${API_BASE}/config/unlock`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ password })
+        });
+        if (res.ok) {
+            isConfigUnlocked = true;
+            settingsLocked.classList.add('hidden');
+            settingsUnlocked.classList.remove('hidden');
+            inputMasterPassword.value = '';
+            fetchApiKeys();
+        } else {
+            alert('Invalid master password');
+        }
+    });
+
+    btnSaveApiKey.addEventListener('click', async () => {
+        const service = document.getElementById('input-api-service').value.trim().toUpperCase();
+        const api_key = document.getElementById('input-api-key').value.trim();
+        if (!service || !api_key) return;
+        
+        await fetch(`${API_BASE}/config/keys`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ service, api_key })
+        });
+        document.getElementById('input-api-service').value = '';
+        document.getElementById('input-api-key').value = '';
+        fetchApiKeys();
+    });
+
+    async function fetchApiKeys() {
+        if (!isConfigUnlocked) return;
+        const res = await fetch(`${API_BASE}/config/keys`);
+        if (res.ok) {
+            const keys = await res.json();
+            configKeys = {};
+            apiKeysList.innerHTML = keys.length ? '' : 'No keys configured.';
+            keys.forEach(k => {
+                configKeys[k.service] = k.api_key;
+                const div = document.createElement('div');
+                div.style.marginBottom = '8px';
+                div.style.display = 'flex';
+                div.style.justifyContent = 'space-between';
+                div.style.alignItems = 'center';
+                div.innerHTML = `
+                    <div><strong>${k.service}</strong>: <span style="font-family:var(--font-mono)">${k.api_key.substring(0,4)}...</span></div>
+                    <button class="icon-btn" style="color:var(--text-secondary); padding: 4px;" title="Edit">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                `;
+                const editBtn = div.querySelector('button');
+                editBtn.onclick = () => {
+                    document.getElementById('input-api-service').value = k.service;
+                    document.getElementById('input-api-key').value = k.api_key;
+                };
+                apiKeysList.appendChild(div);
+            });
+            // Re-render form if a module is selected to auto-inject keys
+            if (moduleSelect.value) {
+                moduleSelect.dispatchEvent(new Event('change'));
+            }
+        }
+    }
     
+    // Workspace Management
     btnCreateWs.addEventListener('click', async () => {
         const name = inputWsName.value.trim();
         const desc = inputWsDesc.value.trim();
@@ -88,6 +199,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {
             console.error('Failed to create workspace', e);
+        }
+    });
+
+    btnConfirmRenameWs.addEventListener('click', async () => {
+        const oldName = inputRenameWs.dataset.oldName;
+        const newName = inputRenameWs.value.trim();
+        if (!newName || newName === oldName) return;
+        
+        const res = await fetch(`${API_BASE}/workspaces/${oldName}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ new_name: newName })
+        });
+        
+        if (res.ok) {
+            modalRenameWs.classList.remove('active');
+            if (activeWorkspace === oldName) activeWorkspace = newName;
+            await fetchWorkspaces();
+            if (activeWorkspace === newName) selectWorkspace(newName);
+        } else {
+            alert("Failed to rename workspace. Ensure no other instances are locking it.");
         }
     });
 
@@ -132,7 +264,12 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const [key, value] of Object.entries(mod.options)) {
                 // value is usually [default, required, description, type]
                 const isRequired = value[1];
-                const defVal = value[0] || '';
+                let defVal = value[0] || '';
+                
+                // Auto-pull API keys if unlocked
+                if (isConfigUnlocked && configKeys[key.toUpperCase()]) {
+                    defVal = configKeys[key.toUpperCase()];
+                }
                 
                 const group = document.createElement('div');
                 group.className = 'form-group';
@@ -141,8 +278,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 label.textContent = `${key} ${isRequired ? '*' : ''}`;
                 label.title = value[2] || '';
                 
+                const isSecret = key.toUpperCase().includes('KEY') || key.toUpperCase().includes('PASSWORD') || key.toUpperCase().includes('SECRET');
                 const input = document.createElement('input');
-                input.type = 'text';
+                input.type = isSecret ? 'password' : 'text';
                 input.name = key;
                 input.value = defVal;
                 input.placeholder = value[2] || '';
@@ -295,7 +433,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.onclick = () => selectWorkspace(w.name);
                 
                 item.innerHTML = `
-                    <div class="workspace-name">${w.name}</div>
+                    <div class="workspace-header-actions">
+                        <div class="workspace-name">${w.name}</div>
+                        <div class="workspace-actions">
+                            <button class="icon-btn btn-ws-edit" data-name="${w.name}" title="Rename Workspace"><i class="fa-solid fa-pen"></i></button>
+                            <button class="icon-btn btn-ws-delete" data-name="${w.name}" title="Delete Workspace" style="color: var(--error);"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
                     <div class="workspace-desc">${w.description || 'No description'}</div>
                     <div class="workspace-stats">
                         <span class="stat-badge"><i class="fa-solid fa-circle-nodes"></i> ${w.node_count || 0}</span>
@@ -304,6 +448,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                 workspaceList.appendChild(item);
             });
+
+            // Bind workspace actions
+            document.querySelectorAll('.btn-ws-delete').forEach(btn => {
+                btn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const wsName = btn.dataset.name;
+                    if (confirm(`Are you sure you want to delete workspace "${wsName}"? This cannot be undone.`)) {
+                        await fetch(`${API_BASE}/workspaces/${wsName}`, { method: 'DELETE' });
+                        if (activeWorkspace === wsName) {
+                            activeWorkspace = null;
+                            activeWorkspaceTitle.textContent = "No Workspace Selected";
+                            nodesTbody.innerHTML = '';
+                            edgesTbody.innerHTML = '';
+                            if (network) network.destroy();
+                        }
+                        fetchWorkspaces();
+                    }
+                };
+            });
+
+            document.querySelectorAll('.btn-ws-edit').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    const wsName = btn.dataset.name;
+                    inputRenameWs.value = wsName;
+                    inputRenameWs.dataset.oldName = wsName;
+                    modalRenameWs.classList.add('active');
+                };
+            });
+
         } catch (e) {
             console.error('Failed to fetch workspaces', e);
         }
@@ -374,10 +548,199 @@ document.addEventListener('DOMContentLoaded', () => {
 
             drawGraph(nodes, edges);
             
-            fetchWorkspaces(); // silent refresh to update side counts
+            // Note: we don't call fetchWorkspaces() here anymore to avoid infinite loops, 
+            // since fetchWorkspaces recreates DOM elements. Just update stats manually if needed.
         } catch (e) {
             console.error('Failed to load workspace data', e);
         }
+    }
+
+    function drawGraph(nodes, edges) {
+        const visNodes = nodes.map(n => {
+            let icon = '\uf111'; // fa-circle default
+            let color = '#8b92a5';
+            
+            if (n.type.includes('email')) { icon = '\uf0e0'; color = '#0072ff'; }
+            else if (n.type.includes('domain')) { icon = '\uf0ac'; color = '#00f0ff'; }
+            else if (n.type.includes('ip')) { icon = '\uf233'; color = '#ff00ff'; }
+            else if (n.type.includes('phone')) { icon = '\uf095'; color = '#00e676'; }
+            else if (n.type.includes('organization')) { icon = '\uf1ad'; color = '#ffb300'; }
+
+            return {
+                id: n.id || n.value,
+                label: n.value,
+                group: n.type,
+                shape: 'icon',
+                icon: {
+                    face: '"Font Awesome 6 Free"',
+                    code: icon,
+                    size: 40,
+                    color: color,
+                    weight: "900"
+                },
+                font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#f0f2f8' }
+            };
+        });
+
+        const visEdges = edges.map(e => ({
+            from: e.source_id,
+            to: e.target_id,
+            label: e.relationship.replace(/[_-]/g, ' '),
+            font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#8b92a5', size: 10, align: 'middle' },
+            color: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c2355' : '#8b92a588' },
+            arrows: 'to'
+        }));
+
+        const data = {
+            nodes: new vis.DataSet(visNodes),
+            edges: new vis.DataSet(visEdges)
+        };
+
+        const options = {
+            edges: { smooth: false },
+            layout: { improvedLayout: false },
+            physics: {
+                enabled: true,
+                barnesHut: { gravitationalConstant: -3000 },
+                stabilization: { iterations: 150 }
+            },
+            interaction: { hover: true },
+            manipulation: {
+                enabled: false,
+                addEdge: function(edgeData, callback) {
+                    const rel = prompt("Enter relationship (e.g. resolves-to, belongs-to):");
+                    if (rel) {
+                        edgeData.label = rel;
+                        fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                source_id: String(edgeData.from),
+                                target_id: String(edgeData.to),
+                                relationship: rel
+                            })
+                        }).then(res => {
+                            if(res.ok) {
+                                callback(edgeData);
+                                selectWorkspace(activeWorkspace);
+                            } else {
+                                alert("Failed to save edge.");
+                                callback(null);
+                            }
+                        });
+                    } else {
+                        callback(null);
+                    }
+                }
+            }
+        };
+
+        if (network) {
+            network.destroy();
+        }
+        network = new vis.Network(networkCanvas, data, options);
+
+        // Freeze physics once initial stabilization is done to save CPU
+        network.once("stabilizationIterationsDone", function () {
+            network.setOptions({ physics: { enabled: false } });
+            const btnPhy = document.getElementById('btn-toggle-physics');
+            if(btnPhy) btnPhy.classList.remove('active');
+        });
+
+        // Setup Layout & Action Buttons
+        const btnForce = document.getElementById('btn-layout-force');
+        const btnHierarchical = document.getElementById('btn-layout-hierarchical');
+        const btnCircle = document.getElementById('btn-layout-circle');
+        const btnPhysics = document.getElementById('btn-toggle-physics');
+        const btnAddEdge = document.getElementById('btn-add-edge');
+
+        function clearLayoutButtons() {
+            btnForce.classList.remove('active');
+            btnHierarchical.classList.remove('active');
+            btnCircle.classList.remove('active');
+        }
+
+        if(btnForce) btnForce.onclick = () => {
+            clearLayoutButtons();
+            btnForce.classList.add('active');
+            network.setOptions({
+                layout: { hierarchical: false },
+                physics: { enabled: true }
+            });
+            btnPhysics.classList.add('active');
+            network.stabilize();
+        };
+
+        if(btnHierarchical) btnHierarchical.onclick = () => {
+            clearLayoutButtons();
+            btnHierarchical.classList.add('active');
+            network.setOptions({
+                layout: { hierarchical: { enabled: true, sortMethod: 'directed' } },
+                physics: { enabled: false }
+            });
+            btnPhysics.classList.remove('active');
+        };
+
+        if(btnCircle) btnCircle.onclick = () => {
+            clearLayoutButtons();
+            btnCircle.classList.add('active');
+            network.setOptions({ physics: { enabled: false }, layout: { hierarchical: false } });
+            btnPhysics.classList.remove('active');
+            
+            const nodeIds = data.nodes.getIds();
+            const radius = Math.max(300, nodeIds.length * 15);
+            const step = 2 * Math.PI / nodeIds.length;
+            
+            const updates = [];
+            nodeIds.forEach((id, index) => {
+                updates.push({
+                    id: id,
+                    x: radius * Math.cos(index * step),
+                    y: radius * Math.sin(index * step)
+                });
+            });
+            data.nodes.update(updates);
+            network.fit();
+        };
+
+        if(btnPhysics) btnPhysics.onclick = () => {
+            const isEnabled = btnPhysics.classList.contains('active');
+            if (isEnabled) {
+                btnPhysics.classList.remove('active');
+                network.setOptions({ physics: { enabled: false } });
+            } else {
+                btnPhysics.classList.add('active');
+                network.setOptions({ physics: { enabled: true } });
+            }
+        };
+
+        if(btnAddEdge) btnAddEdge.onclick = () => {
+            network.addEdgeMode();
+        };
+
+        network.on('oncontext', function (params) {
+            params.event.preventDefault();
+            const nodeId = this.getNodeAt(params.pointer.DOM);
+            if (nodeId) {
+                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
+                if (selectedNode) {
+                    showContextMenu(params.event.pageX, params.event.pageY, selectedNode);
+                }
+            } else {
+                contextMenu.classList.add('hidden');
+            }
+        });
+
+        network.on('click', function (params) {
+            contextMenu.classList.add('hidden');
+            if (params.nodes.length > 0) {
+                const nodeId = params.nodes[0];
+                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
+                if (selectedNode) {
+                    handleNodeSelection(selectedNode);
+                }
+            }
+        });
     }
 
     function showContextMenu(x, y, node) {
@@ -439,168 +802,6 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.style.left = `${x}px`;
         contextMenu.style.top = `${y}px`;
         contextMenu.classList.remove('hidden');
-    }
-
-    function drawGraph(nodes, edges) {
-        const visNodes = nodes.map(n => {
-            let icon = '\uf111'; // fa-circle default
-            let color = '#8b92a5';
-            
-            if (n.type.includes('email')) { icon = '\uf0e0'; color = '#0072ff'; }
-            else if (n.type.includes('domain')) { icon = '\uf0ac'; color = '#00f0ff'; }
-            else if (n.type.includes('ip')) { icon = '\uf233'; color = '#ff00ff'; }
-            else if (n.type.includes('phone')) { icon = '\uf095'; color = '#00e676'; }
-            else if (n.type.includes('organization')) { icon = '\uf1ad'; color = '#ffb300'; }
-
-            return {
-                id: n.id || n.value,
-                label: n.value,
-                group: n.type,
-                shape: 'icon',
-                icon: {
-                    face: '"Font Awesome 6 Free"',
-                    code: icon,
-                    size: 40,
-                    color: color,
-                    weight: "900"
-                },
-                font: { color: '#f0f2f8' }
-            };
-        });
-
-        const visEdges = edges.map(e => ({
-            from: e.source_id,
-            to: e.target_id,
-            label: e.relationship,
-            font: { color: '#8b92a5', size: 10, align: 'middle' },
-            color: { color: '#ffffff22' },
-            arrows: 'to'
-        }));
-
-        const data = {
-            nodes: new vis.DataSet(visNodes),
-            edges: new vis.DataSet(visEdges)
-        };
-
-        const options = {
-            edges: {
-                smooth: false // Performance boost
-            },
-            layout: {
-                improvedLayout: false // Performance boost for large graphs
-            },
-            physics: {
-                enabled: true,
-                barnesHut: { gravitationalConstant: -3000 },
-                stabilization: { iterations: 150 }
-            },
-            interaction: { hover: true }
-        };
-
-        if (network) {
-            network.destroy();
-        }
-        network = new vis.Network(networkCanvas, data, options);
-
-        // Freeze physics once initial stabilization is done to save CPU
-        network.once("stabilizationIterationsDone", function () {
-            network.setOptions({ physics: { enabled: false } });
-            document.getElementById('btn-toggle-physics').classList.remove('active');
-        });
-
-        // Setup Layout Buttons
-        const btnForce = document.getElementById('btn-layout-force');
-        const btnHierarchical = document.getElementById('btn-layout-hierarchical');
-        const btnCircle = document.getElementById('btn-layout-circle');
-        const btnPhysics = document.getElementById('btn-toggle-physics');
-
-        function clearLayoutButtons() {
-            btnForce.classList.remove('active');
-            btnHierarchical.classList.remove('active');
-            btnCircle.classList.remove('active');
-        }
-
-        btnForce.onclick = () => {
-            clearLayoutButtons();
-            btnForce.classList.add('active');
-            network.setOptions({
-                layout: { hierarchical: false },
-                physics: { enabled: true }
-            });
-            btnPhysics.classList.add('active');
-            network.stabilize();
-        };
-
-        btnHierarchical.onclick = () => {
-            clearLayoutButtons();
-            btnHierarchical.classList.add('active');
-            network.setOptions({
-                layout: {
-                    hierarchical: { enabled: true, sortMethod: 'directed' }
-                },
-                physics: { enabled: false }
-            });
-            btnPhysics.classList.remove('active');
-        };
-
-        btnCircle.onclick = () => {
-            clearLayoutButtons();
-            btnCircle.classList.add('active');
-            
-            // Disable physics so we can manually position
-            network.setOptions({ physics: { enabled: false }, layout: { hierarchical: false } });
-            btnPhysics.classList.remove('active');
-            
-            const nodeIds = data.nodes.getIds();
-            const radius = Math.max(300, nodeIds.length * 15);
-            const step = 2 * Math.PI / nodeIds.length;
-            
-            const updates = [];
-            nodeIds.forEach((id, index) => {
-                updates.push({
-                    id: id,
-                    x: radius * Math.cos(index * step),
-                    y: radius * Math.sin(index * step)
-                });
-            });
-            data.nodes.update(updates);
-            network.fit();
-        };
-
-        btnPhysics.onclick = () => {
-            const isEnabled = btnPhysics.classList.contains('active');
-            if (isEnabled) {
-                btnPhysics.classList.remove('active');
-                network.setOptions({ physics: { enabled: false } });
-            } else {
-                btnPhysics.classList.add('active');
-                network.setOptions({ physics: { enabled: true } });
-            }
-        };
-
-        network.on('oncontext', function (params) {
-            params.event.preventDefault();
-            const nodeId = this.getNodeAt(params.pointer.DOM);
-            if (nodeId) {
-                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
-                if (selectedNode) {
-                    showContextMenu(params.event.pageX, params.event.pageY, selectedNode);
-                }
-            } else {
-                contextMenu.classList.add('hidden');
-            }
-        });
-
-        network.on('click', function (params) {
-            contextMenu.classList.add('hidden');
-            if (params.nodes.length > 0) {
-                const nodeId = params.nodes[0];
-                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
-                if (selectedNode) {
-                    handleNodeSelection(selectedNode);
-                }
-            }
-        });
     }
 
     function handleNodeSelection(node) {
