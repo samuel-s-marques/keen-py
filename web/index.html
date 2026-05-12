@@ -13,6 +13,9 @@
     <!-- Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <!-- vis-network -->
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -50,6 +53,7 @@
                     <div class="tabs">
                         <button class="tab active" data-target="tab-nodes">Nodes (<span id="count-nodes">0</span>)</button>
                         <button class="tab" data-target="tab-edges">Edges (<span id="count-edges">0</span>)</button>
+                        <button class="tab" data-target="tab-graph">Graph Map</button>
                     </div>
                 </div>
 
@@ -85,6 +89,10 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+
+                <div class="tab-content" id="tab-graph">
+                    <div id="network-canvas" class="graph-container"></div>
                 </div>
             </main>
 

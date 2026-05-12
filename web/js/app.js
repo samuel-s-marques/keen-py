@@ -3,6 +3,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeWorkspace = null;
     let modulesData = {};
     let activeSocket = null;
+    let network = null;
+
+    const NODE_TO_VALIDATOR_MAP = {
+        'email-addr': ['email'],
+        'email-dst': ['email'],
+        'domain-name': ['domain', 'url'],
+        'ipv4-addr': ['ip'],
+        'ipv6-addr': ['ip'],
+        'x-phone-number': ['phone'],
+        'phone-number': ['phone'],
+        'x-url': ['url']
+    };
 
     // DOM Elements
     const workspaceList = document.getElementById('workspace-list');
@@ -12,6 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const nodesTbody = document.getElementById('nodes-tbody');
     const edgesTbody = document.getElementById('edges-tbody');
     
+    const networkCanvas = document.getElementById('network-canvas');
+
     const moduleSelect = document.getElementById('module-select');
     const moduleDetails = document.getElementById('module-details');
     const moduleDesc = document.getElementById('module-description');
@@ -76,6 +90,12 @@ document.addEventListener('DOMContentLoaded', () => {
             
             tab.classList.add('active');
             document.getElementById(tab.dataset.target).classList.add('active');
+            
+            // Redraw network when tab becomes visible
+            if (tab.dataset.target === 'tab-graph' && network) {
+                network.redraw();
+                network.fit();
+            }
         });
     });
 
@@ -190,6 +210,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Functions ---
 
+    function buildModuleDropdown(compatibleValidators = [], prefillValue = null) {
+        moduleSelect.innerHTML = '<option value="" disabled selected>-- Choose a module --</option>';
+        
+        const compatGroup = document.createElement('optgroup');
+        compatGroup.label = 'Compatible Modules';
+        
+        const allGroup = document.createElement('optgroup');
+        allGroup.label = 'All Modules';
+
+        let firstMatch = null;
+
+        for (const key of Object.keys(modulesData).sort()) {
+            const mod = modulesData[key];
+            let isMatch = false;
+
+            if (compatibleValidators.length > 0 && mod.options) {
+                for (const [optName, optValue] of Object.entries(mod.options)) {
+                    if (compatibleValidators.includes(optValue[3])) {
+                        isMatch = true;
+                        break;
+                    }
+                }
+            }
+
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = `${mod.name} (${key})`;
+
+            if (isMatch) {
+                if (!firstMatch) firstMatch = key;
+                compatGroup.appendChild(opt.cloneNode(true));
+            }
+            allGroup.appendChild(opt);
+        }
+
+        if (compatGroup.children.length > 0) {
+            moduleSelect.appendChild(compatGroup);
+        }
+        moduleSelect.appendChild(allGroup);
+
+        if (firstMatch && prefillValue) {
+            moduleSelect.value = firstMatch;
+            moduleSelect.dispatchEvent(new Event('change'));
+            
+            setTimeout(() => {
+                const inputs = moduleForm.querySelectorAll('input');
+                for (const input of inputs) {
+                    const optVal = modulesData[firstMatch].options[input.name];
+                    if (optVal && compatibleValidators.includes(optVal[3])) {
+                        input.value = prefillValue;
+                    }
+                }
+            }, 50);
+        }
+    }
+
     async function fetchWorkspaces() {
         try {
             const res = await fetch(`${API_BASE}/workspaces`);
@@ -220,17 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_BASE}/modules`);
             modulesData = await res.json();
-            
-            moduleSelect.innerHTML = '<option value="" disabled selected>-- Choose a module --</option>';
-            
-            // Group by category if we wanted to, for now just list
-            for (const key of Object.keys(modulesData).sort()) {
-                const mod = modulesData[key];
-                const opt = document.createElement('option');
-                opt.value = key;
-                opt.textContent = `${mod.name} (${key})`;
-                moduleSelect.appendChild(opt);
-            }
+            buildModuleDropdown();
         } catch (e) {
             console.error('Failed to fetch modules', e);
         }
@@ -288,11 +354,84 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 edgesTbody.innerHTML = '<tr><td colspan="3">No edges found.</td></tr>';
             }
+
+            drawGraph(nodes, edges);
             
             fetchWorkspaces(); // silent refresh to update side counts
         } catch (e) {
             console.error('Failed to load workspace data', e);
         }
+    }
+
+    function drawGraph(nodes, edges) {
+        const visNodes = nodes.map(n => {
+            let icon = '\uf111'; // fa-circle default
+            let color = '#8b92a5';
+            
+            if (n.type.includes('email')) { icon = '\uf0e0'; color = '#0072ff'; }
+            else if (n.type.includes('domain')) { icon = '\uf0ac'; color = '#00f0ff'; }
+            else if (n.type.includes('ip')) { icon = '\uf233'; color = '#ff00ff'; }
+            else if (n.type.includes('phone')) { icon = '\uf095'; color = '#00e676'; }
+            else if (n.type.includes('organization')) { icon = '\uf1ad'; color = '#ffb300'; }
+
+            return {
+                id: n.id || n.value,
+                label: n.value,
+                group: n.type,
+                shape: 'icon',
+                icon: {
+                    face: '"Font Awesome 6 Free"',
+                    code: icon,
+                    size: 40,
+                    color: color,
+                    weight: "900"
+                },
+                font: { color: '#f0f2f8' }
+            };
+        });
+
+        const visEdges = edges.map(e => ({
+            from: e.source_id,
+            to: e.target_id,
+            label: e.relationship,
+            font: { color: '#8b92a5', size: 10, align: 'middle' },
+            color: { color: '#ffffff22' },
+            arrows: 'to'
+        }));
+
+        const data = {
+            nodes: new vis.DataSet(visNodes),
+            edges: new vis.DataSet(visEdges)
+        };
+
+        const options = {
+            physics: {
+                barnesHut: { gravitationalConstant: -3000 }
+            },
+            interaction: { hover: true }
+        };
+
+        if (network) {
+            network.destroy();
+        }
+        network = new vis.Network(networkCanvas, data, options);
+
+        network.on('click', function (params) {
+            if (params.nodes.length > 0) {
+                const nodeId = params.nodes[0];
+                // Sometimes ID is the value, sometimes it's STIX ID. 
+                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
+                if (selectedNode) {
+                    handleNodeSelection(selectedNode);
+                }
+            }
+        });
+    }
+
+    function handleNodeSelection(node) {
+        const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
+        buildModuleDropdown(validators, node.value);
+        termPrint(`Selected node: ${node.value} (${node.type}). Auto-filling compatible modules.`, 'sys-msg');
     }
 
     function termPrint(text, extraClass = '') {
