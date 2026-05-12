@@ -670,6 +670,34 @@ class Shell(Cmd):
                         f"Created and switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
                     )
 
+    def do_web(self, arg: str) -> None:
+        """Start the Keen API web server.
+
+        Usage:
+            web start [--host <host>] [--port <port>]
+        """
+        args = arg.strip().split()
+        if not args or args[0].lower() != "start":
+            error("Usage: web start [--host <host>] [--port <port>]")
+            return
+
+        host = "127.0.0.1"
+        port = 8000
+
+        try:
+            if "--host" in args:
+                idx = args.index("--host")
+                host = args[idx + 1]
+            if "--port" in args:
+                idx = args.index("--port")
+                port = int(args[idx + 1])
+        except (ValueError, IndexError):
+            error("Invalid arguments. Usage: web start [--host <host>] [--port <port>]")
+            return
+
+        from src.api.server import start_server
+        info(f"Starting web server on {host}:{port}...")
+        start_server(host=host, port=port, debug=self.debug_mode)
     def do_exit(self, args: str) -> None:
         """Exit the shell."""
         self.do_quit("")
