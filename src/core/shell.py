@@ -101,7 +101,9 @@ class Shell(Cmd):
                 return
 
             if not self.current_module:
-                error("No module selected. Use 'use <module>' first to set module options.")
+                error(
+                    "No module selected. Use 'use <module>' first to set module options."
+                )
                 return
 
             if self.current_module.set_option(key_lower, value):
@@ -148,9 +150,9 @@ class Shell(Cmd):
             error("Usage: show <options | modules | info | banner>")
 
     def do_list(self, arg: str) -> None:
-        """List available <modules | options>. Another alias to show."""
+        """List available <modules | options | api_keys>."""
         if not arg:
-            error("Usage: list <modules | options>")
+            error("Usage: list <modules | options | api_keys>")
             return
 
         if arg.lower() == "modules":
@@ -185,7 +187,7 @@ class Shell(Cmd):
             else:
                 error("No module selected.")
         else:
-            error("Usage: list <modules | options>")
+            error("Usage: list <modules | options | api_keys>")
 
     def do_clear(self, arg: str) -> None:
         """Clear the screen."""
