@@ -353,7 +353,7 @@ class GitHubModule(BaseModule):
                     }
                 )
 
-        # 5. Repositories Mapping (repository Node)
+        # Repositories Mapping (repository Node)
         for repo in repos:
             repo_name = repo.get("full_name")
             if repo_name:
