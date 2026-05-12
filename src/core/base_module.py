@@ -1,3 +1,4 @@
+from src.core.managers import WorkspaceManager
 from typing import Any
 from typing import Callable
 from typing import Literal
@@ -151,6 +152,13 @@ class BaseModule:
             result: Any = await task(*args, **kwargs)
             status.update(f"[bold green]{title}")
             return result
+
+    @property
+    def workspace(self) -> WorkspaceManager | None:
+        """Helper property to easily access the active workspace from shell."""
+        if not self.shell:
+            return None
+        return self.shell.workspace
 
     async def post_run(self, results: dict) -> None:
         """
