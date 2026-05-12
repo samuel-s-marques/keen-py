@@ -1,4 +1,5 @@
 import json
+from cryptography.fernet import Fernet
 
 from src.core.database_engine import DatabaseEngine
 
@@ -30,7 +31,7 @@ class ConfigManager(DatabaseEngine):
             CREATE TABLE IF NOT EXISTS workspaces (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT,
-                path TEXT,
+                path TEXT NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -39,12 +40,14 @@ class ConfigManager(DatabaseEngine):
 
     def get_api_key(self, service: str) -> str | None:
         cursor = self.conn.cursor()
+        # TODO: Decrypt the API key
         cursor.execute("SELECT api_key FROM api_keys WHERE service = ?", (service,))
         result = cursor.fetchone()
         return result["api_key"] if result else None
 
     def set_api_key(self, service: str, api_key: str) -> None:
         cursor = self.conn.cursor()
+        # TODO: Encrypt the API key
         cursor.execute(
             "INSERT OR REPLACE INTO api_keys (service, api_key) VALUES (?, ?)",
             (service, api_key),
