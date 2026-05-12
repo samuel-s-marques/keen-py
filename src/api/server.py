@@ -159,10 +159,11 @@ def get_workspace_edges(name: str):
 def get_modules():
     modules = load_modules()
     result = {}
-    for name, cls in modules.items():
-        if name not in result:  # Avoid duplicates if same module mapped multiple times
-            metadata = getattr(cls, "metadata", {})
-            result[name] = metadata
+    for key, cls in modules.items():
+        if "/" in key and not key.startswith("src."):
+            metadata = getattr(cls, "metadata", {}).copy()
+            metadata["category"] = key.split("/")[0]
+            result[key] = metadata
     return result
 
 
