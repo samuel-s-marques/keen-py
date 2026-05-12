@@ -1,23 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Keen - OSINT Dashboard</title>
-    
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+
     <!-- Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <!-- vis-network -->
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 
     <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
     <div class="app-container">
         <!-- Header -->
@@ -51,13 +55,17 @@
                 <div class="panel-header">
                     <h2 id="active-workspace-title">No Workspace Selected</h2>
                     <div class="tabs">
-                        <button class="tab active" data-target="tab-nodes">Nodes (<span id="count-nodes">0</span>)</button>
+                        <button class="tab active" data-target="tab-graph">Graph Map</button>
+                        <button class="tab" data-target="tab-nodes">Nodes (<span id="count-nodes">0</span>)</button>
                         <button class="tab" data-target="tab-edges">Edges (<span id="count-edges">0</span>)</button>
-                        <button class="tab" data-target="tab-graph">Graph Map</button>
                     </div>
                 </div>
 
-                <div class="tab-content active" id="tab-nodes">
+                <div class="tab-content active" id="tab-graph">
+                    <div id="network-canvas" class="graph-container"></div>
+                </div>
+
+                <div class="tab-content" id="tab-nodes">
                     <div class="table-container">
                         <table class="data-table">
                             <thead>
@@ -90,10 +98,6 @@
                         </table>
                     </div>
                 </div>
-
-                <div class="tab-content" id="tab-graph">
-                    <div id="network-canvas" class="graph-container"></div>
-                </div>
             </main>
 
             <!-- Right Panel: Module Runner -->
@@ -101,7 +105,7 @@
                 <div class="panel-header">
                     <h2><i class="fa-solid fa-bolt"></i> Module Runner</h2>
                 </div>
-                
+
                 <div class="module-selector-container">
                     <label for="module-select">Select Module</label>
                     <select id="module-select">
@@ -119,7 +123,7 @@
                     <form id="module-form" class="module-form">
                         <!-- Options generated dynamically -->
                     </form>
-                    
+
                     <button id="btn-run-module" class="btn-primary">
                         <i class="fa-solid fa-play"></i> Run Module
                     </button>
@@ -130,7 +134,8 @@
                     <div class="terminal-header">
                         <span>Execution Logs</span>
                         <div class="terminal-actions">
-                            <button id="btn-clear-term" class="icon-btn small"><i class="fa-solid fa-eraser"></i></button>
+                            <button id="btn-clear-term" class="icon-btn small"><i
+                                    class="fa-solid fa-eraser"></i></button>
                         </div>
                     </div>
                     <div class="terminal-body" id="terminal-body">
@@ -164,4 +169,5 @@
 
     <script src="js/app.js"></script>
 </body>
+
 </html>
