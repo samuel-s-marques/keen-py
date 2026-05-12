@@ -483,8 +483,16 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const options = {
+            edges: {
+                smooth: false // Performance boost
+            },
+            layout: {
+                improvedLayout: false // Performance boost for large graphs
+            },
             physics: {
-                barnesHut: { gravitationalConstant: -3000 }
+                enabled: true,
+                barnesHut: { gravitationalConstant: -3000 },
+                stabilization: { iterations: 150 }
             },
             interaction: { hover: true }
         };
@@ -493,6 +501,82 @@ document.addEventListener('DOMContentLoaded', () => {
             network.destroy();
         }
         network = new vis.Network(networkCanvas, data, options);
+
+        // Freeze physics once initial stabilization is done to save CPU
+        network.once("stabilizationIterationsDone", function () {
+            network.setOptions({ physics: { enabled: false } });
+            document.getElementById('btn-toggle-physics').classList.remove('active');
+        });
+
+        // Setup Layout Buttons
+        const btnForce = document.getElementById('btn-layout-force');
+        const btnHierarchical = document.getElementById('btn-layout-hierarchical');
+        const btnCircle = document.getElementById('btn-layout-circle');
+        const btnPhysics = document.getElementById('btn-toggle-physics');
+
+        function clearLayoutButtons() {
+            btnForce.classList.remove('active');
+            btnHierarchical.classList.remove('active');
+            btnCircle.classList.remove('active');
+        }
+
+        btnForce.onclick = () => {
+            clearLayoutButtons();
+            btnForce.classList.add('active');
+            network.setOptions({
+                layout: { hierarchical: false },
+                physics: { enabled: true }
+            });
+            btnPhysics.classList.add('active');
+            network.stabilize();
+        };
+
+        btnHierarchical.onclick = () => {
+            clearLayoutButtons();
+            btnHierarchical.classList.add('active');
+            network.setOptions({
+                layout: {
+                    hierarchical: { enabled: true, sortMethod: 'directed' }
+                },
+                physics: { enabled: false }
+            });
+            btnPhysics.classList.remove('active');
+        };
+
+        btnCircle.onclick = () => {
+            clearLayoutButtons();
+            btnCircle.classList.add('active');
+            
+            // Disable physics so we can manually position
+            network.setOptions({ physics: { enabled: false }, layout: { hierarchical: false } });
+            btnPhysics.classList.remove('active');
+            
+            const nodeIds = data.nodes.getIds();
+            const radius = Math.max(300, nodeIds.length * 15);
+            const step = 2 * Math.PI / nodeIds.length;
+            
+            const updates = [];
+            nodeIds.forEach((id, index) => {
+                updates.push({
+                    id: id,
+                    x: radius * Math.cos(index * step),
+                    y: radius * Math.sin(index * step)
+                });
+            });
+            data.nodes.update(updates);
+            network.fit();
+        };
+
+        btnPhysics.onclick = () => {
+            const isEnabled = btnPhysics.classList.contains('active');
+            if (isEnabled) {
+                btnPhysics.classList.remove('active');
+                network.setOptions({ physics: { enabled: false } });
+            } else {
+                btnPhysics.classList.add('active');
+                network.setOptions({ physics: { enabled: true } });
+            }
+        };
 
         network.on('oncontext', function (params) {
             params.event.preventDefault();

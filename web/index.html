@@ -62,7 +62,16 @@
                 </div>
 
                 <div class="tab-content active" id="tab-graph">
-                    <div id="network-canvas" class="graph-container"></div>
+                    <div class="graph-wrapper" style="position: relative; width: 100%; height: 100%; display: flex; flex: 1; flex-direction: column;">
+                        <div class="graph-toolbar">
+                            <button id="btn-layout-force" class="graph-btn active" title="Force Directed Layout"><i class="fa-solid fa-asterisk"></i></button>
+                            <button id="btn-layout-hierarchical" class="graph-btn" title="Hierarchical Layout"><i class="fa-solid fa-sitemap"></i></button>
+                            <button id="btn-layout-circle" class="graph-btn" title="Circular Layout"><i class="fa-solid fa-circle-notch"></i></button>
+                            <div class="toolbar-divider"></div>
+                            <button id="btn-toggle-physics" class="graph-btn active" title="Toggle Physics (Freeze/Unfreeze)"><i class="fa-solid fa-magnet"></i></button>
+                        </div>
+                        <div id="network-canvas" class="graph-container"></div>
+                    </div>
                 </div>
 
                 <div class="tab-content" id="tab-nodes">

@@ -509,6 +509,54 @@ select:focus, input:focus {
     padding: 20px;
 }
 
+/* Graph Toolbar */
+.graph-toolbar {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 1000;
+    display: flex;
+    gap: 6px;
+    background: rgba(10, 12, 18, 0.7);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-color);
+    padding: 6px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.graph-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.graph-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.graph-btn.active {
+    background: rgba(0, 240, 255, 0.15);
+    border-color: rgba(0, 240, 255, 0.3);
+    color: var(--accent-cyan);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+}
+
+.toolbar-divider {
+    width: 1px;
+    background: var(--border-color);
+    margin: 2px 4px;
+}
+
 /* Context Menu */
 .context-menu {
     position: absolute;
