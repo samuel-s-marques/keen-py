@@ -239,6 +239,34 @@ def create_workspace_edge(name: str, req: EdgeCreate):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
+@app.delete("/api/workspaces/{name}/nodes/{node_id}")
+def delete_workspace_node(name: str, node_id: int):
+    w = global_config.get_workspace(name)
+    if not w:
+        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
+    try:
+        wm = WorkspaceManager(w["path"], name=name)
+        wm.delete_node(node_id)
+        wm.conn.close()
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.delete("/api/workspaces/{name}/edges/{edge_id}")
+def delete_workspace_edge(name: str, edge_id: int):
+    w = global_config.get_workspace(name)
+    if not w:
+        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
+    try:
+        wm = WorkspaceManager(w["path"], name=name)
+        wm.delete_edge(edge_id)
+        wm.conn.close()
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 @app.get("/api/modules")
 def get_modules():
     modules = load_modules()
