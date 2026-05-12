@@ -10,7 +10,7 @@ import os
 import asyncio
 
 from src.core.loader import load_modules
-from src.utils.print_utils import error, info
+from src.utils.print_utils import error, info, success
 from src.utils.logger import set_debug_mode
 
 
@@ -94,6 +94,191 @@ class Shell(Cmd):
             if name.startswith(text.lower()) and "src.modules" not in name
         ]
 
+    def ensure_key_manager_unlocked(self) -> bool:
+        """Ensure the key manager is unlocked. If locked, prompts the user to unlock or setup."""
+        if self.config.is_unlocked():
+            return True
+
+        import getpass
+        from src.utils.print_utils import success, warn, error
+
+        if self.config.has_master_password():
+            print(
+                stylize(
+                    "🔑 Stored API keys detected. The API Key Manager is locked.",
+                    Style(color=Color.CYAN),
+                )
+            )
+            for _ in range(3):
+                try:
+                    password = getpass.getpass(
+                        "Enter master password to unlock (press Enter to skip): "
+                    )
+                except (KeyboardInterrupt, EOFError):
+                    print()
+                    warn("Unlock skipped. API keys will not be loaded.")
+                    return False
+
+                if not password:
+                    warn("Unlock skipped. API keys will not be loaded.")
+                    return False
+
+                if self.config.unlock(password):
+                    success("Key manager unlocked successfully!")
+                    # If a module is active, automatically load its keys now
+                    if self.current_module:
+                        self.current_module.load_api_keys(self.config)
+                    return True
+                else:
+                    error("Incorrect password.")
+            error("Too many failed attempts. API keys will not be loaded.")
+            return False
+        else:
+            print(stylize("🔑 Secure API Key Manager Setup", Style(color=Color.CYAN)))
+            print("Please set a master password to encrypt your stored API keys.")
+            try:
+                password = getpass.getpass(
+                    "Set master password (press Enter to skip): "
+                )
+            except (KeyboardInterrupt, EOFError):
+                print()
+                warn("Setup skipped. API keys will not be saved securely.")
+                return False
+
+            if not password:
+                warn("Setup skipped. API keys will not be saved securely.")
+                return False
+
+            try:
+                confirm = getpass.getpass("Confirm master password: ")
+            except (KeyboardInterrupt, EOFError):
+                print()
+                warn("Setup skipped. API keys will not be saved securely.")
+                return False
+
+            if password != confirm:
+                error("Passwords do not match. Setup failed.")
+                return False
+
+            if self.config.unlock(password):
+                success("Master password set and key manager unlocked successfully!")
+                if self.current_module:
+                    self.current_module.load_api_keys(self.config)
+                return True
+            return False
+
+    def do_api_keys(self, arg: str) -> None:
+        """Manage API keys securely.
+
+        Usage:
+            api_keys list                  - List all registered API key services (masked)
+            api_keys set <service> <key>   - Store an API key for a service
+            api_keys delete <service>      - Delete an API key for a service
+            api_keys unlock                - Unlock the key manager manually
+        """
+        args = arg.strip().split()
+        if not args:
+            info("Usage:")
+            info(
+                "\tapi_keys list                  - List all registered API key services (masked)"
+            )
+            info("\tapi_keys set <service> <key>   - Store an API key for a service")
+            info("\tapi_keys delete <service>      - Delete an API key for a service")
+            info("\tapi_keys unlock                - Unlock the key manager manually")
+            return
+
+        subcommand = args[0].lower()
+
+        if subcommand == "list":
+            if not self.config.is_unlocked():
+                if not self.ensure_key_manager_unlocked():
+                    return
+
+            keys = self.config.get_all_api_keys()
+            if not keys:
+                info("No API keys found.")
+                return
+
+            table = Table(
+                show_header=True,
+                header_style="bold blue",
+                title="Stored API Keys",
+                title_style="bold cyan",
+                show_lines=True,
+                expand=True,
+            )
+            table.add_column("Service", justify="left", style="cyan", no_wrap=True)
+            table.add_column("API Key (Masked)", justify="left", style="white")
+            table.add_column("Saved At", justify="left", style="dim white")
+
+            for k in keys:
+                svc = k["service"]
+                val = k["api_key"]
+                ts = k.get("timestamp", "N/A")
+                masked = (
+                    val[:4] + "*" * (len(val) - 4) if len(val) > 4 else "*" * len(val)
+                )
+                table.add_row(svc, masked, ts)
+
+            console = Console()
+            console.print(table)
+            return
+
+        elif subcommand == "set":
+            if len(args) < 3:
+                error("Usage: api_keys set <service> <key>")
+                return
+
+            service = args[1].lower()
+            key_val = " ".join(args[2:])
+
+            if not self.config.is_unlocked():
+                if not self.ensure_key_manager_unlocked():
+                    return
+
+            try:
+                self.config.set_api_key(service, key_val)
+                success(f"API key for service '{service}' saved successfully!")
+                if self.current_module:
+                    self.current_module.load_api_keys(self.config)
+            except Exception as e:
+                error(f"Failed to save API key: {e}")
+            return
+
+        elif subcommand == "delete":
+            if len(args) < 2:
+                error("Usage: api_keys delete <service>")
+                return
+
+            service = args[1].lower()
+            if not self.config.is_unlocked():
+                if not self.ensure_key_manager_unlocked():
+                    return
+
+            try:
+                self.config.delete_api_key(service)
+                success(f"API key for service '{service}' deleted successfully!")
+                if self.current_module:
+                    for opt_key in self.current_module.metadata.get("options", {}):
+                        if (
+                            opt_key.lower().endswith(service)
+                            or opt_key.lower().endswith(service + "_apikey")
+                            or opt_key.lower().endswith(service + "_api_key")
+                        ):
+                            self.current_module.options[opt_key] = ""
+            except Exception as e:
+                error(f"Failed to delete API key: {e}")
+            return
+
+        elif subcommand == "unlock":
+            self.ensure_key_manager_unlocked()
+            return
+
+        else:
+            error(
+                f"Unknown subcommand '{subcommand}'. Use 'api_keys' without arguments to see usage."
+            )
+
     def do_use(self, arg: str):
         """Select a module to use. You can use the full path or just the module name (e.g. 'use whois')."""
         module_name: str = arg.strip().lower()
@@ -103,7 +288,21 @@ class Shell(Cmd):
             return
 
         if module_name in self.modules:
-            self.current_module = self.modules[module_name]()
+            module_class = self.modules[module_name]
+            self.current_module = module_class()
+
+            # Check if this module uses API keys
+            has_api_key_opts = any(
+                k.endswith("_APIKEY") or k.endswith("_API_KEY")
+                for k in getattr(module_class, "metadata", {}).get("options", {})
+            )
+            if has_api_key_opts and self.config.has_api_keys():
+                if not self.config.is_unlocked():
+                    self.ensure_key_manager_unlocked()
+
+            if self.config.is_unlocked():
+                self.current_module.load_api_keys(self.config)
+
             self._update_prompt()
         else:
             error(
@@ -162,7 +361,7 @@ class Shell(Cmd):
         self._update_prompt()
 
     def do_show(self, arg: str) -> None:
-        """Show available <modules | options | info | banner>."""
+        """Show available <options | modules | info | banner>."""
         if not arg:
             error("Usage: show <options | modules | info | banner>")
             return
@@ -190,7 +389,8 @@ class Shell(Cmd):
             error("Usage: list <modules | options | api_keys>")
             return
 
-        if arg.lower() == "modules":
+        arg_lower = arg.lower()
+        if arg_lower == "modules":
             table = Table(
                 show_header=True,
                 header_style="bold blue",
@@ -215,11 +415,13 @@ class Shell(Cmd):
             console = Console()
             console.print(table)
 
-        elif arg.lower() == "options":
+        elif arg_lower == "options":
             if self.current_module:
                 self.current_module.print_options()
             else:
                 error("No module selected.")
+        elif arg_lower == "api_keys":
+            self.do_api_keys("list")
         else:
             error("Usage: list <modules | options | api_keys>")
 
