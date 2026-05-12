@@ -583,6 +583,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         const visEdges = edges.map(e => ({
+            id: e.id,
             from: e.source_id,
             to: e.target_id,
             label: e.relationship.replace(/[_-]/g, ' '),
@@ -607,6 +608,34 @@ document.addEventListener('DOMContentLoaded', () => {
             interaction: { hover: true },
             manipulation: {
                 enabled: false,
+                deleteNode: function(data, callback) {
+                    if (confirm("Delete selected node(s)? This will also cascade delete any connected edges.")) {
+                        const promises = data.nodes.map(id => fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${id}`, { method: 'DELETE' }));
+                        Promise.all(promises).then(() => {
+                            callback(data);
+                            selectWorkspace(activeWorkspace);
+                        }).catch(e => {
+                            alert("Failed to delete nodes.");
+                            callback(null);
+                        });
+                    } else {
+                        callback(null);
+                    }
+                },
+                deleteEdge: function(data, callback) {
+                    if (confirm("Delete selected edge(s)?")) {
+                        const promises = data.edges.map(id => fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${id}`, { method: 'DELETE' }));
+                        Promise.all(promises).then(() => {
+                            callback(data);
+                            selectWorkspace(activeWorkspace);
+                        }).catch(e => {
+                            alert("Failed to delete edges.");
+                            callback(null);
+                        });
+                    } else {
+                        callback(null);
+                    }
+                },
                 addEdge: function(edgeData, callback) {
                     const rel = prompt("Enter relationship (e.g. resolves-to, belongs-to):");
                     if (rel) {
@@ -653,12 +682,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnCircle = document.getElementById('btn-layout-circle');
         const btnPhysics = document.getElementById('btn-toggle-physics');
         const btnAddEdge = document.getElementById('btn-add-edge');
+        const btnDeleteSelected = document.getElementById('btn-delete-selected');
 
         function clearLayoutButtons() {
             btnForce.classList.remove('active');
             btnHierarchical.classList.remove('active');
             btnCircle.classList.remove('active');
         }
+
+        if(btnDeleteSelected) btnDeleteSelected.onclick = () => {
+            network.deleteSelected();
+        };
 
         if(btnForce) btnForce.onclick = () => {
             clearLayoutButtons();
@@ -798,6 +832,24 @@ document.addEventListener('DOMContentLoaded', () => {
             empty.textContent = 'No compatible modules';
             contextMenuItems.appendChild(empty);
         }
+
+        const deleteItem = document.createElement('div');
+        deleteItem.className = 'context-menu-item';
+        deleteItem.style.color = 'var(--error)';
+        deleteItem.style.borderTop = '1px solid var(--border-color)';
+        deleteItem.style.marginTop = '4px';
+        deleteItem.style.paddingTop = '8px';
+        deleteItem.innerHTML = `<i class="fa-solid fa-trash"></i> Delete Node`;
+        deleteItem.onclick = (e) => {
+            e.stopPropagation();
+            contextMenu.classList.add('hidden');
+            if (confirm("Delete this node? This will also cascade delete any connected edges.")) {
+                fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${node.id || node.value}`, { method: 'DELETE' })
+                    .then(() => selectWorkspace(activeWorkspace))
+                    .catch(() => alert("Failed to delete node."));
+            }
+        };
+        contextMenuItems.appendChild(deleteItem);
 
         contextMenu.style.left = `${x}px`;
         contextMenu.style.top = `${y}px`;
