@@ -215,17 +215,17 @@ class ConfigManager(DatabaseEngine):
         ws = self.get_workspace(old_name)
         if not ws:
             raise ValueError(f"Workspace {old_name} not found.")
-        
+
         old_path = ws["path"]
         new_path = os.path.join(os.path.dirname(old_path), f"{new_name}.db")
         new_path = os.path.normpath(new_path).replace("\\", "/")
-        
+
         if os.path.exists(new_path):
             raise ValueError(f"A workspace file for {new_name} already exists.")
-            
+
         if os.path.exists(old_path):
             os.rename(old_path, new_path)
-            
+
         cursor = self.conn.cursor()
         cursor.execute(
             "UPDATE workspaces SET name = ?, path = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
@@ -332,3 +332,16 @@ class WorkspaceManager(DatabaseEngine):
         cursor.execute("SELECT id FROM nodes WHERE value = ?", (value,))
         result = cursor.fetchone()
         return result["id"] if result else None
+
+    def delete_node(self, node_id: int) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "DELETE FROM edge WHERE source_id = ? OR target_id = ?", (node_id, node_id)
+        )
+        cursor.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
+        self.conn.commit()
+
+    def delete_edge(self, edge_id: int) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM edge WHERE id = ?", (edge_id,))
+        self.conn.commit()
