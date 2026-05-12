@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keen - OSINT Dashboard</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="top-nav">
+            <div class="logo">
+                <i class="fa-solid fa-eye"></i>
+                <span>KEEN</span>
+            </div>
+            <div class="server-status">
+                <div class="status-indicator online"></div>
+                <span>Server Online</span>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <!-- Left Sidebar: Workspaces -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h2><i class="fa-solid fa-folder-tree"></i> Workspaces</h2>
+                    <button id="btn-new-workspace" class="icon-btn" title="New Workspace">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+                <div class="workspace-list" id="workspace-list">
+                    <!-- Loaded dynamically -->
+                </div>
+            </aside>
+
+            <!-- Center Panel: Active Workspace Data -->
+            <main class="center-panel">
+                <div class="panel-header">
+                    <h2 id="active-workspace-title">No Workspace Selected</h2>
+                    <div class="tabs">
+                        <button class="tab active" data-target="tab-nodes">Nodes (<span id="count-nodes">0</span>)</button>
+                        <button class="tab" data-target="tab-edges">Edges (<span id="count-edges">0</span>)</button>
+                    </div>
+                </div>
+
+                <div class="tab-content active" id="tab-nodes">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Value</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody id="nodes-tbody">
+                                <!-- Nodes loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-edges">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Source ID</th>
+                                    <th>Target ID</th>
+                                    <th>Relationship</th>
+                                </tr>
+                            </thead>
+                            <tbody id="edges-tbody">
+                                <!-- Edges loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Panel: Module Runner -->
+            <aside class="right-panel">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-bolt"></i> Module Runner</h2>
+                </div>
+                
+                <div class="module-selector-container">
+                    <label for="module-select">Select Module</label>
+                    <select id="module-select">
+                        <option value="" disabled selected>-- Choose a module --</option>
+                    </select>
+                </div>
+
+                <div id="module-details" class="module-details hidden">
+                    <p id="module-description" class="module-desc"></p>
+                    <div class="module-meta">
+                        <span class="badge" id="module-author"></span>
+                        <span class="badge" id="module-version"></span>
+                    </div>
+
+                    <form id="module-form" class="module-form">
+                        <!-- Options generated dynamically -->
+                    </form>
+                    
+                    <button id="btn-run-module" class="btn-primary">
+                        <i class="fa-solid fa-play"></i> Run Module
+                    </button>
+                </div>
+
+                <!-- Terminal -->
+                <div class="terminal-container">
+                    <div class="terminal-header">
+                        <span>Execution Logs</span>
+                        <div class="terminal-actions">
+                            <button id="btn-clear-term" class="icon-btn small"><i class="fa-solid fa-eraser"></i></button>
+                        </div>
+                    </div>
+                    <div class="terminal-body" id="terminal-body">
+                        <div class="log-line sys-msg">Ready.</div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="modal-new-workspace">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Create Workspace</h3>
+                <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Workspace Name</label>
+                    <input type="text" id="input-ws-name" placeholder="e.g. target_corp_1">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="input-ws-desc" placeholder="Optional description">
+                </div>
+                <button id="btn-create-ws" class="btn-primary full-width">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
