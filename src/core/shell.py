@@ -442,6 +442,7 @@ class Shell(Cmd):
             workspace create <name> [desc]      - Create & register a workspace
             workspace set-desc <description>    - Update current workspace's description
             workspace delete <name>             - Unregister a workspace (retains database)
+            workspace rename <name> <new_name>  - Rename a workspace
         """
         args = arg.strip().split()
         if not args:
@@ -459,6 +460,7 @@ class Shell(Cmd):
                 info("\tworkspace select <name>")
                 info("\tworkspace set-desc <description>")
                 info("\tworkspace delete <name>")
+                info("\tworkspace rename <name> <new_name>")
             return
 
         subcommand = args[0].lower()
@@ -632,6 +634,19 @@ class Shell(Cmd):
                 f"Unregistered workspace: '{name}'. (Database file '{w['path']}' was kept)."
             )
             return
+        elif subcommand == "rename":
+            if len(args) < 3:
+                error("Usage: workspace rename <name> <new_name>")
+                return
+            name = args[1]
+            new_name = args[2]
+            w = self.config.get_workspace(name)
+            if not w:
+                error(f"Workspace '{name}' not found.")
+                return
+            self.config.rename_workspace(name, new_name)
+            info(f"Renamed workspace '{name}' to '{new_name}'.")
+            return
 
         else:
             # Fallback direct switch/creation matching original behavior
@@ -696,8 +711,10 @@ class Shell(Cmd):
             return
 
         from src.api.server import start_server
+
         info(f"Starting web server on {host}:{port}...")
         start_server(host=host, port=port, debug=self.debug_mode)
+
     def do_exit(self, args: str) -> None:
         """Exit the shell."""
         self.do_quit("")
