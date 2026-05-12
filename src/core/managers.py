@@ -276,6 +276,14 @@ class WorkspaceManager(DatabaseEngine):
                 FOREIGN KEY(target_id) REFERENCES nodes(id)
             )
         """)
+        
+        # Add positions columns if they don't exist
+        try:
+            cursor.execute("ALTER TABLE nodes ADD COLUMN x REAL")
+            cursor.execute("ALTER TABLE nodes ADD COLUMN y REAL")
+        except Exception:
+            pass
+            
         self.conn.commit()
 
     def get_or_add_node(
