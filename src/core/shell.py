@@ -19,14 +19,25 @@ class Shell(Cmd):
         super().__init__()
         self.debug_mode = debug_mode
         self.version = "1.0.0"
-        self.prompt = f"{stylize('keen', Style(color=Color.BLUE))} > "
         self.modules = load_modules()
         self.current_module = None
 
-        # Creates a ConfigManager to handle API keys and user preferences.
+        # Creates a ConfigManager to handle API keys, preferences, and workspace registry.
         self.config = ConfigManager("~/.keen/config.db")
-        # Starts empty, set by user via the 'workspace' command.
+
+        # Starts empty, but attempts to restore the last active workspace.
         self.workspace = None
+        last_ws = self.config.get_preference("last_workspace")
+        if last_ws:
+            w = self.config.get_workspace(last_ws)
+            if w and os.path.exists(w["path"]):
+                try:
+                    self.workspace = WorkspaceManager(w["path"], name=last_ws)
+                except Exception:
+                    # Clean up if database fails to load
+                    self.config.set_preference("last_workspace", "")
+
+        self._update_prompt()
 
         banner: FigletString = Figlet(font="slant").renderText("Keen")
         banner_styled: str = stylize(
@@ -52,6 +63,28 @@ class Shell(Cmd):
 
         self.intro = f"\n{banner_styled}\n{version_styled}\n{welcome_styled}\n"
 
+    def _update_prompt(self) -> None:
+        """Centralized prompt updating based on active workspace and module."""
+        keen_part = stylize("keen", Style(color=Color.BLUE))
+        workspace_part = ""
+        module_part = ""
+
+        if self.workspace:
+            workspace_part = stylize(
+                f"[{self.workspace.name}]", Style(color=Color.GREEN)
+            )
+
+        if self.current_module:
+            category = self.current_module.metadata.get("category", "")
+            name = self.current_module.metadata.get("name", "").lower()
+            if category and category != ".":
+                display_path = f"{category}/{name}"
+            else:
+                display_path = name
+            module_part = stylize(f"({display_path})", Style(color=Color.RED))
+
+        self.prompt = f"{keen_part}{workspace_part}{module_part} > "
+
     def complete_use(self, text, line, begidx, endidx):
         """Tab-completion for the 'use' command."""
         # Suggest names that don't look like internal python paths
@@ -71,24 +104,7 @@ class Shell(Cmd):
 
         if module_name in self.modules:
             self.current_module = self.modules[module_name]()
-            category = self.current_module.metadata.get("category", "")
-            name = self.current_module.metadata.get("name", "").lower()
-
-            if category and category != ".":
-                display_path = f"{category}/{name}"
-            else:
-                display_path = name
-
-            keen_part = stylize("keen", Style(color=Color.BLUE))
-            module_part = stylize(f"({display_path})", Style(color=Color.RED))
-
-            if self.workspace:
-                workspace_part = stylize(
-                    f"[{self.workspace.name}]", Style(color=Color.GREEN)
-                )
-                self.prompt = f"{keen_part}{workspace_part}{module_part} > "
-            else:
-                self.prompt = f"{keen_part}{module_part} > "
+            self._update_prompt()
         else:
             error(
                 f"Module '{module_name}' not found. Type 'list modules' to see available modules."
@@ -141,11 +157,9 @@ class Shell(Cmd):
             self.current_module = None
         elif self.workspace:
             self.workspace = None
+            self.config.set_preference("last_workspace", "")
 
-        if self.workspace:
-            self.prompt = f"{stylize('keen', Style(color=Color.BLUE))}{stylize(f'({self.workspace.name})', Style(color=Color.GREEN))} > "
-        else:
-            self.prompt = f"{stylize('keen', Style(color=Color.BLUE))} > "
+        self._update_prompt()
 
     def do_show(self, arg: str) -> None:
         """Show available <modules | options | info | banner>."""
@@ -194,7 +208,6 @@ class Shell(Cmd):
                 if cls not in seen:
                     seen.add(cls)
                     count += 1
-                    # key will be the first one inserted (category/name if it exists)
                     desc = getattr(cls, "metadata", {}).get("description", "")
                     table.add_row(key, desc)
 
@@ -214,20 +227,244 @@ class Shell(Cmd):
         """Clear the screen."""
         os.system("cls" if os.name == "nt" else "clear")
 
-    def do_workspace(self, name: str) -> None:
-        """Create a new workspace."""
-        if not name:
-            error("Usage: workspace <name>")
+    def do_workspace(self, arg: str) -> None:
+        """Manage workspaces.
+
+        Usage:
+            workspace                           - Show active workspace
+            workspace list                      - List all workspaces & active metrics
+            workspace select <name>             - Switch/use an existing workspace
+            workspace create <name> [desc]      - Create & register a workspace
+            workspace set-desc <description>    - Update current workspace's description
+            workspace delete <name>             - Unregister a workspace (retains database)
+        """
+        args = arg.strip().split()
+        if not args:
+            if self.workspace:
+                info(
+                    f"Current workspace: {stylize(self.workspace.name, Style(color=Color.GREEN))}"
+                )
+            else:
+                info(
+                    "No workspace currently selected. Use 'workspace list' or 'workspace create <name>'."
+                )
+                info("Available commands:")
+                info("\tworkspace list")
+                info("\tworkspace create <name> [description]")
+                info("\tworkspace select <name>")
+                info("\tworkspace set-desc <description>")
+                info("\tworkspace delete <name>")
             return
 
-        db_file = f"cases/{name}.keen"
-        self.workspace = WorkspaceManager(db_file)
+        subcommand = args[0].lower()
 
-        keen_part = stylize("keen", Style(color=Color.BLUE))
-        workspace_part = stylize(f"[{name}]", Style(color=Color.GREEN))
-        self.prompt = f"{keen_part}{workspace_part} > "
+        if subcommand == "list":
+            workspaces = self.config.get_all_workspaces()
+            # Auto-discover any unregistered .keen files in cases/
+            registered_paths = {w["path"] for w in workspaces}
+            discovered = False
+            if os.path.exists("cases"):
+                for file in os.listdir("cases"):
+                    if file.endswith(".keen"):
+                        path = f"cases/{file}"
+                        norm_path = os.path.normpath(path).replace("\\", "/")
+                        if norm_path not in registered_paths:
+                            name = os.path.splitext(file)[0]
+                            self.config.add_workspace(
+                                name, norm_path, "Auto-discovered workspace"
+                            )
+                            discovered = True
 
-        info(f"Switched to workspace: {stylize(name, Style(color=Color.GREEN))}.")
+            if discovered:
+                workspaces = self.config.get_all_workspaces()
+
+            if not workspaces:
+                info(
+                    "No workspaces available. Create one with 'workspace create <name>'."
+                )
+                return
+
+            table = Table(
+                show_header=True,
+                header_style="bold blue",
+                title="Available Workspaces",
+                title_style="bold cyan",
+                show_lines=True,
+                expand=True,
+            )
+            table.add_column("Active", justify="center", style="bold green", width=6)
+            table.add_column("Name", justify="left", style="cyan", no_wrap=True)
+            table.add_column("Nodes", justify="right", style="yellow")
+            table.add_column("Edges", justify="right", style="magenta")
+            table.add_column("Description", justify="left", style="white")
+            table.add_column("Path", justify="left", style="dim white")
+
+            for w in workspaces:
+                name = w["name"]
+                path = w["path"]
+                desc = w["description"] or "No description provided."
+
+                # Check active status
+                is_active = (
+                    "●" if self.workspace and self.workspace.name == name else ""
+                )
+
+                # Count nodes/edges from the db file
+                nodes_count = 0
+                edges_count = 0
+                try:
+                    if self.workspace and self.workspace.name == name:
+                        nodes_count = self.workspace.get_node_count()
+                        edges_count = self.workspace.get_edge_count()
+                    elif os.path.exists(path):
+                        temp_wm = WorkspaceManager(path, name=name)
+                        nodes_count = temp_wm.get_node_count()
+                        edges_count = temp_wm.get_edge_count()
+                        temp_wm.conn.close()
+                except Exception as e:
+                    desc += f" (Error: {e})"
+
+                table.add_row(
+                    is_active, name, str(nodes_count), str(edges_count), desc, path
+                )
+
+            console = Console()
+            console.print(table)
+            return
+
+        elif subcommand == "create":
+            if len(args) < 2:
+                error("Usage: workspace create <name> [description]")
+                return
+            name = args[1]
+            desc = " ".join(args[2:]) if len(args) > 2 else ""
+
+            if not name.isalnum() and "_" not in name and "-" not in name:
+                error(
+                    "Workspace name must be alphanumeric (underscores/hyphens allowed)."
+                )
+                return
+
+            db_file = f"cases/{name}.keen"
+            self.config.add_workspace(name, db_file, desc)
+
+            self.workspace = WorkspaceManager(db_file, name=name)
+            self.config.set_preference("last_workspace", name)
+            self._update_prompt()
+
+            info(
+                f"Created and switched to workspace: {stylize(name, Style(color=Color.GREEN))}"
+            )
+            if desc:
+                info(f"Description: {desc}")
+            return
+
+        elif subcommand in ("select", "use"):
+            if len(args) < 2:
+                error("Usage: workspace select <name>")
+                return
+            name = args[1]
+            w: dict | None = self.config.get_workspace(name)
+            if not w:
+                db_file = f"cases/{name}.keen"
+                if os.path.exists(db_file):
+                    self.config.add_workspace(
+                        name, db_file, "Auto-discovered workspace"
+                    )
+                    w = self.config.get_workspace(name)
+                else:
+                    error(
+                        f"Workspace '{name}' does not exist. Use 'workspace create {name}' to create it."
+                    )
+                    return
+
+            # Defensive check: if w is still None (e.g. due to DB lock or read error), fallback to direct path
+            db_path = w["path"] if w else f"cases/{name}.keen"
+
+            try:
+                self.workspace = WorkspaceManager(db_path, name=name)
+                self.config.set_preference("last_workspace", name)
+                self._update_prompt()
+                info(
+                    f"Switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
+                )
+            except Exception as e:
+                error(f"Failed to load workspace database at '{db_path}': {e}")
+            return
+
+        elif subcommand == "set-desc":
+            if not self.workspace:
+                error("No active workspace selected. Select a workspace first.")
+                return
+            if len(args) < 2:
+                error("Usage: workspace set-desc <description>")
+                return
+
+            parts = arg.strip().split(maxsplit=1)
+            description = parts[1] if len(parts) > 1 else ""
+
+            self.config.update_workspace_description(self.workspace.name, description)
+            info(f"Description updated for workspace '{self.workspace.name}'.")
+            return
+
+        elif subcommand == "delete":
+            if len(args) < 2:
+                error("Usage: workspace delete <name>")
+                return
+            name = args[1]
+            w = self.config.get_workspace(name)
+            print(w)
+            if not w:
+                error(f"Workspace '{name}' not found.")
+                return
+
+            if self.workspace and self.workspace.name == name:
+                self.workspace = None
+                self.config.set_preference("last_workspace", "")
+                self._update_prompt()
+
+            self.config.delete_workspace(name)
+            info(
+                f"Unregistered workspace: '{name}'. (Database file '{w['path']}' was kept)."
+            )
+            return
+
+        else:
+            # Fallback direct switch/creation matching original behavior
+            name = args[0]
+            w = self.config.get_workspace(name)
+            if w:
+                self.workspace = WorkspaceManager(w["path"], name=name)
+                self.config.set_preference("last_workspace", name)
+                self._update_prompt()
+                info(
+                    f"Switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
+                )
+            else:
+                db_file = f"cases/{name}.keen"
+                if os.path.exists(db_file):
+                    self.config.add_workspace(
+                        name, db_file, "Auto-discovered workspace"
+                    )
+                    self.workspace = WorkspaceManager(db_file, name=name)
+                    self.config.set_preference("last_workspace", name)
+                    self._update_prompt()
+                    info(
+                        f"Discovered and switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
+                    )
+                else:
+                    if not name.isalnum() and "_" not in name and "-" not in name:
+                        error(
+                            "Workspace name must be alphanumeric (underscores/hyphens allowed)."
+                        )
+                        return
+                    self.config.add_workspace(name, db_file, f"Workspace for {name}")
+                    self.workspace = WorkspaceManager(db_file, name=name)
+                    self.config.set_preference("last_workspace", name)
+                    self._update_prompt()
+                    info(
+                        f"Created and switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
+                    )
 
     def do_exit(self) -> None:
         """Exit the shell."""
