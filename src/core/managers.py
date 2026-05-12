@@ -1,4 +1,6 @@
 import json
+import os
+import sqlite3
 from cryptography.fernet import Fernet
 
 from src.core.database_engine import DatabaseEngine
@@ -30,12 +32,24 @@ class ConfigManager(DatabaseEngine):
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS workspaces (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
+                name TEXT UNIQUE,
                 path TEXT NOT NULL,
+                description TEXT DEFAULT '',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Handle migration for existing databases missing the description column
+        try:
+            cursor.execute(
+                "ALTER TABLE workspaces ADD COLUMN description TEXT DEFAULT ''"
+            )
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+
         self.conn.commit()
 
     def get_api_key(self, service: str) -> str | None:
@@ -57,17 +71,76 @@ class ConfigManager(DatabaseEngine):
     def get_all_api_keys(self) -> list[dict]:
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM api_keys")
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
 
     def delete_api_key(self, service: str) -> None:
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM api_keys WHERE service = ?", (service,))
         self.conn.commit()
 
+    # Workspace registry management CRUD
+    def add_workspace(self, name: str, path: str, description: str = "") -> None:
+        cursor = self.conn.cursor()
+        # Normalize path representation to forward slashes for cross-platform safety
+        normalized_path = os.path.normpath(path).replace("\\", "/")
+        cursor.execute("SELECT id FROM workspaces WHERE name = ?", (name,))
+        result = cursor.fetchone()
+        if result:
+            cursor.execute(
+                "UPDATE workspaces SET path = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
+                (normalized_path, description, name),
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO workspaces (name, path, description) VALUES (?, ?, ?)",
+                (name, normalized_path, description),
+            )
+        self.conn.commit()
+
+    def get_workspace(self, name: str) -> dict | None:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM workspaces WHERE name = ?", (name,))
+        result = cursor.fetchone()
+        return dict(result) if result else None
+
+    def get_all_workspaces(self) -> list[dict]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM workspaces ORDER BY name ASC")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def update_workspace_description(self, name: str, description: str) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE workspaces SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
+            (description, name),
+        )
+        self.conn.commit()
+
+    def delete_workspace(self, name: str) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM workspaces WHERE name = ?", (name,))
+        self.conn.commit()
+
+    # Preferences CRUD helper methods
+    def get_preference(self, key: str) -> str | None:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT value FROM preferences WHERE key = ?", (key,))
+        result = cursor.fetchone()
+        return result["value"] if result else None
+
+    def set_preference(self, key: str, value: str) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)",
+            (key, value),
+        )
+        self.conn.commit()
+
 
 class WorkspaceManager(DatabaseEngine):
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, name: str | None = None) -> None:
         super().__init__(db_path)
+        self.name = name or os.path.splitext(os.path.basename(db_path))[0]
         self._initialize_schema()
 
     def _initialize_schema(self) -> None:
@@ -81,7 +154,6 @@ class WorkspaceManager(DatabaseEngine):
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # relationship = ("owner_of", "related_to", "associated_with")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS edge (
                 id INTEGER PRIMARY KEY,
@@ -99,7 +171,8 @@ class WorkspaceManager(DatabaseEngine):
     ) -> int | None:
         cursor = self.conn.cursor()
 
-        cursor.execute("SELECT id FROM nodes WHERE value = ?", (value))
+        # Fix SQL tuple binding bug (value,) instead of (value)
+        cursor.execute("SELECT id FROM nodes WHERE value = ?", (value,))
         result = cursor.fetchone()
 
         if result:
@@ -121,3 +194,15 @@ class WorkspaceManager(DatabaseEngine):
             (source_id, target_id, relationship),
         )
         self.conn.commit()
+
+    def get_node_count(self) -> int:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) as count FROM nodes")
+        result = cursor.fetchone()
+        return result["count"] if result else 0
+
+    def get_edge_count(self) -> int:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) as count FROM edge")
+        result = cursor.fetchone()
+        return result["count"] if result else 0
