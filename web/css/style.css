@@ -615,7 +615,6 @@ select:focus, input:focus {
     border-radius: 8px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
     min-width: 200px;
-    overflow: hidden;
 }
 .context-menu.hidden {
     display: none;
@@ -637,10 +636,32 @@ select:focus, input:focus {
     align-items: center;
     gap: 8px;
     transition: background 0.2s ease;
+    position: relative;
 }
 .context-menu-item:hover {
     background: var(--bg-panel-hover);
     color: var(--accent-cyan);
+}
+.submenu-arrow {
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+.submenu {
+    position: absolute;
+    top: 0;
+    left: 100%;
+    background: var(--bg-panel);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    min-width: 200px;
+    display: none;
+    flex-direction: column;
+}
+.has-submenu:hover > .submenu {
+    display: flex;
 }
 
 /* Responsive */

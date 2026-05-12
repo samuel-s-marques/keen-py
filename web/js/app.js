@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const countEdges = document.getElementById('count-edges');
     const nodesTbody = document.getElementById('nodes-tbody');
     const edgesTbody = document.getElementById('edges-tbody');
-    
+
     const networkCanvas = document.getElementById('network-canvas');
 
     const moduleSelect = document.getElementById('module-select');
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const moduleVersion = document.getElementById('module-version');
     const moduleForm = document.getElementById('module-form');
     const btnRunModule = document.getElementById('btn-run-module');
-    
+
     const terminalBody = document.getElementById('terminal-body');
     const btnClearTerm = document.getElementById('btn-clear-term');
 
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCreateWs = document.getElementById('btn-create-ws');
     const inputWsName = document.getElementById('input-ws-name');
     const inputWsDesc = document.getElementById('input-ws-desc');
-    
+
     const modalRenameWs = document.getElementById('modal-rename-workspace');
     const btnConfirmRenameWs = document.getElementById('btn-confirm-rename-ws');
     const inputRenameWs = document.getElementById('input-rename-ws');
@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalSettings.classList.add('active');
         if (isConfigUnlocked) fetchApiKeys();
     });
-    
+
     closeModals.forEach(btn => btn.addEventListener('click', () => {
         modalNewWs.classList.remove('active');
         modalSettings.classList.remove('active');
@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const password = inputMasterPassword.value;
         const res = await fetch(`${API_BASE}/config/unlock`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password })
         });
         if (res.ok) {
@@ -133,10 +133,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const service = document.getElementById('input-api-service').value.trim().toUpperCase();
         const api_key = document.getElementById('input-api-key').value.trim();
         if (!service || !api_key) return;
-        
+
         await fetch(`${API_BASE}/config/keys`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ service, api_key })
         });
         document.getElementById('input-api-service').value = '';
@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 div.style.justifyContent = 'space-between';
                 div.style.alignItems = 'center';
                 div.innerHTML = `
-                    <div><strong>${k.service}</strong>: <span style="font-family:var(--font-mono)">${k.api_key.substring(0,4)}...</span></div>
+                    <div><strong>${k.service}</strong>: <span style="font-family:var(--font-mono)">${k.api_key.substring(0, 4)}...</span></div>
                     <button class="icon-btn" style="color:var(--text-secondary); padding: 4px;" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
@@ -177,13 +177,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
-    
+
     // Workspace Management
     btnCreateWs.addEventListener('click', async () => {
         const name = inputWsName.value.trim();
         const desc = inputWsDesc.value.trim();
         if (!name) return;
-        
+
         try {
             const res = await fetch(`${API_BASE}/workspaces`, {
                 method: 'POST',
@@ -206,13 +206,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const oldName = inputRenameWs.dataset.oldName;
         const newName = inputRenameWs.value.trim();
         if (!newName || newName === oldName) return;
-        
+
         const res = await fetch(`${API_BASE}/workspaces/${oldName}`, {
             method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ new_name: newName })
         });
-        
+
         if (res.ok) {
             modalRenameWs.classList.remove('active');
             if (activeWorkspace === oldName) activeWorkspace = newName;
@@ -228,10 +228,10 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.addEventListener('click', (e) => {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
+
             tab.classList.add('active');
             document.getElementById(tab.dataset.target).classList.add('active');
-            
+
             // Redraw network when tab becomes visible
             if (tab.dataset.target === 'tab-graph' && network) {
                 network.redraw();
@@ -265,32 +265,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 // value is usually [default, required, description, type]
                 const isRequired = value[1];
                 let defVal = value[0] || '';
-                
+
                 // Auto-pull API keys if unlocked
                 if (isConfigUnlocked && configKeys[key.toUpperCase()]) {
                     defVal = configKeys[key.toUpperCase()];
                 }
-                
+
                 const group = document.createElement('div');
                 group.className = 'form-group';
-                
+
                 const label = document.createElement('label');
                 label.textContent = `${key} ${isRequired ? '*' : ''}`;
                 label.title = value[2] || '';
-                
+
                 const isSecret = key.toUpperCase().includes('KEY') || key.toUpperCase().includes('PASSWORD') || key.toUpperCase().includes('SECRET');
                 const input = document.createElement('input');
                 input.type = isSecret ? 'password' : 'text';
                 input.name = key;
                 input.value = defVal;
                 input.placeholder = value[2] || '';
-                
+
                 group.appendChild(label);
                 group.appendChild(input);
                 moduleForm.appendChild(group);
             }
         }
-        
+
         moduleDetails.classList.remove('hidden');
     });
 
@@ -347,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btnRunModule.innerHTML = '<i class="fa-solid fa-play"></i> Run Module';
             termPrint(`Connection closed.`, 'sys-msg');
             activeSocket = null;
-            
+
             // Refresh workspace to show new nodes
             if (activeWorkspace) {
                 selectWorkspace(activeWorkspace);
@@ -367,10 +367,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function buildModuleDropdown(compatibleValidators = [], prefillValue = null) {
         moduleSelect.innerHTML = '<option value="" disabled selected>-- Choose a module --</option>';
-        
+
         const compatGroup = document.createElement('optgroup');
         compatGroup.label = 'Compatible Modules';
-        
+
         const allGroup = document.createElement('optgroup');
         allGroup.label = 'All Modules';
 
@@ -408,7 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (firstMatch && prefillValue) {
             moduleSelect.value = firstMatch;
             moduleSelect.dispatchEvent(new Event('change'));
-            
+
             setTimeout(() => {
                 const inputs = moduleForm.querySelectorAll('input');
                 for (const input of inputs) {
@@ -425,13 +425,13 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_BASE}/workspaces`);
             const data = await res.json();
-            
+
             workspaceList.innerHTML = '';
             data.forEach(w => {
                 const item = document.createElement('div');
                 item.className = `workspace-item ${w.name === activeWorkspace ? 'active' : ''}`;
                 item.onclick = () => selectWorkspace(w.name);
-                
+
                 item.innerHTML = `
                     <div class="workspace-header-actions">
                         <div class="workspace-name">${w.name}</div>
@@ -496,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function selectWorkspace(name) {
         activeWorkspace = name;
         activeWorkspaceTitle.textContent = name;
-        
+
         // Update UI active state
         document.querySelectorAll('.workspace-item').forEach(el => {
             if (el.querySelector('.workspace-name').textContent === name) el.classList.add('active');
@@ -509,13 +509,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetch(`${API_BASE}/workspaces/${name}/nodes`),
                 fetch(`${API_BASE}/workspaces/${name}/edges`)
             ]);
-            
+
             const nodes = await nodesRes.json();
             const edges = await edgesRes.json();
-            
+
             countNodes.textContent = nodes.length || 0;
             countEdges.textContent = edges.length || 0;
-            
+
             nodesTbody.innerHTML = '';
             if (nodes.length) {
                 nodes.forEach(n => {
@@ -547,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             drawGraph(nodes, edges);
-            
+
             // Note: we don't call fetchWorkspaces() here anymore to avoid infinite loops, 
             // since fetchWorkspaces recreates DOM elements. Just update stats manually if needed.
         } catch (e) {
@@ -557,11 +557,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function drawGraph(nodes, edges) {
         let allHavePositions = nodes.length > 0;
-        
+
         const visNodes = nodes.map(n => {
             let icon = '\uf111'; // fa-circle default
             let color = '#8b92a5';
-            
+
             if (n.type.includes('email')) { icon = '\uf0e0'; color = '#0072ff'; }
             else if (n.type.includes('domain')) { icon = '\uf0ac'; color = '#00f0ff'; }
             else if (n.type.includes('ip')) { icon = '\uf233'; color = '#ff00ff'; }
@@ -582,14 +582,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#f0f2f8' }
             };
-            
+
             if (n.x !== null && n.x !== undefined && n.y !== null && n.y !== undefined) {
                 visNode.x = n.x;
                 visNode.y = n.y;
             } else {
                 allHavePositions = false;
             }
-            
+
             return visNode;
         });
 
@@ -619,7 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
             interaction: { hover: true },
             manipulation: {
                 enabled: false,
-                deleteNode: function(data, callback) {
+                deleteNode: function (data, callback) {
                     if (confirm("Delete selected node(s)? This will also cascade delete any connected edges.")) {
                         const promises = data.nodes.map(id => fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${id}`, { method: 'DELETE' }));
                         Promise.all(promises).then(() => {
@@ -633,7 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         callback(null);
                     }
                 },
-                deleteEdge: function(data, callback) {
+                deleteEdge: function (data, callback) {
                     if (confirm("Delete selected edge(s)?")) {
                         const promises = data.edges.map(id => fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${id}`, { method: 'DELETE' }));
                         Promise.all(promises).then(() => {
@@ -647,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         callback(null);
                     }
                 },
-                addEdge: function(edgeData, callback) {
+                addEdge: function (edgeData, callback) {
                     const btnAddEdge = document.getElementById('btn-add-edge');
                     if (btnAddEdge) btnAddEdge.classList.remove('active');
                     networkCanvas.style.cursor = 'default';
@@ -656,14 +656,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         edgeData.label = rel;
                         fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges`, {
                             method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
+                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 source_id: String(edgeData.from),
                                 target_id: String(edgeData.to),
                                 relationship: rel
                             })
                         }).then(res => {
-                            if(res.ok) {
+                            if (res.ok) {
                                 callback(edgeData);
                                 selectWorkspace(activeWorkspace);
                             } else {
@@ -692,7 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/positions`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ positions: formattedPositions })
             });
         }
@@ -701,11 +701,11 @@ document.addEventListener('DOMContentLoaded', () => {
         network.once("stabilizationIterationsDone", function () {
             network.setOptions({ physics: { enabled: false } });
             const btnPhy = document.getElementById('btn-toggle-physics');
-            if(btnPhy) btnPhy.classList.remove('active');
+            if (btnPhy) btnPhy.classList.remove('active');
             savePositions();
         });
 
-        network.on("dragEnd", function() {
+        network.on("dragEnd", function () {
             savePositions();
         });
 
@@ -723,11 +723,11 @@ document.addEventListener('DOMContentLoaded', () => {
             btnCircle.classList.remove('active');
         }
 
-        if(btnDeleteSelected) btnDeleteSelected.onclick = () => {
+        if (btnDeleteSelected) btnDeleteSelected.onclick = () => {
             network.deleteSelected();
         };
 
-        if(btnForce) btnForce.onclick = () => {
+        if (btnForce) btnForce.onclick = () => {
             clearLayoutButtons();
             btnForce.classList.add('active');
             network.setOptions({
@@ -738,7 +738,7 @@ document.addEventListener('DOMContentLoaded', () => {
             network.stabilize();
         };
 
-        if(btnHierarchical) btnHierarchical.onclick = () => {
+        if (btnHierarchical) btnHierarchical.onclick = () => {
             clearLayoutButtons();
             btnHierarchical.classList.add('active');
             network.setOptions({
@@ -749,16 +749,16 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(savePositions, 500);
         };
 
-        if(btnCircle) btnCircle.onclick = () => {
+        if (btnCircle) btnCircle.onclick = () => {
             clearLayoutButtons();
             btnCircle.classList.add('active');
             network.setOptions({ physics: { enabled: false }, layout: { hierarchical: false } });
             btnPhysics.classList.remove('active');
-            
+
             const nodeIds = data.nodes.getIds();
             const radius = Math.max(300, nodeIds.length * 15);
             const step = 2 * Math.PI / nodeIds.length;
-            
+
             const updates = [];
             nodeIds.forEach((id, index) => {
                 updates.push({
@@ -772,7 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(savePositions, 500);
         };
 
-        if(btnPhysics) btnPhysics.onclick = () => {
+        if (btnPhysics) btnPhysics.onclick = () => {
             const isEnabled = btnPhysics.classList.contains('active');
             if (isEnabled) {
                 btnPhysics.classList.remove('active');
@@ -783,7 +783,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        if(btnAddEdge) btnAddEdge.onclick = () => {
+        if (btnAddEdge) btnAddEdge.onclick = () => {
             if (btnAddEdge.classList.contains('active')) {
                 btnAddEdge.classList.remove('active');
                 networkCanvas.style.cursor = 'default';
@@ -799,7 +799,7 @@ document.addEventListener('DOMContentLoaded', () => {
             params.event.preventDefault();
             const nodeId = this.getNodeAt(params.pointer.DOM);
             const edgeId = this.getEdgeAt(params.pointer.DOM);
-            
+
             if (nodeId) {
                 const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
                 if (selectedNode) {
@@ -819,7 +819,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 networkCanvas.style.cursor = 'default';
                 network.disableEditMode();
             }
-            
+
             contextMenu.classList.add('hidden');
             if (params.nodes.length > 0) {
                 const nodeId = params.nodes[0];
@@ -829,8 +829,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
-        
-        document.addEventListener('keydown', function(e) {
+
+        document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && btnAddEdge && btnAddEdge.classList.contains('active')) {
                 btnAddEdge.classList.remove('active');
                 networkCanvas.style.cursor = 'default';
@@ -841,7 +841,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showContextMenu(x, y, node, edgeId = null) {
         contextMenuItems.innerHTML = '';
-        
+
         if (edgeId !== null) {
             const deleteEdgeItem = document.createElement('div');
             deleteEdgeItem.className = 'context-menu-item';
@@ -857,7 +857,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
             contextMenuItems.appendChild(deleteEdgeItem);
-            
+
             contextMenu.style.left = `${x}px`;
             contextMenu.style.top = `${y}px`;
             contextMenu.classList.remove('hidden');
@@ -865,8 +865,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
-        
+
         let found = false;
+        const categories = {};
 
         for (const key of Object.keys(modulesData).sort()) {
             const mod = modulesData[key];
@@ -882,30 +883,49 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (isMatch) {
+                console.log("Match found!");
                 found = true;
-                const item = document.createElement('div');
-                item.className = 'context-menu-item';
-                item.innerHTML = `<i class="fa-solid fa-play"></i> ${formatModuleName(key, mod)}`;
-                item.onclick = (e) => {
-                    e.stopPropagation();
-                    contextMenu.classList.add('hidden');
-                    // Select node and module
-                    handleNodeSelection(node);
-                    moduleSelect.value = key;
-                    moduleSelect.dispatchEvent(new Event('change'));
-                    
-                    // Auto-fill target
-                    setTimeout(() => {
-                        const inputs = moduleForm.querySelectorAll('input');
-                        for (const input of inputs) {
-                            const optVal = modulesData[key].options[input.name];
-                            if (optVal && validators.includes(optVal[3])) {
-                                input.value = node.value;
+                const cat = mod.category || 'Uncategorized';
+                if (!categories[cat]) categories[cat] = [];
+                categories[cat].push({ key, mod });
+            }
+        }
+
+        if (found) {
+            for (const cat of Object.keys(categories).sort()) {
+                const catItem = document.createElement('div');
+                catItem.className = 'context-menu-item has-submenu';
+                catItem.innerHTML = `<i class="fa-solid fa-folder"></i> ${cat} <i class="fa-solid fa-chevron-right submenu-arrow"></i>`;
+
+                const submenu = document.createElement('div');
+                submenu.className = 'submenu';
+
+                categories[cat].forEach(({ key, mod }) => {
+                    const item = document.createElement('div');
+                    item.className = 'context-menu-item';
+                    item.innerHTML = `<i class="fa-solid fa-play"></i> ${formatModuleName(key, mod)}`;
+                    item.onclick = (e) => {
+                        e.stopPropagation();
+                        contextMenu.classList.add('hidden');
+                        handleNodeSelection(node);
+                        moduleSelect.value = key;
+                        moduleSelect.dispatchEvent(new Event('change'));
+
+                        setTimeout(() => {
+                            const inputs = moduleForm.querySelectorAll('input');
+                            for (const input of inputs) {
+                                const optVal = modulesData[key].options[input.name];
+                                if (optVal && validators.includes(optVal[3])) {
+                                    input.value = node.value;
+                                }
                             }
-                        }
-                    }, 50);
-                };
-                contextMenuItems.appendChild(item);
+                        }, 50);
+                    };
+                    submenu.appendChild(item);
+                });
+
+                catItem.appendChild(submenu);
+                contextMenuItems.appendChild(catItem);
             }
         }
 
