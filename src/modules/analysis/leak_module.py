@@ -25,7 +25,6 @@ class LeakModule(BaseModule):
                 "The type of the target (username, email, phone, auto).",
                 "",
             ],
-            # TODO: Add automatic API key management
             "HIBP_APIKEY": ["", False, "API Key for Have I Been Pwned.", ""],
             "LEAKCHECK_APIKEY": ["", False, "API Key for LeakCheck.", ""],
             "DEHASHED_APIKEY": ["", False, "API Key for DeHashed.", ""],
