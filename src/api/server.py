@@ -61,6 +61,10 @@ class WorkspaceRename(BaseModel):
     new_name: str
 
 
+class NodePositionsUpdate(BaseModel):
+    positions: Dict[str, Dict[str, float]]
+
+
 class APIShellContext:
     def __init__(self, workspace: WorkspaceManager | None = None):
         self.workspace = workspace
@@ -261,6 +265,30 @@ def delete_workspace_edge(name: str, edge_id: int):
     try:
         wm = WorkspaceManager(w["path"], name=name)
         wm.delete_edge(edge_id)
+        wm.conn.close()
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/workspaces/{name}/nodes/positions")
+def update_node_positions(name: str, req: NodePositionsUpdate):
+    w = global_config.get_workspace(name)
+    if not w:
+        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
+    try:
+        wm = WorkspaceManager(w["path"], name=name)
+        cursor = wm.conn.cursor()
+        for node_id_str, pos in req.positions.items():
+            node_id = None
+            if node_id_str.isdigit():
+                node_id = int(node_id_str)
+            else:
+                node_id = wm.get_node_id(node_id_str)
+                
+            if node_id:
+                cursor.execute("UPDATE nodes SET x = ?, y = ? WHERE id = ?", (pos.get("x"), pos.get("y"), node_id))
+        wm.conn.commit()
         wm.conn.close()
         return {"success": True}
     except Exception as e:
