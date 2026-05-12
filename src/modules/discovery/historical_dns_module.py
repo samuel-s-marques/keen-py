@@ -128,11 +128,20 @@ class HistoricalDnsModule(BaseModule):
         await self._analyze_migrations(historical_ips, target)
 
         # Check Abandoned Subdomains
+        vulnerable_subs = []
         if subdomains:
             info(f"Checking {len(subdomains)} historical subdomains for abandonment...")
-            await self._check_abandoned_subdomains(subdomains)
+            vulnerable_subs = await self._check_abandoned_subdomains(subdomains)
         else:
             warn("No subdomains found for abandonment analysis.")
+
+        # Save results
+        results_dict = {
+            "ip_history": ip_history_data,
+            "subdomains": list(subdomains),
+            "vulnerable_subdomains": vulnerable_subs,
+        }
+        await self._save_results(target, results_dict)
 
     def _get_hackertarget_history(self, target: str) -> list[dict]:
         results = []
@@ -300,7 +309,9 @@ class HistoricalDnsModule(BaseModule):
         elif len(providers) == 1:
             info(f"Historically consistently hosted on: {list(providers)[0]}")
 
-    async def _check_abandoned_subdomains(self, subdomains: set[str]) -> None:
+    async def _check_abandoned_subdomains(
+        self, subdomains: set[str]
+    ) -> list[tuple[str, str, list[str]]]:
         """Actively check subdomains for NXDOMAIN or specific 404/Takeover patterns."""
         vulnerable = []
 
@@ -393,3 +404,164 @@ class HistoricalDnsModule(BaseModule):
             )
         else:
             success("No abandoned or vulnerable subdomains detected.")
+
+        return vulnerable
+
+    async def _save_results(self, target: str, results: dict) -> None:
+        import uuid
+        from typing import Any
+
+        ip_history = results.get("ip_history", [])
+        subdomains = results.get("subdomains", [])
+        vulnerable_subs = results.get("vulnerable_subdomains", [])
+
+        # STIX 2.1 Standard Domain-Name Object
+        STIX_DOMAIN_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa7")
+        domain_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, target)
+
+        stix2_domain = {
+            "type": "domain-name",
+            "id": f"domain-name--{domain_uuid}",
+            "spec_version": "2.1",
+            "value": target,
+        }
+
+        misp_domain = {
+            "type": "domain",
+            "value": target,
+        }
+
+        primary_node = {
+            "type": "domain-name",
+            "value": target,
+            "metadata": {
+                "stix2": stix2_domain,
+                "misp": misp_domain,
+                "historical_ips_count": len(set(x["ip"] for x in ip_history)),
+                "historical_subdomains_count": len(subdomains),
+                "vulnerable_subdomains_count": len(vulnerable_subs),
+            },
+        }
+
+        nodes: list[dict[str, Any]] = [primary_node]
+        edges: list[dict[str, Any]] = []
+
+        # Standard CTI Namespaces
+        STIX_IP_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa0")
+
+        # Create lookup dictionary for vulnerable subdomain statuses
+        vuln_lookup = {}
+        for sub, status, ips in vulnerable_subs:
+            vuln_lookup[sub.lower()] = {
+                "status": status,
+                "ips": ips,
+                "vulnerable": True,
+            }
+
+        # Map Historical Subdomains
+        for sub in subdomains:
+            sub_cleaned = sub.strip().lower()
+            if not sub_cleaned:
+                continue
+
+            sub_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, sub_cleaned)
+            vuln_info = vuln_lookup.get(
+                sub_cleaned, {"vulnerable": False, "status": None, "ips": []}
+            )
+
+            stix2_sub = {
+                "type": "domain-name",
+                "id": f"domain-name--{sub_uuid}",
+                "spec_version": "2.1",
+                "value": sub_cleaned,
+                "x_vulnerable_takeover": vuln_info["vulnerable"],
+                "x_takeover_status": vuln_info["status"],
+            }
+
+            misp_sub = {
+                "type": "domain",
+                "value": sub_cleaned,
+            }
+
+            sub_node = {
+                "type": "domain-name",
+                "value": sub_cleaned,
+                "metadata": {
+                    "stix2": stix2_sub,
+                    "misp": misp_sub,
+                    "takeover_vulnerable": vuln_info["vulnerable"],
+                    "takeover_status": vuln_info["status"],
+                    "vulnerable_ips": vuln_info["ips"],
+                    "historical": True,
+                },
+            }
+
+            if sub_node not in nodes:
+                nodes.append(sub_node)
+
+            edges.append(
+                {
+                    "source": target,
+                    "target": sub_cleaned,
+                    "relationship": "has-subdomain",
+                }
+            )
+
+        # Map Historical IP Addresses
+        for ip_entry in ip_history:
+            ip_val = ip_entry.get("ip")
+            date_val = ip_entry.get("date", "Unknown")
+            source_val = ip_entry.get("source", "Unknown")
+
+            if not ip_val:
+                continue
+
+            ip_uuid = uuid.uuid5(STIX_IP_NAMESPACE, ip_val)
+            stix2_ip = {
+                "type": "ipv4-addr",
+                "id": f"ipv4-addr--{ip_uuid}",
+                "spec_version": "2.1",
+                "value": ip_val,
+            }
+
+            ip_node = {
+                "type": "ipv4-addr",
+                "value": ip_val,
+                "metadata": {
+                    "stix2": stix2_ip,
+                    "misp": {"type": "ip-dst", "value": ip_val},
+                    "first_seen": date_val,
+                    "reporting_source": source_val,
+                    "historical": True,
+                },
+            }
+
+            # Avoid duplicates, update metadata if already exists with other dates/sources
+            existing_ip = next((n for n in nodes if n["value"] == ip_val), None)
+            if existing_ip:
+                # Append sources/dates to metadata list
+                if "history" not in existing_ip["metadata"]:
+                    existing_ip["metadata"]["history"] = []
+                existing_ip["metadata"]["history"].append(
+                    {"date": date_val, "source": source_val}
+                )
+            else:
+                ip_node["metadata"]["history"] = [
+                    {"date": date_val, "source": source_val}
+                ]
+                nodes.append(ip_node)
+
+            edges.append(
+                {
+                    "source": target,
+                    "target": ip_val,
+                    "relationship": "historically-resolved-to",
+                }
+            )
+
+        new_results = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        await self.post_run(new_results)

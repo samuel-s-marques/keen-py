@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 import dns.resolver
 import random
 import string
@@ -171,8 +172,8 @@ class DnsModule(BaseModule):
                     ips.extend(data)
 
             unique_ips = list(set(ips))
+            asn_results = []
             if unique_ips:
-                asn_results = []
                 for ip in unique_ips[:5]:  # Limit to avoid excessive queries
                     asn_data = await self.get_asn_info(ip)
                     if asn_data:
@@ -204,6 +205,10 @@ class DnsModule(BaseModule):
                     console.print(asn_table)
         else:
             info(f"No DNS records found for {target}.")
+            asn_results = []
+
+        results_dict = {"records": results, "asn_info": asn_results}
+        await self._save_results(target, results_dict)
 
     async def get_wildcard_records(self, target: str) -> None:
         """Detect if the target domain has a wildcard DNS record."""
@@ -261,7 +266,9 @@ class DnsModule(BaseModule):
             for key in dnskeys:
                 key_type = "KSK" if key.flags == 257 else "ZSK"
                 algo = algorithms.get(key.algorithm, f"Unknown ({key.algorithm})")
-                results.append(["DNSKEY", f"{key_type} | {algo} | Tag: {key.key_tag()}"])
+                results.append(
+                    ["DNSKEY", f"{key_type} | {algo} | Tag: {key.key_tag()}"]
+                )
         except Exception:
             pass
 
@@ -272,9 +279,7 @@ class DnsModule(BaseModule):
             )
             for ds in ds_records:
                 algo = algorithms.get(ds.algorithm, f"Unknown ({ds.algorithm})")
-                digest = digest_types.get(
-                    ds.digest_type, f"Unknown ({ds.digest_type})"
-                )
+                digest = digest_types.get(ds.digest_type, f"Unknown ({ds.digest_type})")
                 results.append(["DS", f"{algo} | {digest} | Tag: {ds.key_tag}"])
         except Exception:
             pass
@@ -342,3 +347,266 @@ class DnsModule(BaseModule):
             }
         except Exception:
             return None
+
+    async def _save_results(self, target: str, results: dict) -> None:
+        import uuid
+
+        records = results.get("records", [])
+        asn_info = results.get("asn_info", [])
+
+        # STIX 2.1 Standard Domain-Name Object
+        STIX_DOMAIN_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa7")
+        domain_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, target)
+
+        stix2_domain = {
+            "type": "domain-name",
+            "id": f"domain-name--{domain_uuid}",
+            "spec_version": "2.1",
+            "value": target,
+        }
+
+        misp_domain = {
+            "type": "domain",
+            "value": target,
+        }
+
+        primary_node = {
+            "type": "domain-name",
+            "value": target,
+            "metadata": {
+                "stix2": stix2_domain,
+                "misp": misp_domain,
+                "record_types_count": len(records),
+            },
+        }
+
+        nodes: list[dict[str, Any]] = [primary_node]
+        edges: list[dict[str, Any]] = []
+
+        # Standard CTI Namespaces
+        STIX_IP_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa0")
+        STIX_TXT_NAMESPACE = uuid.UUID(
+            "f070f381-8b38-5fdf-9730-802526e84fa5"
+        )  # URL namespace for text
+        STIX_AS_NAMESPACE = uuid.UUID(
+            "f070f381-8b38-5fdf-9730-802526e84fa3"
+        )  # Org namespace for AS
+
+        # Map DNS Records
+        for record_type, data in records:
+            if not data:
+                continue
+
+            for item in data:
+                # Format cleaning
+                item_cleaned = item.strip().rstrip(".")
+
+                if record_type in ["A", "AAAA"]:
+                    # IP Address Node
+                    ip_uuid = uuid.uuid5(STIX_IP_NAMESPACE, item_cleaned)
+                    stix_type = "ipv4-addr" if record_type == "A" else "ipv6-addr"
+                    stix2_ip = {
+                        "type": stix_type,
+                        "id": f"{stix_type}--{ip_uuid}",
+                        "spec_version": "2.1",
+                        "value": item_cleaned,
+                    }
+                    ip_node = {
+                        "type": stix_type,
+                        "value": item_cleaned,
+                        "metadata": {
+                            "stix2": stix2_ip,
+                            "misp": {
+                                "type": (
+                                    "ip-dst" if record_type == "A" else "ip-dst-ipv6"
+                                ),
+                                "value": item_cleaned,
+                            },
+                        },
+                    }
+                    if ip_node not in nodes:
+                        nodes.append(ip_node)
+
+                    edges.append(
+                        {
+                            "source": target,
+                            "target": item_cleaned,
+                            "relationship": "resolves-to",
+                        }
+                    )
+
+                elif record_type in ["MX"]:
+                    # MX server host domain. Example: "10 mxb-001a.cyberdyne.com" or "mxb-001a.cyberdyne.com"
+                    parts = item_cleaned.split()
+                    mx_host = parts[-1].rstrip(".")
+                    priority = (
+                        int(parts[0]) if len(parts) > 1 and parts[0].isdigit() else 10
+                    )
+
+                    mx_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, mx_host)
+                    stix2_mx = {
+                        "type": "domain-name",
+                        "id": f"domain-name--{mx_uuid}",
+                        "spec_version": "2.1",
+                        "value": mx_host,
+                    }
+                    mx_node = {
+                        "type": "domain-name",
+                        "value": mx_host,
+                        "metadata": {
+                            "stix2": stix2_mx,
+                            "misp": {"type": "domain", "value": mx_host},
+                            "priority": priority,
+                        },
+                    }
+                    if mx_node not in nodes:
+                        nodes.append(mx_node)
+
+                    edges.append(
+                        {
+                            "source": target,
+                            "target": mx_host,
+                            "relationship": "has-mx-record",
+                        }
+                    )
+
+                elif record_type in ["NS"]:
+                    ns_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, item_cleaned)
+                    stix2_ns = {
+                        "type": "domain-name",
+                        "id": f"domain-name--{ns_uuid}",
+                        "spec_version": "2.1",
+                        "value": item_cleaned,
+                    }
+                    ns_node = {
+                        "type": "domain-name",
+                        "value": item_cleaned,
+                        "metadata": {
+                            "stix2": stix2_ns,
+                            "misp": {"type": "domain", "value": item_cleaned},
+                        },
+                    }
+                    if ns_node not in nodes:
+                        nodes.append(ns_node)
+
+                    edges.append(
+                        {
+                            "source": target,
+                            "target": item_cleaned,
+                            "relationship": "has-ns-record",
+                        }
+                    )
+
+                elif record_type in ["CNAME"]:
+                    cname_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, item_cleaned)
+                    stix2_cname = {
+                        "type": "domain-name",
+                        "id": f"domain-name--{cname_uuid}",
+                        "spec_version": "2.1",
+                        "value": item_cleaned,
+                    }
+                    cname_node = {
+                        "type": "domain-name",
+                        "value": item_cleaned,
+                        "metadata": {
+                            "stix2": stix2_cname,
+                            "misp": {"type": "domain", "value": item_cleaned},
+                        },
+                    }
+                    if cname_node not in nodes:
+                        nodes.append(cname_node)
+
+                    edges.append(
+                        {
+                            "source": target,
+                            "target": item_cleaned,
+                            "relationship": "has-cname-record",
+                        }
+                    )
+
+                elif record_type in ["TXT"]:
+                    txt_uuid = uuid.uuid5(STIX_TXT_NAMESPACE, item_cleaned)
+                    stix2_txt = {
+                        "type": "x-dns-txt",
+                        "id": f"x-dns-txt--{txt_uuid}",
+                        "spec_version": "2.1",
+                        "value": item_cleaned,
+                    }
+                    txt_node = {
+                        "type": "x-dns-txt",
+                        "value": item_cleaned,
+                        "metadata": {
+                            "stix2": stix2_txt,
+                            "misp": {"type": "text", "value": item_cleaned},
+                        },
+                    }
+                    if txt_node not in nodes:
+                        nodes.append(txt_node)
+
+                    edges.append(
+                        {
+                            "source": target,
+                            "target": item_cleaned,
+                            "relationship": "has-txt-record",
+                        }
+                    )
+
+        # Map ASN Intelligence
+        for asn_entry in asn_info:
+            ip_val = asn_entry.get("ip")
+            asn_val = asn_entry.get("asn")
+            prefix = asn_entry.get("prefix")
+            provider = asn_entry.get("provider")
+            country = asn_entry.get("country")
+
+            if not ip_val or not asn_val:
+                continue
+
+            as_val = f"AS{asn_val}"
+            as_uuid = uuid.uuid5(STIX_AS_NAMESPACE, as_val)
+
+            stix2_as = {
+                "type": "autonomous-system",
+                "id": f"autonomous-system--{as_uuid}",
+                "spec_version": "2.1",
+                "number": int(asn_val) if asn_val.isdigit() else 0,
+                "name": provider,
+                "country": country,
+                "prefix": prefix,
+            }
+
+            misp_as = {
+                "type": "asn",
+                "value": as_val,
+            }
+
+            as_node = {
+                "type": "autonomous-system",
+                "value": as_val,
+                "metadata": {
+                    "stix2": stix2_as,
+                    "misp": misp_as,
+                    "provider": provider,
+                    "prefix": prefix,
+                    "country": country,
+                },
+            }
+
+            if as_node not in nodes:
+                nodes.append(as_node)
+
+            # Link IP to AS Node
+            edges.append(
+                {
+                    "source": ip_val,
+                    "target": as_val,
+                    "relationship": "belongs-to-as",
+                }
+            )
+
+        new_results = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        await self.post_run(new_results)

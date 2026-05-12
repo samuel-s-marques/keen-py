@@ -1,4 +1,5 @@
 import httpx
+from typing import Any
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -50,6 +51,7 @@ class HudsonRockModule(BaseModule):
 
                 data = r.json()
                 self.display_hudson_rock_results(email, data)
+                await self._save_results(email, data)
 
         except Exception as e:
             error(f"Error checking Hudson Rock: {e}")
@@ -135,3 +137,157 @@ class HudsonRockModule(BaseModule):
                     border_style="yellow",
                 )
             )
+
+    async def _save_results(self, target: str, results: dict) -> None:
+        import uuid
+
+        stealers = results.get("stealers", [])
+
+        # STIX 2.1 Standard Email-Address Object
+        STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
+        email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, target)
+
+        stix2_email = {
+            "type": "email-addr",
+            "id": f"email-addr--{email_uuid}",
+            "spec_version": "2.1",
+            "value": target,
+        }
+
+        misp_email = {
+            "type": "email-dst",
+            "value": target,
+        }
+
+        primary_node = {
+            "type": "email-addr",
+            "value": target,
+            "metadata": {
+                "stix2": stix2_email,
+                "misp": misp_email,
+                "message": results.get("message"),
+                "total_corporate_services": results.get("total_corporate_services", 0),
+                "total_user_services": results.get("total_user_services", 0),
+                "infections_count": len(stealers),
+            },
+        }
+
+        nodes: list[dict[str, Any]] = [primary_node]
+        edges: list[dict[str, Any]] = []
+
+        # Namespaces for UUIDv5
+        STIX_DEVICE_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa9")
+        STIX_IP_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa0")
+
+        for index, stealer in enumerate(stealers, start=1):
+            comp_name = stealer.get("computer_name", "Unknown")
+            date_comp = stealer.get("date_compromised", "Unknown")
+            os_name = stealer.get("operating_system", "Unknown")
+            mal_path = stealer.get("malware_path", "Unknown")
+            ip_val = stealer.get("ip", "Unknown")
+            passwords = stealer.get("top_passwords", [])
+            logins = stealer.get("top_logins", [])
+
+            device_val = f"infected-device:{target}:{comp_name}:{date_comp}"
+            device_uuid = uuid.uuid5(STIX_DEVICE_NAMESPACE, device_val)
+
+            # STIX 2.1 Custom infostealer-infection Object
+            stix2_device = {
+                "type": "x-infected-device",
+                "id": f"x-infected-device--{device_uuid}",
+                "spec_version": "2.1",
+                "computer_name": comp_name,
+                "date_compromised": date_comp,
+                "operating_system": os_name,
+                "malware_path": mal_path,
+                "ip_address": ip_val if ip_val != "Unknown" else None,
+                "top_passwords": passwords,
+                "top_logins": logins,
+            }
+
+            misp_device = {
+                "type": "stealer-infection",
+                "attributes": [
+                    {
+                        "type": "text",
+                        "value": comp_name,
+                        "object_relation": "computer-name",
+                    },
+                    {
+                        "type": "text",
+                        "value": date_comp,
+                        "object_relation": "date-compromised",
+                    },
+                    {
+                        "type": "text",
+                        "value": os_name,
+                        "object_relation": "operating-system",
+                    },
+                    {
+                        "type": "filename",
+                        "value": mal_path,
+                        "object_relation": "malware-path",
+                    },
+                ],
+            }
+
+            device_node = {
+                "type": "x-infected-device",
+                "value": device_val,
+                "metadata": {
+                    "stix2": stix2_device,
+                    "misp": misp_device,
+                    "computer_name": comp_name,
+                    "date_compromised": date_comp,
+                    "operating_system": os_name,
+                    "malware_path": mal_path,
+                    "top_passwords": passwords,
+                    "top_logins": logins,
+                },
+            }
+
+            if device_node not in nodes:
+                nodes.append(device_node)
+
+            edges.append(
+                {
+                    "source": target,
+                    "target": device_val,
+                    "relationship": "compromised-device",
+                }
+            )
+
+            # Map IP Node if present and valid
+            if ip_val and ip_val != "Unknown":
+                ip_uuid = uuid.uuid5(STIX_IP_NAMESPACE, ip_val)
+                stix2_ip = {
+                    "type": "ipv4-addr",
+                    "id": f"ipv4-addr--{ip_uuid}",
+                    "spec_version": "2.1",
+                    "value": ip_val,
+                }
+                ip_node = {
+                    "type": "ipv4-addr",
+                    "value": ip_val,
+                    "metadata": {
+                        "stix2": stix2_ip,
+                        "misp": {"type": "ip-src", "value": ip_val},
+                    },
+                }
+                if ip_node not in nodes:
+                    nodes.append(ip_node)
+
+                edges.append(
+                    {
+                        "source": device_val,
+                        "target": ip_val,
+                        "relationship": "had-ip",
+                    }
+                )
+
+        new_results = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        await self.post_run(new_results)

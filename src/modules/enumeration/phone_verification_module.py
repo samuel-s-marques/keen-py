@@ -59,6 +59,7 @@ class PhoneVerificationModule(BaseModule):
         }
 
         self.display_results(phone, results)
+        await self._save_results(phone, results)
 
     def local_analysis(self, phone: str) -> dict:
         """Perform local analysis using the phonenumbers library."""
@@ -168,3 +169,124 @@ class PhoneVerificationModule(BaseModule):
             success(f"Phone number {phone} appears to be valid.")
         else:
             error(f"Phone number {phone} is invalid or could not be verified.")
+
+    async def _save_results(self, phone: str, results: dict) -> None:
+        import uuid
+
+        local = results.get("local", {})
+        api = results.get("api") or {}
+
+        # Generate deterministic UUIDv5 for STIX 2.1 representation
+        STIX_PHONE_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa1")
+        object_uuid = uuid.uuid5(STIX_PHONE_NAMESPACE, phone)
+
+        stix2_obj = {
+            "type": "x-phone-number",
+            "id": f"x-phone-number--{object_uuid}",
+            "spec_version": "2.1",
+            "value": phone,
+            "country_code": str(local.get("country_code")) if local.get("country_code") else None,
+            "region": local.get("region") or api.get("location"),
+            "carrier": local.get("carrier") or api.get("carrier"),
+            "line_type": api.get("line_type"),
+            "valid": bool(local.get("valid", False)),
+        }
+
+        # Generate MISP phone-number object representation
+        misp_attributes = [
+            {"type": "phone-number", "value": phone, "object_relation": "phone-number"}
+        ]
+        if local.get("country_code"):
+            misp_attributes.append(
+                {"type": "text", "value": str(local["country_code"]), "object_relation": "country-code"}
+            )
+        
+        region = local.get("region") or api.get("location")
+        if region:
+            misp_attributes.append(
+                {"type": "text", "value": region, "object_relation": "location"}
+            )
+
+        carrier_name = local.get("carrier") or api.get("carrier")
+        if carrier_name:
+            misp_attributes.append(
+                {"type": "text", "value": carrier_name, "object_relation": "carrier"}
+            )
+
+        line_type = api.get("line_type")
+        if line_type:
+            misp_attributes.append(
+                {"type": "text", "value": line_type, "object_relation": "line-type"}
+            )
+
+        misp_attributes.append(
+            {
+                "type": "boolean",
+                "value": "true" if local.get("valid") else "false",
+                "object_relation": "valid",
+            }
+        )
+
+        misp_obj = {
+            "name": "phone-number",
+            "meta-category": "misc",
+            "description": "Phone number object describing a phone number and its metadata.",
+            "attributes": misp_attributes,
+        }
+
+        # Structure graph nodes
+        primary_node = {
+            "type": "x-phone-number",
+            "value": phone,
+            "metadata": {
+                "stix2": stix2_obj,
+                "misp": misp_obj,
+                "country_code": local.get("country_code"),
+                "carrier": carrier_name,
+                "region": region,
+                "line_type": line_type,
+                "valid": local.get("valid"),
+            },
+        }
+
+        nodes = [primary_node]
+        edges = []
+
+        # Create carrier node and relationship if carrier is known
+        if carrier_name:
+            carrier_node = {
+                "type": "organization",
+                "value": carrier_name,
+                "metadata": {"type": "carrier"},
+            }
+            nodes.append(carrier_node)
+            edges.append(
+                {
+                    "source": phone,
+                    "target": carrier_name,
+                    "relationship": "allocated-to",
+                }
+            )
+
+        # Create location node and relationship if region is known
+        if region:
+            location_node = {
+                "type": "location",
+                "value": region,
+                "metadata": {"type": "region"},
+            }
+            nodes.append(location_node)
+            edges.append(
+                {
+                    "source": phone,
+                    "target": region,
+                    "relationship": "located-in",
+                }
+            )
+
+        new_results = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        await self.post_run(new_results)

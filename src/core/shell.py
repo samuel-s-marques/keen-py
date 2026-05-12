@@ -1,3 +1,4 @@
+import sys
 from src.core.managers import WorkspaceManager
 from src.core.managers import ConfigManager
 from pyfiglet import FigletString
@@ -290,6 +291,7 @@ class Shell(Cmd):
         if module_name in self.modules:
             module_class = self.modules[module_name]
             self.current_module = module_class()
+            self.current_module.shell = self
 
             # Check if this module uses API keys
             has_api_key_opts = any(
@@ -345,6 +347,7 @@ class Shell(Cmd):
     def do_run(self, arg: str):
         """Execute the current module."""
         if self.current_module:
+            self.current_module.shell = self
             info("Executing...\n")
             asyncio.run(self.current_module.run())
         else:
@@ -667,6 +670,7 @@ class Shell(Cmd):
                         f"Created and switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
                     )
 
-    def do_exit(self) -> None:
+    def do_exit(self, args: str) -> None:
         """Exit the shell."""
-        self.do_quit("Exiting the shell. Goodbye!")
+        self.do_quit("")
+        sys.exit(0)

@@ -1,3 +1,4 @@
+from typing import Any
 import httpx
 from rich.console import Console
 from rich.table import Table
@@ -34,14 +35,16 @@ class EmailEnrichmentModule(BaseModule):
         await self.loading(f"Enriching email {target}...", self.execute, target)
 
     async def execute(self, email: str) -> None:
-        await self.check_hunter_io(email)
+        person = await self.check_hunter_io(email)
+        if person:
+            await self._save_results(email, person)
 
-    async def check_hunter_io(self, email: str) -> None:
+    async def check_hunter_io(self, email: str) -> dict | None:
         api_key = self.options.get("HUNTER_IO_APIKEY")
 
         if not api_key:
             warn("Hunter.io API Key not found. Skipping Hunter.io enrichment.")
-            return
+            return None
 
         try:
             async with httpx.AsyncClient() as client:
@@ -61,19 +64,21 @@ class EmailEnrichmentModule(BaseModule):
                         else str(r.status_code)
                     )
                     error(f"Error checking {email} with Hunter.io: {errors}")
-                    return
+                    return None
 
                 data = r.json()
                 person = data.get("data", {})
 
                 if not person:
                     warn(f"No information found for {email} with Hunter.io.")
-                    return
+                    return None
 
                 self.display_hunter_results(email, person)
+                return person
 
         except Exception as e:
             error(f"Error checking {email} with Hunter.io: {str(e)}")
+            return None
 
     def display_hunter_results(self, email: str, person: dict) -> None:
         console = Console()
@@ -169,3 +174,236 @@ class EmailEnrichmentModule(BaseModule):
             )
 
         success(f"Enrichment completed for {email}")
+
+    async def _save_results(self, email: str, results: dict) -> None:
+        import uuid
+
+        # STIX 2.1 Standard Email-Address Object
+        STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
+        email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, email)
+
+        stix2_email = {
+            "type": "email-addr",
+            "id": f"email-addr--{email_uuid}",
+            "spec_version": "2.1",
+            "value": email,
+        }
+
+        # MISP representation
+        misp_email = {
+            "type": "email-dst",
+            "value": email,
+        }
+
+        # General target personal details
+        name_data = results.get("name", {})
+        full_name = name_data.get("fullName")
+        first_name = name_data.get("firstName")
+        last_name = name_data.get("lastName")
+        bio = results.get("bio")
+        location = results.get("location")
+        phone = results.get("phone")
+        site = results.get("site")
+        provider = results.get("emailProvider")
+
+        primary_node = {
+            "type": "email-addr",
+            "value": email,
+            "metadata": {
+                "stix2": stix2_email,
+                "misp": misp_email,
+                "full_name": full_name,
+                "first_name": first_name,
+                "last_name": last_name,
+                "bio": bio,
+                "location": location,
+                "provider": provider,
+            },
+        }
+
+        nodes: list[dict[str, Any]] = [primary_node]
+        edges: list[dict[str, Any]] = []
+
+        # Employment Mapping (Organization Node)
+        employment = results.get("employment", {})
+        company_name = employment.get("name")
+        if company_name and company_name.strip():
+            # Build STIX 2.1 Identity (Organization) Object
+            STIX_IDENTITY_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa3")
+            org_uuid = uuid.uuid5(STIX_IDENTITY_NAMESPACE, company_name)
+            stix2_org = {
+                "type": "identity",
+                "id": f"identity--{org_uuid}",
+                "spec_version": "2.1",
+                "name": company_name,
+                "identity_class": "organization",
+            }
+            misp_org = {
+                "type": "target-org",
+                "value": company_name,
+            }
+            org_node = {
+                "type": "organization",
+                "value": company_name,
+                "metadata": {
+                    "stix2": stix2_org,
+                    "misp": misp_org,
+                    "title": employment.get("title"),
+                    "role": employment.get("role"),
+                    "seniority": employment.get("seniority"),
+                },
+            }
+            nodes.append(org_node)
+            edges.append(
+                {
+                    "source": email,
+                    "target": company_name,
+                    "relationship": "employed-by",
+                }
+            )
+
+        # Location Mapping (Location Node)
+        if location and location != "Unknown":
+            STIX_LOCATION_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa4")
+            loc_uuid = uuid.uuid5(STIX_LOCATION_NAMESPACE, location)
+            stix2_loc = {
+                "type": "location",
+                "id": f"location--{loc_uuid}",
+                "spec_version": "2.1",
+                "name": location,
+            }
+            misp_loc = {
+                "type": "target-location",
+                "value": location,
+            }
+            loc_node = {
+                "type": "location",
+                "value": location,
+                "metadata": {
+                    "stix2": stix2_loc,
+                    "misp": misp_loc,
+                },
+            }
+            nodes.append(loc_node)
+            edges.append(
+                {
+                    "source": email,
+                    "target": location,
+                    "relationship": "located-in",
+                }
+            )
+
+        # Phone Mapping (x-phone-number Node)
+        if phone:
+            STIX_PHONE_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa1")
+            phone_uuid = uuid.uuid5(STIX_PHONE_NAMESPACE, phone)
+            stix2_phone = {
+                "type": "x-phone-number",
+                "id": f"x-phone-number--{phone_uuid}",
+                "spec_version": "2.1",
+                "value": phone,
+            }
+            misp_phone = {
+                "type": "phone-number",
+                "value": phone,
+            }
+            phone_node = {
+                "type": "x-phone-number",
+                "value": phone,
+                "metadata": {
+                    "stix2": stix2_phone,
+                    "misp": misp_phone,
+                },
+            }
+            nodes.append(phone_node)
+            edges.append(
+                {
+                    "source": email,
+                    "target": phone,
+                    "relationship": "associated-phone",
+                }
+            )
+
+        # Website Mapping (url Node)
+        if site:
+            STIX_URL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa5")
+            url_uuid = uuid.uuid5(STIX_URL_NAMESPACE, site)
+            stix2_url = {
+                "type": "url",
+                "id": f"url--{url_uuid}",
+                "spec_version": "2.1",
+                "value": site,
+            }
+            misp_url = {
+                "type": "url",
+                "value": site,
+            }
+            url_node = {
+                "type": "url",
+                "value": site,
+                "metadata": {
+                    "stix2": stix2_url,
+                    "misp": misp_url,
+                },
+            }
+            nodes.append(url_node)
+            edges.append(
+                {
+                    "source": email,
+                    "target": site,
+                    "relationship": "associated-website",
+                }
+            )
+
+        # Social Media Accounts Mapping
+        social_types = {
+            "facebook": "facebook-id",
+            "github": "github-username",
+            "twitter": "twitter-id",
+            "linkedin": "linkedin-url",
+            "googleplus": "text",
+            "gravatar": "text",
+        }
+        for s_type, misp_type in social_types.items():
+            handle = results.get(s_type, {}).get("handle")
+            if handle:
+                STIX_ACCOUNT_NAMESPACE = uuid.UUID(
+                    "f070f381-8b38-5fdf-9730-802526e84fa6"
+                )
+                acc_uuid = uuid.uuid5(STIX_ACCOUNT_NAMESPACE, f"{s_type}:{handle}")
+                stix2_acc = {
+                    "type": "user-account",
+                    "id": f"user-account--{acc_uuid}",
+                    "spec_version": "2.1",
+                    "account_login": handle,
+                    "account_type": s_type,
+                }
+                misp_acc = {
+                    "type": misp_type,
+                    "value": handle,
+                }
+                acc_node = {
+                    "type": "user-account",
+                    "value": f"{s_type}:{handle}",
+                    "metadata": {
+                        "stix2": stix2_acc,
+                        "misp": misp_acc,
+                        "platform": s_type,
+                        "handle": handle,
+                    },
+                }
+                nodes.append(acc_node)
+                edges.append(
+                    {
+                        "source": email,
+                        "target": f"{s_type}:{handle}",
+                        "relationship": "owns-account",
+                    }
+                )
+
+        new_results = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        await self.post_run(new_results)

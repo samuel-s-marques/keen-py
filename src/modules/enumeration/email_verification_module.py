@@ -161,6 +161,18 @@ class EmailVerificationModule(BaseModule):
             score,
         )
 
+        results = {
+            "is_role": is_role,
+            "is_disposable": is_disposable,
+            "mx_records": mx_records,
+            "deliverable": deliverable,
+            "inbox_full": inbox_full,
+            "disabled": disabled,
+            "catch_all": catch_all,
+            "score": score,
+        }
+        await self._save_results(email, results)
+
     async def get_mx_records(self, domain: str, timeout: int) -> list[tuple[int, str]]:
         records = []
         try:
@@ -369,3 +381,117 @@ class EmailVerificationModule(BaseModule):
             warn(f"{email} has mixed signals (Score: {score}).")
         else:
             error(f"{email} looks risky or undeliverable.")
+
+    async def _save_results(self, email: str, results: dict) -> None:
+        import uuid
+        from typing import Any
+
+        # STIX 2.1 Standard Email-Address Object
+        STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
+        email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, email)
+
+        stix2_email = {
+            "type": "email-addr",
+            "id": f"email-addr--{email_uuid}",
+            "spec_version": "2.1",
+            "value": email,
+        }
+
+        # MISP representation
+        misp_email = {
+            "type": "email-dst",
+            "value": email,
+        }
+
+        primary_node = {
+            "type": "email-addr",
+            "value": email,
+            "metadata": {
+                "stix2": stix2_email,
+                "misp": misp_email,
+                "is_role": results.get("is_role"),
+                "is_disposable": results.get("is_disposable"),
+                "deliverable": results.get("deliverable"),
+                "inbox_full": results.get("inbox_full"),
+                "disabled": results.get("disabled"),
+                "catch_all": results.get("catch_all"),
+                "score": results.get("score"),
+            },
+        }
+
+        nodes: list[dict[str, Any]] = [primary_node]
+        edges: list[dict[str, Any]] = []
+
+        local_part, domain = email.split("@")
+
+        # 1. Domain Mapping (domain-name Node)
+        STIX_DOMAIN_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa7")
+        domain_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, domain)
+        stix2_domain = {
+            "type": "domain-name",
+            "id": f"domain-name--{domain_uuid}",
+            "spec_version": "2.1",
+            "value": domain,
+        }
+        misp_domain = {
+            "type": "domain",
+            "value": domain,
+        }
+        domain_node = {
+            "type": "domain-name",
+            "value": domain,
+            "metadata": {
+                "stix2": stix2_domain,
+                "misp": misp_domain,
+            },
+        }
+        nodes.append(domain_node)
+        edges.append(
+            {
+                "source": email,
+                "target": domain,
+                "relationship": "belongs-to-domain",
+            }
+        )
+
+        # 2. MX Infrastructure Mapping
+        mx_records = results.get("mx_records", [])
+        for pref, mx_host in mx_records:
+            mx_cleaned = mx_host.rstrip(".")
+            mx_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, mx_cleaned)
+            stix2_mx = {
+                "type": "domain-name",
+                "id": f"domain-name--{mx_uuid}",
+                "spec_version": "2.1",
+                "value": mx_cleaned,
+            }
+            misp_mx = {
+                "type": "mx",
+                "value": f"{pref} {mx_cleaned}",
+            }
+            mx_node = {
+                "type": "domain-name",
+                "value": mx_cleaned,
+                "metadata": {
+                    "stix2": stix2_mx,
+                    "misp": misp_mx,
+                    "preference": pref,
+                },
+            }
+            if mx_node not in nodes:
+                nodes.append(mx_node)
+
+            edges.append(
+                {
+                    "source": domain,
+                    "target": mx_cleaned,
+                    "relationship": "has-mx-record",
+                }
+            )
+
+        new_results = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        await self.post_run(new_results)

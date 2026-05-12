@@ -80,7 +80,7 @@ class ConfigManager(DatabaseEngine):
 
     def unlock(self, password: str) -> bool:
         """Derives the Fernet key from the password, and validates it.
-        
+
         Returns True if unlocked successfully, False otherwise.
         """
         salt = self._get_or_create_salt()
@@ -149,7 +149,9 @@ class ConfigManager(DatabaseEngine):
         for row in cursor.fetchall():
             row_dict = dict(row)
             try:
-                row_dict["api_key"] = self._fernet.decrypt(row_dict["api_key"].encode()).decode()
+                row_dict["api_key"] = self._fernet.decrypt(
+                    row_dict["api_key"].encode()
+                ).decode()
             except Exception:
                 row_dict["api_key"] = "[Decryption Error]"
             rows.append(row_dict)
@@ -271,8 +273,16 @@ class WorkspaceManager(DatabaseEngine):
 
     def add_edge(self, source_id: int, target_id: int, relationship: str) -> None:
         cursor = self.conn.cursor()
+        # Prevent duplicated edges by checking if the exact edge already exists
         cursor.execute(
-            "INSERT OR IGNORE INTO edge (source_id, target_id, relationship) VALUES (?, ?, ?)",
+            "SELECT 1 FROM edge WHERE source_id = ? AND target_id = ? AND relationship = ?",
+            (source_id, target_id, relationship),
+        )
+        if cursor.fetchone() is not None:
+            return
+
+        cursor.execute(
+            "INSERT INTO edge (source_id, target_id, relationship) VALUES (?, ?, ?)",
             (source_id, target_id, relationship),
         )
         self.conn.commit()
@@ -288,3 +298,9 @@ class WorkspaceManager(DatabaseEngine):
         cursor.execute("SELECT COUNT(*) as count FROM edge")
         result = cursor.fetchone()
         return result["count"] if result else 0
+
+    def get_node_id(self, value) -> int | None:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id FROM nodes WHERE value = ?", (value,))
+        result = cursor.fetchone()
+        return result["id"] if result else None
