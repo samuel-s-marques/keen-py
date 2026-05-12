@@ -1,3 +1,5 @@
+from src.core.managers import WorkspaceManager
+from src.core.managers import ConfigManager
 from pyfiglet import FigletString
 from cmd2 import Cmd, Color, stylize
 from rich.console import Console
@@ -20,6 +22,11 @@ class Shell(Cmd):
         self.prompt = f"{stylize('keen', Style(color=Color.BLUE))} > "
         self.modules = load_modules()
         self.current_module = None
+
+        # Creates a ConfigManager to handle API keys and user preferences.
+        self.config = ConfigManager("~/.keen/config.db")
+        # Starts empty, set by user via the 'workspace' command.
+        self.workspace = None
 
         banner: FigletString = Figlet(font="slant").renderText("Keen")
         banner_styled: str = stylize(
@@ -74,7 +81,14 @@ class Shell(Cmd):
 
             keen_part = stylize("keen", Style(color=Color.BLUE))
             module_part = stylize(f"({display_path})", Style(color=Color.RED))
-            self.prompt = f"{keen_part}{module_part} > "
+
+            if self.workspace:
+                workspace_part = stylize(
+                    f"[{self.workspace.name}]", Style(color=Color.GREEN)
+                )
+                self.prompt = f"{keen_part}{workspace_part}{module_part} > "
+            else:
+                self.prompt = f"{keen_part}{module_part} > "
         else:
             error(
                 f"Module '{module_name}' not found. Type 'list modules' to see available modules."
@@ -123,8 +137,15 @@ class Shell(Cmd):
 
     def do_back(self, arg: str) -> None:
         """Go back to the main menu."""
-        self.current_module = None
-        self.prompt = f"{stylize('keen', Style(color=Color.BLUE))} > "
+        if self.current_module:
+            self.current_module = None
+        elif self.workspace:
+            self.workspace = None
+
+        if self.workspace:
+            self.prompt = f"{stylize('keen', Style(color=Color.BLUE))}{stylize(f'({self.workspace.name})', Style(color=Color.GREEN))} > "
+        else:
+            self.prompt = f"{stylize('keen', Style(color=Color.BLUE))} > "
 
     def do_show(self, arg: str) -> None:
         """Show available <modules | options | info | banner>."""
@@ -192,3 +213,22 @@ class Shell(Cmd):
     def do_clear(self, arg: str) -> None:
         """Clear the screen."""
         os.system("cls" if os.name == "nt" else "clear")
+
+    def do_workspace(self, name: str) -> None:
+        """Create a new workspace."""
+        if not name:
+            error("Usage: workspace <name>")
+            return
+
+        db_file = f"cases/{name}.keen"
+        self.workspace = WorkspaceManager(db_file)
+
+        keen_part = stylize("keen", Style(color=Color.BLUE))
+        workspace_part = stylize(f"[{name}]", Style(color=Color.GREEN))
+        self.prompt = f"{keen_part}{workspace_part} > "
+
+        info(f"Switched to workspace: {stylize(name, Style(color=Color.GREEN))}.")
+
+    def do_exit(self) -> None:
+        """Exit the shell."""
+        self.do_quit("Exiting the shell. Goodbye!")
