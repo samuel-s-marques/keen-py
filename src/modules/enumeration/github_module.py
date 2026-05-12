@@ -98,6 +98,15 @@ class GitHubModule(BaseModule):
                     success(f"  - {email}")
             else:
                 warn("No emails found in public commit history.")
+
+            # Save Results
+            results = {
+                "profile": user_data,
+                "orgs": orgs or [],
+                "repos": repos or [],
+                "emails": list(emails or []),
+            }
+            await self._save_results(target, results)
         finally:
             if close_client:
                 await self.client.aclose()
@@ -178,3 +187,212 @@ class GitHubModule(BaseModule):
         except Exception as e:
             warn(f"Error extracting emails: {e}")
         return emails
+
+    async def _save_results(self, target: str, results: dict) -> None:
+        import uuid
+
+        profile = results.get("profile", {})
+        orgs = results.get("orgs", [])
+        repos = results.get("repos", [])
+        emails = results.get("emails", [])
+
+        # STIX 2.1 Standard User-Account Object
+        STIX_ACCOUNT_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa6")
+        acc_uuid = uuid.uuid5(STIX_ACCOUNT_NAMESPACE, f"github:{target}")
+
+        stix2_acc = {
+            "type": "user-account",
+            "id": f"user-account--{acc_uuid}",
+            "spec_version": "2.1",
+            "account_login": target,
+            "account_type": "github",
+            "display_name": profile.get("name"),
+        }
+
+        # MISP representation
+        misp_acc = {
+            "type": "github-username",
+            "value": target,
+        }
+
+        primary_node = {
+            "type": "user-account",
+            "value": f"github:{target}",
+            "metadata": {
+                "stix2": stix2_acc,
+                "misp": misp_acc,
+                "bio": profile.get("bio"),
+                "blog": profile.get("blog"),
+                "company": profile.get("company"),
+                "followers": profile.get("followers"),
+                "following": profile.get("following"),
+                "public_repos": profile.get("public_repos"),
+                "public_gists": profile.get("public_gists"),
+            },
+        }
+
+        nodes: list[dict[str, Any]] = [primary_node]
+        edges: list[dict[str, Any]] = []
+
+        # Public Profile Email Mapping (email-addr Node)
+        profile_email = profile.get("email")
+        STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
+        if profile_email:
+            email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, profile_email)
+            stix2_email = {
+                "type": "email-addr",
+                "id": f"email-addr--{email_uuid}",
+                "spec_version": "2.1",
+                "value": profile_email,
+            }
+            email_node = {
+                "type": "email-addr",
+                "value": profile_email,
+                "metadata": {
+                    "stix2": stix2_email,
+                    "misp": {"type": "email-dst", "value": profile_email},
+                },
+            }
+            nodes.append(email_node)
+            edges.append(
+                {
+                    "source": f"github:{target}",
+                    "target": profile_email,
+                    "relationship": "has-profile-email",
+                }
+            )
+
+        # Commit History Emails Mapping (email-addr Node)
+        for email in emails:
+            if email == profile_email:
+                continue
+            email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, email)
+            stix2_email = {
+                "type": "email-addr",
+                "id": f"email-addr--{email_uuid}",
+                "spec_version": "2.1",
+                "value": email,
+            }
+            email_node = {
+                "type": "email-addr",
+                "value": email,
+                "metadata": {
+                    "stix2": stix2_email,
+                    "misp": {"type": "email-dst", "value": email},
+                },
+            }
+            if email_node not in nodes:
+                nodes.append(email_node)
+
+            edges.append(
+                {
+                    "source": f"github:{target}",
+                    "target": email,
+                    "relationship": "committed-with-email",
+                }
+            )
+
+        # 3. Location Mapping (location Node)
+        location = profile.get("location")
+        if location:
+            STIX_LOCATION_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa4")
+            loc_uuid = uuid.uuid5(STIX_LOCATION_NAMESPACE, location)
+            stix2_loc = {
+                "type": "location",
+                "id": f"location--{loc_uuid}",
+                "spec_version": "2.1",
+                "name": location,
+            }
+            loc_node = {
+                "type": "location",
+                "value": location,
+                "metadata": {
+                    "stix2": stix2_loc,
+                    "misp": {"type": "target-location", "value": location},
+                },
+            }
+            nodes.append(loc_node)
+            edges.append(
+                {
+                    "source": f"github:{target}",
+                    "target": location,
+                    "relationship": "located-in",
+                }
+            )
+
+        # Organizations Mapping (organization Node)
+        for org in orgs:
+            org_login = org.get("login")
+            if org_login:
+                STIX_IDENTITY_NAMESPACE = uuid.UUID(
+                    "f070f381-8b38-5fdf-9730-802526e84fa3"
+                )
+                org_uuid = uuid.uuid5(STIX_IDENTITY_NAMESPACE, org_login)
+                stix2_org = {
+                    "type": "identity",
+                    "id": f"identity--{org_uuid}",
+                    "spec_version": "2.1",
+                    "name": org_login,
+                    "identity_class": "organization",
+                }
+                org_node = {
+                    "type": "organization",
+                    "value": org_login,
+                    "metadata": {
+                        "stix2": stix2_org,
+                        "misp": {"type": "target-org", "value": org_login},
+                        "description": org.get("description"),
+                    },
+                }
+                nodes.append(org_node)
+                edges.append(
+                    {
+                        "source": f"github:{target}",
+                        "target": org_login,
+                        "relationship": "member-of-org",
+                    }
+                )
+
+        # 5. Repositories Mapping (repository Node)
+        for repo in repos:
+            repo_name = repo.get("full_name")
+            if repo_name:
+                STIX_URL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa5")
+                repo_url = repo.get("html_url")
+                repo_uuid = uuid.uuid5(STIX_URL_NAMESPACE, repo_url or repo_name)
+                stix2_repo = {
+                    "type": "url",
+                    "id": f"url--{repo_uuid}",
+                    "spec_version": "2.1",
+                    "value": repo_url or f"https://github.com/{repo_name}",
+                }
+                repo_node = {
+                    "type": "repository",
+                    "value": repo_name,
+                    "metadata": {
+                        "stix2": stix2_repo,
+                        "misp": {
+                            "type": "link",
+                            "value": repo_url or f"https://github.com/{repo_name}",
+                        },
+                        "description": repo.get("description"),
+                        "stars": repo.get("stargazers_count"),
+                        "forks": repo.get("forks_count"),
+                        "language": repo.get("language"),
+                    },
+                }
+                nodes.append(repo_node)
+                edges.append(
+                    {
+                        "source": f"github:{target}",
+                        "target": repo_name,
+                        "relationship": "owns-repository",
+                    }
+                )
+
+        new_results = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        await self.post_run(new_results)
