@@ -1,7 +1,10 @@
+import base64
 import json
 import os
 import sqlite3
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from src.core.database_engine import DatabaseEngine
 
@@ -10,6 +13,8 @@ class ConfigManager(DatabaseEngine):
     def __init__(self, db_path: str) -> None:
         super().__init__(db_path)
         self._initialize_schema()
+        self._unlocked = False
+        self._fernet = None
 
     def _initialize_schema(self) -> None:
         cursor = self.conn.cursor()
@@ -52,26 +57,103 @@ class ConfigManager(DatabaseEngine):
 
         self.conn.commit()
 
-    def get_api_key(self, service: str) -> str | None:
+    def _get_or_create_salt(self) -> bytes:
+        salt_b64 = self.get_preference("api_keys_salt")
+        if salt_b64:
+            return base64.b64decode(salt_b64.encode())
+        else:
+            salt = os.urandom(16)
+            self.set_preference("api_keys_salt", base64.b64encode(salt).decode())
+            return salt
+
+    def has_master_password(self) -> bool:
+        return self.get_preference("master_password_check") is not None
+
+    def has_api_keys(self) -> bool:
         cursor = self.conn.cursor()
-        # TODO: Decrypt the API key
+        cursor.execute("SELECT COUNT(*) as count FROM api_keys")
+        result = cursor.fetchone()
+        return result["count"] > 0 if result else False
+
+    def is_unlocked(self) -> bool:
+        return self._unlocked
+
+    def unlock(self, password: str) -> bool:
+        """Derives the Fernet key from the password, and validates it.
+        
+        Returns True if unlocked successfully, False otherwise.
+        """
+        salt = self._get_or_create_salt()
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+        self._fernet = Fernet(key)
+
+        verify_token_enc = self.get_preference("master_password_check")
+        if verify_token_enc:
+            try:
+                decrypted = self._fernet.decrypt(verify_token_enc.encode()).decode()
+                if decrypted == "verification_token":
+                    self._unlocked = True
+                    return True
+                else:
+                    self._fernet = None
+                    self._unlocked = False
+                    return False
+            except Exception:
+                self._fernet = None
+                self._unlocked = False
+                return False
+        else:
+            # First time setup!
+            # Store the verification token encrypted
+            enc = self._fernet.encrypt(b"verification_token").decode()
+            self.set_preference("master_password_check", enc)
+            self._unlocked = True
+            return True
+
+    def get_api_key(self, service: str) -> str | None:
+        if not self._unlocked or not self._fernet:
+            return None
+        cursor = self.conn.cursor()
         cursor.execute("SELECT api_key FROM api_keys WHERE service = ?", (service,))
         result = cursor.fetchone()
-        return result["api_key"] if result else None
+        if result:
+            try:
+                return self._fernet.decrypt(result["api_key"].encode()).decode()
+            except Exception:
+                return None
+        return None
 
     def set_api_key(self, service: str, api_key: str) -> None:
+        if not self._unlocked or not self._fernet:
+            raise RuntimeError("Key manager is locked. Unlock it first.")
         cursor = self.conn.cursor()
-        # TODO: Encrypt the API key
+        encrypted_key = self._fernet.encrypt(api_key.encode()).decode()
         cursor.execute(
             "INSERT OR REPLACE INTO api_keys (service, api_key) VALUES (?, ?)",
-            (service, api_key),
+            (service, encrypted_key),
         )
         self.conn.commit()
 
     def get_all_api_keys(self) -> list[dict]:
+        if not self._unlocked or not self._fernet:
+            return []
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM api_keys")
-        return [dict(row) for row in cursor.fetchall()]
+        rows = []
+        for row in cursor.fetchall():
+            row_dict = dict(row)
+            try:
+                row_dict["api_key"] = self._fernet.decrypt(row_dict["api_key"].encode()).decode()
+            except Exception:
+                row_dict["api_key"] = "[Decryption Error]"
+            rows.append(row_dict)
+        return rows
 
     def delete_api_key(self, service: str) -> None:
         cursor = self.conn.cursor()
