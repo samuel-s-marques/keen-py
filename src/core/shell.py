@@ -1,3 +1,4 @@
+import sys
 from src.core.managers import WorkspaceManager
 from src.core.managers import ConfigManager
 from pyfiglet import FigletString
@@ -669,6 +670,7 @@ class Shell(Cmd):
                         f"Created and switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
                     )
 
-    def do_exit(self) -> None:
+    def do_exit(self, args: str) -> None:
         """Exit the shell."""
-        self.do_quit("Exiting the shell. Goodbye!")
+        self.do_quit("")
+        sys.exit(0)
