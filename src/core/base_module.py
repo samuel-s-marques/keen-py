@@ -110,9 +110,30 @@ class BaseModule:
             validator = value[3]
             option_value: str = str(self.options.get(key, None))
 
-            if validator and not InputValidator.VALIDATORS[validator](option_value):
-                error(f"Invalid value for {key.upper()}. It should be a {validator}.")
-                return False
+            if validator:
+                # Support list/tuple or comma-separated string of validators
+                if isinstance(validator, (list, tuple)):
+                    validators_list = list(validator)
+                else:
+                    validators_list = [v.strip() for v in str(validator).split(",") if v.strip()]
+
+                if validators_list:
+                    # An option is valid if it passes AT LEAST ONE of the known validators.
+                    # Unknown validators (like "username") are considered to always accept any input.
+                    passed_at_least_one = False
+                    for v in validators_list:
+                        if v in InputValidator.VALIDATORS:
+                            if InputValidator.VALIDATORS[v](option_value):
+                                passed_at_least_one = True
+                                break
+                        else:
+                            passed_at_least_one = True
+                            break
+                    if not passed_at_least_one:
+                        error(
+                            f"Invalid value for {key.upper()}. It should match at least one of: {', '.join(validators_list)}."
+                        )
+                        return False
         return True
 
     def pre_run(self) -> bool:
