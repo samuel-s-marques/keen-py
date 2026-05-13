@@ -14,10 +14,10 @@ The `Email_Enrichment` module allows you to retrieve all the information related
 
 ## Options
 
-| Option               | Description                  | Required | Default | Value Type |
-| -------------------- | ---------------------------- | -------- | ------- | ---------- |
-| **TARGET**           | The email address to lookup. | Yes      | None    | `email`    |
-| **HUNTER_IO_APIKEY** | API Key for Hunter.io API.   | No       | None    | `text`     |
+| Option             | Description                  | Required | Default | Value Type |
+| ------------------ | ---------------------------- | -------- | ------- | ---------- |
+| `TARGET`           | The email address to lookup. | Yes      | None    | `email`    |
+| `HUNTER_IO_APIKEY` | API Key for Hunter.io API.   | No       | None    | None       |
 
 ## Usage
 
