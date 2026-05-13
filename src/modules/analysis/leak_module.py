@@ -515,8 +515,6 @@ class LeakModule(BaseModule):
                 "metadata": {
                     "stix2": stix2_breach,
                     "misp": misp_breach,
-                    "categories": categories,
-                    "extra_info": extra_info,
                     "breach_date": date,
                 },
             }
@@ -532,6 +530,10 @@ class LeakModule(BaseModule):
                     "source": source_val,
                     "target": f"{source}:{breach_name}",
                     "relationship": "compromised-in",
+                    "metadata": {
+                        "categories": categories,
+                        "extra_info": extra_info,
+                    },
                 }
             )
 

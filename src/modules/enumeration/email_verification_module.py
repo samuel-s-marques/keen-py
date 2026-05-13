@@ -475,7 +475,6 @@ class EmailVerificationModule(BaseModule):
                 "metadata": {
                     "stix2": stix2_mx,
                     "misp": misp_mx,
-                    "preference": pref,
                 },
             }
             if mx_node not in nodes:
@@ -486,6 +485,9 @@ class EmailVerificationModule(BaseModule):
                     "source": domain,
                     "target": mx_cleaned,
                     "relationship": "has-mx-record",
+                    "metadata": {
+                        "preference": pref,
+                    },
                 }
             )
 

@@ -530,25 +530,11 @@ class HistoricalDnsModule(BaseModule):
                 "metadata": {
                     "stix2": stix2_ip,
                     "misp": {"type": "ip-dst", "value": ip_val},
-                    "first_seen": date_val,
-                    "reporting_source": source_val,
                     "historical": True,
                 },
             }
 
-            # Avoid duplicates, update metadata if already exists with other dates/sources
-            existing_ip = next((n for n in nodes if n["value"] == ip_val), None)
-            if existing_ip:
-                # Append sources/dates to metadata list
-                if "history" not in existing_ip["metadata"]:
-                    existing_ip["metadata"]["history"] = []
-                existing_ip["metadata"]["history"].append(
-                    {"date": date_val, "source": source_val}
-                )
-            else:
-                ip_node["metadata"]["history"] = [
-                    {"date": date_val, "source": source_val}
-                ]
+            if ip_node not in nodes:
                 nodes.append(ip_node)
 
             edges.append(
@@ -556,6 +542,10 @@ class HistoricalDnsModule(BaseModule):
                     "source": target,
                     "target": ip_val,
                     "relationship": "historically-resolved-to",
+                    "metadata": {
+                        "first_seen": date_val,
+                        "reporting_source": source_val,
+                    },
                 }
             )
 
