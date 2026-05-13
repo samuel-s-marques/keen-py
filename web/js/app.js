@@ -103,6 +103,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Global Keydown Listener (Escape handling)
+    document.addEventListener('keydown', function (e) {
+        const btnAddEdge = document.getElementById('btn-add-edge');
+        if (e.key === 'Escape' && btnAddEdge && btnAddEdge.classList.contains('active')) {
+            btnAddEdge.classList.remove('active');
+            networkCanvas.style.cursor = 'default';
+            if (network) network.disableEditMode();
+        }
+    });
+
     // Modals Handling
     btnNewWs.addEventListener('click', () => {
         inputWsName.value = '';
@@ -1148,143 +1158,134 @@ document.addEventListener('DOMContentLoaded', () => {
                     moduleDetails.classList.add('hidden');
                 }
             }
-        });
 
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && btnAddEdge && btnAddEdge.classList.contains('active')) {
-                btnAddEdge.classList.remove('active');
-                networkCanvas.style.cursor = 'default';
-                network.disableEditMode();
-            }
-        });
-    }
+            function showContextMenu(x, y, node, edgeId = null) {
+                contextMenuItems.innerHTML = '';
 
-    function showContextMenu(x, y, node, edgeId = null) {
-        contextMenuItems.innerHTML = '';
-
-        if (edgeId !== null) {
-            const deleteEdgeItem = document.createElement('div');
-            deleteEdgeItem.className = 'context-menu-item';
-            deleteEdgeItem.style.color = 'var(--error)';
-            deleteEdgeItem.innerHTML = `<i class="fa-solid fa-trash"></i> Delete Edge`;
-            deleteEdgeItem.onclick = (e) => {
-                e.stopPropagation();
-                contextMenu.classList.add('hidden');
-                if (confirm("Delete this edge?")) {
-                    fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${edgeId}`, { method: 'DELETE' })
-                        .then(() => selectWorkspace(activeWorkspace))
-                        .catch(() => alert("Failed to delete edge."));
-                }
-            };
-            contextMenuItems.appendChild(deleteEdgeItem);
-
-            contextMenu.style.left = `${x}px`;
-            contextMenu.style.top = `${y}px`;
-            contextMenu.classList.remove('hidden');
-            return;
-        }
-
-        const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
-
-        let found = false;
-        const categories = {};
-
-        for (const key of Object.keys(modulesData).sort()) {
-            const mod = modulesData[key];
-            let isMatch = false;
-
-            if (validators.length > 0 && mod.options) {
-                for (const [optName, optValue] of Object.entries(mod.options)) {
-                    const validator = optValue[3];
-                    if (validator) {
-                        const vals = Array.isArray(validator)
-                            ? validator
-                            : validator.split(',').map(v => v.trim());
-                        if (vals.some(v => validators.includes(v))) {
-                            isMatch = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (isMatch) {
-                console.log("Match found!");
-                found = true;
-                const cat = mod.category || 'Uncategorized';
-                if (!categories[cat]) categories[cat] = [];
-                categories[cat].push({ key, mod });
-            }
-        }
-
-        if (found) {
-            for (const cat of Object.keys(categories).sort()) {
-                const catItem = document.createElement('div');
-                const capitalizedCat = cat.charAt(0).toUpperCase() + cat.slice(1);
-                catItem.className = 'context-menu-item has-submenu';
-                catItem.innerHTML = `<i class="fa-solid fa-folder"></i> ${capitalizedCat} <i class="fa-solid fa-chevron-right submenu-arrow"></i>`;
-
-                const submenu = document.createElement('div');
-                submenu.className = 'submenu';
-
-                categories[cat].forEach(({ key, mod }) => {
-                    const item = document.createElement('div');
-                    item.className = 'context-menu-item';
-                    const shortName = mod.name ? mod.name.replace(/[_-]/g, ' ') : key;
-                    item.innerHTML = `<i class="fa-solid fa-play"></i> ${shortName}`;
-                    item.onclick = (e) => {
+                if (edgeId !== null) {
+                    const deleteEdgeItem = document.createElement('div');
+                    deleteEdgeItem.className = 'context-menu-item';
+                    deleteEdgeItem.style.color = 'var(--error)';
+                    deleteEdgeItem.innerHTML = `<i class="fa-solid fa-trash"></i> Delete Edge`;
+                    deleteEdgeItem.onclick = (e) => {
                         e.stopPropagation();
                         contextMenu.classList.add('hidden');
-                        populateNodeInfo(node);
-                        runModuleImmediately(key, node);
+                        if (confirm("Delete this edge?")) {
+                            fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${edgeId}`, { method: 'DELETE' })
+                                .then(() => selectWorkspace(activeWorkspace))
+                                .catch(() => alert("Failed to delete edge."));
+                        }
                     };
-                    submenu.appendChild(item);
-                });
+                    contextMenuItems.appendChild(deleteEdgeItem);
 
-                catItem.appendChild(submenu);
-                contextMenuItems.appendChild(catItem);
+                    contextMenu.style.left = `${x}px`;
+                    contextMenu.style.top = `${y}px`;
+                    contextMenu.classList.remove('hidden');
+                    return;
+                }
+
+                const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
+
+                let found = false;
+                const categories = {};
+
+                for (const key of Object.keys(modulesData).sort()) {
+                    const mod = modulesData[key];
+                    let isMatch = false;
+
+                    if (validators.length > 0 && mod.options) {
+                        for (const [optName, optValue] of Object.entries(mod.options)) {
+                            const validator = optValue[3];
+                            if (validator) {
+                                const vals = Array.isArray(validator)
+                                    ? validator
+                                    : validator.split(',').map(v => v.trim());
+                                if (vals.some(v => validators.includes(v))) {
+                                    isMatch = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (isMatch) {
+                        found = true;
+                        const cat = mod.category || 'Uncategorized';
+                        if (!categories[cat]) categories[cat] = [];
+                        categories[cat].push({ key, mod });
+                    }
+                }
+
+                if (found) {
+                    for (const cat of Object.keys(categories).sort()) {
+                        const catItem = document.createElement('div');
+                        const capitalizedCat = cat.charAt(0).toUpperCase() + cat.slice(1);
+                        catItem.className = 'context-menu-item has-submenu';
+                        catItem.innerHTML = `<i class="fa-solid fa-folder"></i> ${capitalizedCat} <i class="fa-solid fa-chevron-right submenu-arrow"></i>`;
+
+                        const submenu = document.createElement('div');
+                        submenu.className = 'submenu';
+
+                        categories[cat].forEach(({ key, mod }) => {
+                            const item = document.createElement('div');
+                            item.className = 'context-menu-item';
+                            const shortName = mod.name ? mod.name.replace(/[_-]/g, ' ') : key;
+                            item.innerHTML = `<i class="fa-solid fa-play"></i> ${shortName}`;
+                            item.onclick = (e) => {
+                                e.stopPropagation();
+                                contextMenu.classList.add('hidden');
+                                populateNodeInfo(node);
+                                runModuleImmediately(key, node);
+                            };
+                            submenu.appendChild(item);
+                        });
+
+                        catItem.appendChild(submenu);
+                        contextMenuItems.appendChild(catItem);
+                    }
+                }
+
+                if (!found) {
+                    const empty = document.createElement('div');
+                    empty.className = 'context-menu-item';
+                    empty.style.cursor = 'default';
+                    empty.style.color = 'var(--text-secondary)';
+                    empty.textContent = 'No compatible modules';
+                    contextMenuItems.appendChild(empty);
+                }
+
+                const deleteItem = document.createElement('div');
+                deleteItem.className = 'context-menu-item';
+                deleteItem.style.color = 'var(--error)';
+                deleteItem.style.borderTop = '1px solid var(--border-color)';
+                deleteItem.style.marginTop = '4px';
+                deleteItem.style.paddingTop = '8px';
+                deleteItem.innerHTML = `<i class="fa-solid fa-trash"></i> Delete Node`;
+                deleteItem.onclick = (e) => {
+                    e.stopPropagation();
+                    contextMenu.classList.add('hidden');
+                    if (confirm("Delete this node? This will also cascade delete any connected edges.")) {
+                        fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${node.id || node.value}`, { method: 'DELETE' })
+                            .then(() => selectWorkspace(activeWorkspace))
+                            .catch(() => alert("Failed to delete node."));
+                    }
+                };
+                contextMenuItems.appendChild(deleteItem);
+
+                contextMenu.style.left = `${x}px`;
+                contextMenu.style.top = `${y}px`;
+                contextMenu.classList.remove('hidden');
             }
-        }
 
-        if (!found) {
-            const empty = document.createElement('div');
-            empty.className = 'context-menu-item';
-            empty.style.cursor = 'default';
-            empty.style.color = 'var(--text-secondary)';
-            empty.textContent = 'No compatible modules';
-            contextMenuItems.appendChild(empty);
-        }
 
-        const deleteItem = document.createElement('div');
-        deleteItem.className = 'context-menu-item';
-        deleteItem.style.color = 'var(--error)';
-        deleteItem.style.borderTop = '1px solid var(--border-color)';
-        deleteItem.style.marginTop = '4px';
-        deleteItem.style.paddingTop = '8px';
-        deleteItem.innerHTML = `<i class="fa-solid fa-trash"></i> Delete Node`;
-        deleteItem.onclick = (e) => {
-            e.stopPropagation();
-            contextMenu.classList.add('hidden');
-            if (confirm("Delete this node? This will also cascade delete any connected edges.")) {
-                fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${node.id || node.value}`, { method: 'DELETE' })
-                    .then(() => selectWorkspace(activeWorkspace))
-                    .catch(() => alert("Failed to delete node."));
+
+            function termPrint(text, extraClass = '') {
+                const line = document.createElement('div');
+                line.className = `log-line ${extraClass}`;
+                line.textContent = text;
+                terminalBody.appendChild(line);
+                terminalBody.scrollTop = terminalBody.scrollHeight;
             }
-        };
-        contextMenuItems.appendChild(deleteItem);
-
-        contextMenu.style.left = `${x}px`;
-        contextMenu.style.top = `${y}px`;
-        contextMenu.classList.remove('hidden');
+        })
     }
-
-
-
-    function termPrint(text, extraClass = '') {
-        const line = document.createElement('div');
-        line.className = `log-line ${extraClass}`;
-        line.textContent = text;
-        terminalBody.appendChild(line);
-        terminalBody.scrollTop = terminalBody.scrollHeight;
-    }
-});
+})
