@@ -24,6 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let network = null;
     let isConfigUnlocked = false;
     let configKeys = {};
+    let currentNodes = [];
+    let currentEdges = [];
 
     const NODE_TO_VALIDATOR_MAP = {
         'email-addr': ['email'],
@@ -499,7 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${cat} - ${name}`;
     }
 
-    function populateNodeInfo(node) {
+    function populateNodeInfo(item, isEdge = false) {
         // Populate info tab FIRST — this is the primary action
         try {
             const infoEmpty = document.getElementById('node-info-empty');
@@ -509,9 +511,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 infoContent.style.display = 'flex';
 
                 let metadataHtml = '';
-                if (node.metadata) {
+                if (item.metadata) {
                     try {
-                        const meta = typeof node.metadata === 'string' ? JSON.parse(node.metadata) : node.metadata;
+                        const meta = typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata;
                         if (meta && typeof meta === 'object' && Object.keys(meta).length > 0) {
                             for (const [key, val] of Object.entries(meta)) {
                                 let displayVal = val;
@@ -530,18 +532,33 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
                     } catch (e) {
-                        metadataHtml = `<div style="word-break: break-all;">${node.metadata}</div>`;
+                        metadataHtml = `<div style="word-break: break-all;">${item.metadata}</div>`;
                     }
                 }
                 if (!metadataHtml) {
-                    metadataHtml = `<div style="color: var(--text-secondary); font-style: italic;">No extra info available for this node.</div>`;
+                    metadataHtml = `<div style="color: var(--text-secondary); font-style: italic;">No extra info available for this ${isEdge ? 'edge' : 'node'}.</div>`;
                 }
 
-                infoContent.innerHTML = `
-                    <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${node.value}</div>
-                    <div style="margin-bottom: 16px;"><span class="badge">${node.type}</span>${node.timestamp ? `<span class="badge" style="margin-left: 6px;">${node.timestamp}</span>` : ''}</div>
-                    ${metadataHtml}
-                `;
+                if (isEdge) {
+                    const sourceNode = currentNodes.find(n => n.id === item.source_id) || { value: item.source_id };
+                    const targetNode = currentNodes.find(n => n.id === item.target_id) || { value: item.target_id };
+
+                    infoContent.innerHTML = `
+                        <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span style="word-break: break-all;">${sourceNode.value}</span>
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;"><i class="fa-solid fa-arrow-right-long"></i></span>
+                            <span style="word-break: break-all;">${targetNode.value}</span>
+                        </div>
+                        <div style="margin-bottom: 16px;"><span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${item.relationship}</span></div>
+                        ${metadataHtml}
+                    `;
+                } else {
+                    infoContent.innerHTML = `
+                        <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${item.value}</div>
+                        <div style="margin-bottom: 16px;"><span class="badge">${item.type}</span>${item.timestamp ? `<span class="badge" style="margin-left: 6px;">${item.timestamp}</span>` : ''}</div>
+                        ${metadataHtml}
+                    `;
+                }
 
                 // Auto-switch to Info tab
                 document.querySelectorAll('.right-tab').forEach(t => t.classList.remove('active'));
@@ -800,6 +817,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const nodes = await nodesRes.json();
             const edges = await edgesRes.json();
+            currentNodes = nodes;
+            currentEdges = edges;
 
             countNodes.textContent = nodes.length || 0;
             countEdges.textContent = edges.length || 0;
@@ -1119,6 +1138,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
                 if (selectedNode) {
                     handleNodeSelection(selectedNode);
+                }
+            } else if (params.edges.length > 0) {
+                const edgeId = params.edges[0];
+                const selectedEdge = edges.find(e => e.id === edgeId);
+                if (selectedEdge) {
+                    populateNodeInfo(selectedEdge, true);
+                    moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
+                    moduleDetails.classList.add('hidden');
                 }
             }
         });
