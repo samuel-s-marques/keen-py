@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any
 import io
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -111,8 +111,18 @@ def root():
     return {"message": "Keen API is running. Access /dashboard for the UI."}
 
 
+@app.get("/api")
+def api():
+    return RedirectResponse(url="/docs")
+
+
 @app.get("/api/workspaces")
 def get_workspaces():
+    """Get all workspaces.
+
+    Returns:
+        List[Dict[str, Any]]: List of workspaces.
+    """
     config = ConfigManager("~/.keen/config.db")
     workspaces = config.get_all_workspaces()
 
@@ -132,6 +142,14 @@ def get_workspaces():
 
 @app.post("/api/workspaces")
 def create_workspace(req: WorkspaceCreate):
+    """Create a new workspace.
+
+    Args:
+        req (WorkspaceCreate): Workspace to create.
+
+    Returns:
+        Dict[str, Any]: Workspace.
+    """
     if not req.name.strip():
         return JSONResponse(status_code=400, content={"error": "Name is required"})
 
@@ -145,6 +163,14 @@ def create_workspace(req: WorkspaceCreate):
 
 @app.get("/api/workspaces/{name}/nodes")
 def get_workspace_nodes(name: str):
+    """Get all nodes in a workspace.
+
+    Args:
+        name (str): Workspace name.
+
+    Returns:
+        List[Dict[str, Any]]: List of nodes.
+    """
     config = ConfigManager("~/.keen/config.db")
     w = config.get_workspace(name)
     if not w:
@@ -169,6 +195,15 @@ def get_workspace_nodes(name: str):
 
 @app.post("/api/workspaces/{name}/nodes")
 def create_workspace_node(name: str, req: NodeCreate):
+    """Create a new node in a workspace.
+
+    Args:
+        name (str): Workspace name.
+        req (NodeCreate): Node to create.
+
+    Returns:
+        Dict[str, Any]: Node.
+    """
     w = global_config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
@@ -183,6 +218,14 @@ def create_workspace_node(name: str, req: NodeCreate):
 
 @app.get("/api/workspaces/{name}/edges")
 def get_workspace_edges(name: str):
+    """Get all edges in a workspace.
+
+    Args:
+        name (str): Workspace name.
+
+    Returns:
+        List[Dict[str, Any]]: List of edges.
+    """
     config = ConfigManager("~/.keen/config.db")
     w = config.get_workspace(name)
     if not w:
@@ -204,6 +247,14 @@ global_config = ConfigManager("~/.keen/config.db")
 
 @app.post("/api/config/unlock")
 def unlock_config(req: ConfigUnlock):
+    """Unlock the config.
+
+    Args:
+        req (ConfigUnlock): Config to unlock.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
     if global_config.unlock(req.password):
         return {"success": True}
     return JSONResponse(status_code=401, content={"error": "Invalid password"})
@@ -211,6 +262,11 @@ def unlock_config(req: ConfigUnlock):
 
 @app.get("/api/config/keys")
 def get_config_keys():
+    """Get all API keys.
+
+    Returns:
+        List[Dict[str, Any]]: List of API keys.
+    """
     if not global_config.is_unlocked():
         return JSONResponse(status_code=401, content={"error": "Config locked"})
     return global_config.get_all_api_keys()
@@ -218,6 +274,14 @@ def get_config_keys():
 
 @app.post("/api/config/keys")
 def set_config_key(req: APIKeyCreate):
+    """Set an API key.
+
+    Args:
+        req (APIKeyCreate): API key to set.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
     if not global_config.is_unlocked():
         return JSONResponse(status_code=401, content={"error": "Config locked"})
     global_config.set_api_key(req.service.lower(), req.api_key)
@@ -226,12 +290,29 @@ def set_config_key(req: APIKeyCreate):
 
 @app.delete("/api/workspaces/{name}")
 def delete_workspace(name: str):
+    """Delete a workspace.
+
+    Args:
+        name (str): Workspace name.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
     global_config.delete_workspace(name)
     return {"success": True}
 
 
 @app.put("/api/workspaces/{name}")
 def rename_workspace(name: str, req: WorkspaceRename):
+    """Rename a workspace.
+
+    Args:
+        name (str): Workspace name.
+        req (WorkspaceRename): New name.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
     if not req.new_name.strip():
         return JSONResponse(status_code=400, content={"error": "Name is required"})
 
@@ -246,6 +327,15 @@ def rename_workspace(name: str, req: WorkspaceRename):
 
 @app.post("/api/workspaces/{name}/edges")
 def create_workspace_edge(name: str, req: EdgeCreate):
+    """Create a new edge in a workspace.
+
+    Args:
+        name (str): Workspace name.
+        req (EdgeCreate): Edge to create.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
     w = global_config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
@@ -273,6 +363,15 @@ def create_workspace_edge(name: str, req: EdgeCreate):
 
 @app.delete("/api/workspaces/{name}/nodes/{node_id}")
 def delete_workspace_node(name: str, node_id: int):
+    """Delete a node from a workspace.
+
+    Args:
+        name (str): Workspace name.
+        node_id (int): Node ID.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
     w = global_config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
@@ -287,6 +386,15 @@ def delete_workspace_node(name: str, node_id: int):
 
 @app.delete("/api/workspaces/{name}/edges/{edge_id}")
 def delete_workspace_edge(name: str, edge_id: int):
+    """Delete an edge from a workspace.
+
+    Args:
+        name (str): Workspace name.
+        edge_id (int): Edge ID.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
     w = global_config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
@@ -301,6 +409,15 @@ def delete_workspace_edge(name: str, edge_id: int):
 
 @app.post("/api/workspaces/{name}/nodes/positions")
 def update_node_positions(name: str, req: NodePositionsUpdate):
+    """Update node positions in a workspace.
+
+    Args:
+        name (str): Workspace name.
+        req (NodePositionsUpdate): Node positions to update.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
     w = global_config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
@@ -328,6 +445,11 @@ def update_node_positions(name: str, req: NodePositionsUpdate):
 
 @app.get("/api/modules")
 def get_modules():
+    """Get all available modules.
+
+    Returns:
+        Dict[str, Any]: Dictionary of modules.
+    """
     modules = load_modules()
     result = {}
     for key, cls in modules.items():
@@ -340,25 +462,31 @@ def get_modules():
 
 @app.websocket("/ws/modules/{module_name:path}/run")
 async def websocket_run_module(websocket: WebSocket, module_name: str):
+    """Run a module asynchronously via WebSocket.
+
+    Args:
+        websocket (WebSocket): WebSocket connection.
+        module_name (str): Module name.
+    """
     await websocket.accept()
 
     config = ConfigManager("~/.keen/config.db")
     handler_id = None
 
     try:
-        # 1. Receive configuration payload
+        # Receive configuration payload
         data = await websocket.receive_json()
         options = data.get("options", {})
         workspace_name = data.get("workspace_name", "")
 
-        # 2. Setup workspace context
+        # Setup workspace context
         workspace = None
         if workspace_name:
             w = config.get_workspace(workspace_name)
             if w:
                 workspace = WorkspaceManager(w["path"], name=workspace_name)
 
-        # 3. Instantiate module
+        # Instantiate module
         modules = load_modules()
 
         # We need to find the module. load_modules maps short name, category/name, and full path.
