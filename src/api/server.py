@@ -65,6 +65,11 @@ class NodePositionsUpdate(BaseModel):
     positions: Dict[str, Dict[str, float]]
 
 
+class NodeCreate(BaseModel):
+    type: str
+    value: str
+    metadata: Optional[Dict[str, Any]] = {}
+
 class APIShellContext:
     def __init__(self, workspace: WorkspaceManager | None = None):
         self.workspace = workspace
@@ -154,6 +159,20 @@ def get_workspace_nodes(name: str):
                     pass
         wm.conn.close()
         return nodes
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/workspaces/{name}/nodes")
+def create_workspace_node(name: str, req: NodeCreate):
+    w = global_config.get_workspace(name)
+    if not w:
+        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
+    try:
+        wm = WorkspaceManager(w["path"], name=name)
+        node_id = wm.get_or_add_node(req.type, req.value, req.metadata)
+        wm.conn.close()
+        return {"success": True, "node_id": node_id}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
