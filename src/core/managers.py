@@ -419,16 +419,16 @@ class WorkspaceManager(DatabaseEngine):
                 raise ValueError(f"Unknown export type: {type}")
 
     def _export_to_pdf(self, nodes, edges, path):
-        pass
+        raise NotImplementedError("PDF export is not implemented yet")
 
     def _export_to_html(self, nodes, edges, path):
-        pass
+        raise NotImplementedError("HTML export is not implemented yet")
 
     def _export_to_markdown(self, nodes, edges, path):
-        pass
+        raise NotImplementedError("Markdown export is not implemented yet")
 
     def _export_to_json(self, nodes, edges, path):
-        pass
+        raise NotImplementedError("JSON export is not implemented yet")
 
     def _export_to_stix2(self, nodes, edges, path):
-        pass
+        raise NotImplementedError("STIX2 export is not implemented yet")
