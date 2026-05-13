@@ -476,6 +476,7 @@ select:focus, input:focus {
     flex-direction: column;
     background: var(--term-bg);
     border-top: 1px solid var(--border-color);
+    min-height: 0;
 }
 
 .terminal-header {

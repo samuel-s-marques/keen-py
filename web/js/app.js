@@ -226,8 +226,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tabs
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', (e) => {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            const isRightTab = tab.classList.contains('right-tab');
+            const tabClass = isRightTab ? '.right-tab' : '.tab:not(.right-tab)';
+            const contentClass = isRightTab ? '.right-tab-content' : '.tab-content:not(.right-tab-content)';
+
+            document.querySelectorAll(tabClass).forEach(t => t.classList.remove('active'));
+            document.querySelectorAll(contentClass).forEach(c => c.classList.remove('active'));
 
             tab.classList.add('active');
             document.getElementById(tab.dataset.target).classList.add('active');
@@ -363,6 +367,48 @@ document.addEventListener('DOMContentLoaded', () => {
         cat = cat.replace(/[_-]/g, ' ');
         const name = mod.name ? mod.name.replace(/[_-]/g, ' ') : key;
         return `${cat} - ${name}`;
+    }
+
+    function handleNodeSelection(node) {
+        const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
+        buildModuleDropdown(validators, node.value);
+
+        // Populate info tab
+        const infoEmpty = document.getElementById('node-info-empty');
+        const infoContent = document.getElementById('node-info-content');
+        if (infoEmpty && infoContent) {
+            infoEmpty.classList.add('hidden');
+            infoContent.classList.remove('hidden');
+
+            let metadataHtml = '';
+            if (node.metadata) {
+                try {
+                    const meta = typeof node.metadata === 'string' ? JSON.parse(node.metadata) : node.metadata;
+                    for (const [key, val] of Object.entries(meta)) {
+                        let displayVal = val;
+                        if (typeof val === 'object') {
+                            displayVal = `<pre style="margin: 0; padding: 6px; background: var(--term-bg); border: 1px solid var(--border-color); border-radius: 4px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.8rem; color: var(--term-color);">${JSON.stringify(val, null, 2)}</pre>`;
+                        } else if (typeof val === 'string' && val.startsWith('http')) {
+                            displayVal = `<a href="${val}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;">${val}</a>`;
+                        } else {
+                            displayVal = `<span style="word-break: break-all;">${val}</span>`;
+                        }
+                        metadataHtml += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary); text-transform: capitalize;">${key.replace(/_/g, ' ')}:</strong><br/>${displayVal}</div>`;
+                    }
+                } catch(e) {
+                    metadataHtml = `<div style="word-break: break-all;">${node.metadata}</div>`;
+                }
+            }
+            if (!metadataHtml) {
+                metadataHtml = `<div>No extra info available.</div>`;
+            }
+
+            infoContent.innerHTML = `
+                <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${node.value}</div>
+                <div style="margin-bottom: 16px;"><span class="badge">${node.type}</span></div>
+                ${metadataHtml}
+            `;
+        }
     }
 
     function buildModuleDropdown(compatibleValidators = [], prefillValue = null) {

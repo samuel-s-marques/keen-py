@@ -119,31 +119,45 @@
 
             <!-- Right Panel: Module Runner -->
             <aside class="right-panel">
-                <div class="panel-header">
-                    <h2><i class="fa-solid fa-bolt"></i> Module Runner</h2>
+                <div class="panel-header right-panel-tabs" style="padding: 10px 10px 0 10px; border-bottom: 1px solid var(--border-color);">
+                    <div class="tabs" style="margin-bottom: 0;">
+                        <button class="tab right-tab active" data-target="tab-module-runner" style="padding: 10px 16px;"><i class="fa-solid fa-bolt"></i> Runner</button>
+                        <button class="tab right-tab" data-target="tab-node-info" style="padding: 10px 16px;"><i class="fa-solid fa-circle-info"></i> Info</button>
+                    </div>
                 </div>
 
-                <div class="module-selector-container">
-                    <label for="module-select">Select Module</label>
-                    <select id="module-select">
-                        <option value="" disabled selected>-- Choose a module --</option>
-                    </select>
-                </div>
+                <div class="right-tab-content-container" style="flex: 1; min-height: 0; overflow-y: auto;">
+                    <div id="tab-module-runner" class="tab-content right-tab-content active" style="padding: 16px;">
+                        <div class="module-selector-container">
+                            <label for="module-select">Select Module</label>
+                            <select id="module-select">
+                                <option value="" disabled selected>-- Choose a module --</option>
+                            </select>
+                        </div>
 
-                <div id="module-details" class="module-details hidden">
-                    <p id="module-description" class="module-desc"></p>
-                    <div class="module-meta">
-                        <span class="badge" id="module-author"></span>
-                        <span class="badge" id="module-version"></span>
+                        <div id="module-details" class="module-details hidden" style="border-bottom: none; padding-bottom: 0;">
+                            <p id="module-description" class="module-desc"></p>
+                            <div class="module-meta">
+                                <span class="badge" id="module-author"></span>
+                                <span class="badge" id="module-version"></span>
+                            </div>
+
+                            <form id="module-form" class="module-form">
+                                <!-- Options generated dynamically -->
+                            </form>
+
+                            <button id="btn-run-module" class="btn-primary">
+                                <i class="fa-solid fa-play"></i> Run Module
+                            </button>
+                        </div>
                     </div>
 
-                    <form id="module-form" class="module-form">
-                        <!-- Options generated dynamically -->
-                    </form>
-
-                    <button id="btn-run-module" class="btn-primary">
-                        <i class="fa-solid fa-play"></i> Run Module
-                    </button>
+                    <div id="tab-node-info" class="tab-content right-tab-content" style="padding: 16px;">
+                        <div id="node-info-empty" class="sys-msg" style="color: var(--text-secondary); text-align: center; margin-top: 20px;">Select a node to view its info.</div>
+                        <div id="node-info-content" class="hidden" style="display: flex; flex-direction: column; gap: 12px; font-size: 0.85rem; color: var(--text-secondary);">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Terminal -->
