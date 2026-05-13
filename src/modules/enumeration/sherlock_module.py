@@ -14,7 +14,7 @@ class SherlockModule(BaseModule):
             "TARGET": [
                 "",
                 True,
-                "The target to lookup (username, name, domain, etc).",
+                "The username to lookup.",
                 "username",
             ]
         },
