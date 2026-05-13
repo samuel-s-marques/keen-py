@@ -110,9 +110,25 @@ class BaseModule:
             validator = value[3]
             option_value: str = str(self.options.get(key, None))
 
-            if validator and not InputValidator.VALIDATORS[validator](option_value):
-                error(f"Invalid value for {key.upper()}. It should be a {validator}.")
-                return False
+            if validator:
+                # Support list/tuple or comma-separated string of validators
+                if isinstance(validator, (list, tuple)):
+                    validators_list = list(validator)
+                else:
+                    validators_list = [v.strip() for v in str(validator).split(",") if v.strip()]
+
+                if validators_list:
+                    known_validators = [v for v in validators_list if v in InputValidator.VALIDATORS]
+
+                    if known_validators:
+                        passed_at_least_one = any(InputValidator.VALIDATORS[v](option_value) for v in known_validators)
+                        if not passed_at_least_one:
+                            error(
+                                f"Invalid value for {key.upper()}. It should match at least one of: {', '.join(validators_list)}."
+                            )
+                            return False
+                    else:
+                        pass
         return True
 
     def pre_run(self) -> bool:
@@ -196,4 +212,5 @@ class BaseModule:
                     source_id=source_id,
                     target_id=target_id,
                     relationship=edge.get("relationship", "RELATED"),
+                    metadata=edge.get("metadata", {}),
                 )

@@ -21,7 +21,7 @@ class SOCMINTModule(BaseModule):
                 "",
                 True,
                 "The target to lookup (username, name, domain, etc).",
-                "",
+                "email,phone,username,domain,name",
             ],
             "TYPE": [
                 "auto",

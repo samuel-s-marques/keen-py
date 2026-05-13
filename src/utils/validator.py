@@ -98,6 +98,31 @@ class InputValidator:
         except Exception:
             return False
 
+    @staticmethod
+    def is_valid_username(username: str) -> bool:
+        """Validate username.
+
+        Args:
+            username (str): Username to validate.
+
+        Returns:
+            bool: True if username is valid, False otherwise.
+        """
+        return bool(str(username).strip())
+
+    @staticmethod
+    def is_valid_name(name: str) -> bool:
+        """Validate person name.
+
+        Args:
+            name (str): Name to validate.
+
+        Returns:
+            bool: True if name is valid, False otherwise.
+        """
+        # TODO: Improve this validation with NER and other approaches
+        return bool(str(name).strip())
+
     VALIDATORS = {
         "domain": is_valid_domain,
         "ip": is_valid_ip,
@@ -105,4 +130,6 @@ class InputValidator:
         "url": is_valid_url,
         "email": is_valid_email,
         "phone": is_valid_phone_number,
+        "username": is_valid_username,
+        "name": is_valid_name,
     }

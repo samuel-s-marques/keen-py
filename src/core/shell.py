@@ -1,12 +1,11 @@
+from src.utils.banner import get_banner
 import sys
 from src.core.managers import WorkspaceManager
 from src.core.managers import ConfigManager
-from pyfiglet import FigletString
 from cmd2 import Cmd, Color, stylize
 from rich.console import Console
 from rich.table import Table
 from rich.style import Style
-from pyfiglet import Figlet
 import os
 import asyncio
 
@@ -40,29 +39,7 @@ class Shell(Cmd):
 
         self._update_prompt()
 
-        banner: FigletString = Figlet(font="slant").renderText("Keen")
-        banner_styled: str = stylize(
-            banner,
-            Style(
-                color=Color.BLUE,
-            ),
-        )
-
-        version_styled: str = stylize(
-            f"Version: {self.version}",
-            Style(
-                color=Color.YELLOW,
-            ),
-        )
-
-        welcome_styled: str = stylize(
-            "Welcome to Keen, an information gathering tool.",
-            Style(
-                color=Color.GREEN,
-            ),
-        )
-
-        self.intro = f"\n{banner_styled}\n{version_styled}\n{welcome_styled}\n"
+        self.intro = get_banner(self.version)
 
     def _update_prompt(self) -> None:
         """Centralized prompt updating based on active workspace and module."""
@@ -382,7 +359,7 @@ class Shell(Cmd):
             else:
                 error("No module selected.")
         elif arg.lower() == "banner":
-            print(self.intro)
+            print(get_banner(self.version))
         else:
             error("Usage: show <options | modules | info | banner>")
 
@@ -442,6 +419,8 @@ class Shell(Cmd):
             workspace create <name> [desc]      - Create & register a workspace
             workspace set-desc <description>    - Update current workspace's description
             workspace delete <name>             - Unregister a workspace (retains database)
+            workspace rename <name> <new_name>  - Rename a workspace
+            workspace export <type> <path>      - Export current workspace (PDF, HTML, Markdown, JSON/STIX2)
         """
         args = arg.strip().split()
         if not args:
@@ -459,6 +438,8 @@ class Shell(Cmd):
                 info("\tworkspace select <name>")
                 info("\tworkspace set-desc <description>")
                 info("\tworkspace delete <name>")
+                info("\tworkspace rename <name> <new_name>")
+                info("\tworkspace export <type> <path>")
             return
 
         subcommand = args[0].lower()
@@ -632,7 +613,36 @@ class Shell(Cmd):
                 f"Unregistered workspace: '{name}'. (Database file '{w['path']}' was kept)."
             )
             return
+        elif subcommand == "rename":
+            if len(args) < 3:
+                error("Usage: workspace rename <name> <new_name>")
+                return
+            name = args[1]
+            new_name = args[2]
+            w = self.config.get_workspace(name)
+            if not w:
+                error(f"Workspace '{name}' not found.")
+                return
+            self.config.rename_workspace(name, new_name)
+            info(f"Renamed workspace '{name}' to '{new_name}'.")
+            return
 
+        elif subcommand == "export":
+            if not self.workspace:
+                error("No active workspace selected. Select a workspace first.")
+                return
+
+            if len(args) < 3:
+                error("Usage: workspace export <type> <path>")
+                return
+
+            type = args[1]
+            path = args[2]
+
+            self.workspace.export(type, path)
+
+            info(f"Exported workspace '{self.workspace.name}' to '{path}'.")
+            return
         else:
             # Fallback direct switch/creation matching original behavior
             name = args[0]
@@ -669,6 +679,36 @@ class Shell(Cmd):
                     info(
                         f"Created and switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
                     )
+
+    def do_web(self, arg: str) -> None:
+        """Start the Keen API web server.
+
+        Usage:
+            web start [--host <host>] [--port <port>]
+        """
+        args = arg.strip().split()
+        if not args or args[0].lower() != "start":
+            error("Usage: web start [--host <host>] [--port <port>]")
+            return
+
+        host = "127.0.0.1"
+        port = 8000
+
+        try:
+            if "--host" in args:
+                idx = args.index("--host")
+                host = args[idx + 1]
+            if "--port" in args:
+                idx = args.index("--port")
+                port = int(args[idx + 1])
+        except (ValueError, IndexError):
+            error("Invalid arguments. Usage: web start [--host <host>] [--port <port>]")
+            return
+
+        from src.api.server import start_server
+
+        info(f"Starting web server on {host}:{port}...")
+        start_server(host=host, port=port, debug=self.debug_mode)
 
     def do_exit(self, args: str) -> None:
         """Exit the shell."""

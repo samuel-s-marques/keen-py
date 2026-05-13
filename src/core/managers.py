@@ -1,7 +1,9 @@
+from src.utils.config_util import get_valid_name
 import base64
 import json
 import os
 import sqlite3
+import threading
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -10,11 +12,33 @@ from src.core.database_engine import DatabaseEngine
 
 
 class ConfigManager(DatabaseEngine):
+    _global_unlocked = {}
+    _global_fernet = {}
+    _lock = threading.Lock()
+
     def __init__(self, db_path: str) -> None:
         super().__init__(db_path)
         self._initialize_schema()
-        self._unlocked = False
-        self._fernet = None
+
+    @property
+    def _unlocked(self) -> bool:
+        with ConfigManager._lock:
+            return ConfigManager._global_unlocked.get(self.path, False)
+
+    @_unlocked.setter
+    def _unlocked(self, value: bool) -> None:
+        with ConfigManager._lock:
+            ConfigManager._global_unlocked[self.path] = value
+
+    @property
+    def _fernet(self):
+        with ConfigManager._lock:
+            return ConfigManager._global_fernet.get(self.path, None)
+
+    @_fernet.setter
+    def _fernet(self, value) -> None:
+        with ConfigManager._lock:
+            ConfigManager._global_fernet[self.path] = value
 
     def _initialize_schema(self) -> None:
         cursor = self.conn.cursor()
@@ -91,49 +115,54 @@ class ConfigManager(DatabaseEngine):
             iterations=100000,
         )
         key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-        self._fernet = Fernet(key)
+        fernet_temp = Fernet(key)
 
         verify_token_enc = self.get_preference("master_password_check")
         if verify_token_enc:
             try:
-                decrypted = self._fernet.decrypt(verify_token_enc.encode()).decode()
+                decrypted = fernet_temp.decrypt(verify_token_enc.encode()).decode()
                 if decrypted == "verification_token":
+                    self._fernet = fernet_temp
                     self._unlocked = True
                     return True
                 else:
-                    self._fernet = None
-                    self._unlocked = False
                     return False
             except Exception:
-                self._fernet = None
-                self._unlocked = False
                 return False
         else:
             # First time setup!
             # Store the verification token encrypted
-            enc = self._fernet.encrypt(b"verification_token").decode()
+            enc = fernet_temp.encrypt(b"verification_token").decode()
             self.set_preference("master_password_check", enc)
+            self._fernet = fernet_temp
             self._unlocked = True
             return True
 
+    def lock(self) -> None:
+        """Locks the configuration manager, clearing keys from memory."""
+        self._unlocked = False
+        self._fernet = None
+
     def get_api_key(self, service: str) -> str | None:
-        if not self._unlocked or not self._fernet:
+        fernet = self._fernet
+        if not self._unlocked or not fernet:
             return None
         cursor = self.conn.cursor()
         cursor.execute("SELECT api_key FROM api_keys WHERE service = ?", (service,))
         result = cursor.fetchone()
         if result:
             try:
-                return self._fernet.decrypt(result["api_key"].encode()).decode()
+                return fernet.decrypt(result["api_key"].encode()).decode()
             except Exception:
                 return None
         return None
 
     def set_api_key(self, service: str, api_key: str) -> None:
-        if not self._unlocked or not self._fernet:
+        fernet = self._fernet
+        if not self._unlocked or not fernet:
             raise RuntimeError("Key manager is locked. Unlock it first.")
         cursor = self.conn.cursor()
-        encrypted_key = self._fernet.encrypt(api_key.encode()).decode()
+        encrypted_key = fernet.encrypt(api_key.encode()).decode()
         cursor.execute(
             "INSERT OR REPLACE INTO api_keys (service, api_key) VALUES (?, ?)",
             (service, encrypted_key),
@@ -141,7 +170,8 @@ class ConfigManager(DatabaseEngine):
         self.conn.commit()
 
     def get_all_api_keys(self) -> list[dict]:
-        if not self._unlocked or not self._fernet:
+        fernet = self._fernet
+        if not self._unlocked or not fernet:
             return []
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM api_keys")
@@ -149,7 +179,7 @@ class ConfigManager(DatabaseEngine):
         for row in cursor.fetchall():
             row_dict = dict(row)
             try:
-                row_dict["api_key"] = self._fernet.decrypt(
+                row_dict["api_key"] = fernet.decrypt(
                     row_dict["api_key"].encode()
                 ).decode()
             except Exception:
@@ -201,8 +231,38 @@ class ConfigManager(DatabaseEngine):
         self.conn.commit()
 
     def delete_workspace(self, name: str) -> None:
+        ws = self.get_workspace(name)
+        if ws and os.path.exists(ws["path"]):
+            try:
+                os.remove(ws["path"])
+            except OSError:
+                pass
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM workspaces WHERE name = ?", (name,))
+        self.conn.commit()
+
+    def rename_workspace(self, old_name: str, new_name: str) -> None:
+        ws = self.get_workspace(old_name)
+        if not ws:
+            raise ValueError(f"Workspace {old_name} not found.")
+
+        new_name = get_valid_name(new_name)
+
+        old_path = ws["path"]
+        new_path = os.path.join(os.path.dirname(old_path), f"{new_name}.keen")
+        new_path = os.path.normpath(new_path).replace("\\", "/")
+
+        if os.path.exists(new_path):
+            raise ValueError(f"A workspace file for {new_name} already exists.")
+
+        if os.path.exists(old_path):
+            os.rename(old_path, new_path)
+
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE workspaces SET name = ?, path = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
+            (new_name, new_path, old_name),
+        )
         self.conn.commit()
 
     # Preferences CRUD helper methods
@@ -244,10 +304,25 @@ class WorkspaceManager(DatabaseEngine):
                 source_id INTEGER,
                 target_id INTEGER,
                 relationship TEXT,
+                metadata TEXT,
                 FOREIGN KEY(source_id) REFERENCES nodes(id),
                 FOREIGN KEY(target_id) REFERENCES nodes(id)
             )
         """)
+
+        # Add positions columns if they don't exist
+        try:
+            cursor.execute("ALTER TABLE nodes ADD COLUMN x REAL")
+            cursor.execute("ALTER TABLE nodes ADD COLUMN y REAL")
+        except Exception:
+            pass
+
+        # Add metadata column for edges if it doesn't exist
+        try:
+            cursor.execute("ALTER TABLE edge ADD COLUMN metadata TEXT")
+        except Exception:
+            pass
+
         self.conn.commit()
 
     def get_or_add_node(
@@ -271,8 +346,15 @@ class WorkspaceManager(DatabaseEngine):
         self.conn.commit()
         return cursor.lastrowid
 
-    def add_edge(self, source_id: int, target_id: int, relationship: str) -> None:
+    def add_edge(
+        self,
+        source_id: int,
+        target_id: int,
+        relationship: str,
+        metadata: dict | None = None,
+    ) -> None:
         cursor = self.conn.cursor()
+        meta_json = json.dumps(metadata or {})
         # Prevent duplicated edges by checking if the exact edge already exists
         cursor.execute(
             "SELECT 1 FROM edge WHERE source_id = ? AND target_id = ? AND relationship = ?",
@@ -282,8 +364,8 @@ class WorkspaceManager(DatabaseEngine):
             return
 
         cursor.execute(
-            "INSERT INTO edge (source_id, target_id, relationship) VALUES (?, ?, ?)",
-            (source_id, target_id, relationship),
+            "INSERT INTO edge (source_id, target_id, relationship, metadata) VALUES (?, ?, ?, ?)",
+            (source_id, target_id, relationship, meta_json),
         )
         self.conn.commit()
 
@@ -304,3 +386,57 @@ class WorkspaceManager(DatabaseEngine):
         cursor.execute("SELECT id FROM nodes WHERE value = ?", (value,))
         result = cursor.fetchone()
         return result["id"] if result else None
+
+    def node_exists_by_id(self, node_id: int) -> bool:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT 1 FROM nodes WHERE id = ?", (node_id,))
+        return cursor.fetchone() is not None
+
+    def delete_node(self, node_id: int) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "DELETE FROM edge WHERE source_id = ? OR target_id = ?", (node_id, node_id)
+        )
+        cursor.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
+        self.conn.commit()
+
+    def delete_edge(self, edge_id: int) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM edge WHERE id = ?", (edge_id,))
+        self.conn.commit()
+
+    def export(self, type: str, path: str) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM nodes")
+        nodes = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM edge")
+        edges = [dict(row) for row in cursor.fetchall()]
+
+        match type:
+            case "pdf":
+                self._export_to_pdf(nodes, edges, path)
+            case "html":
+                self._export_to_html(nodes, edges, path)
+            case "markdown":
+                self._export_to_markdown(nodes, edges, path)
+            case "json":
+                self._export_to_json(nodes, edges, path)
+            case "stix2":
+                self._export_to_stix2(nodes, edges, path)
+            case _:
+                raise ValueError(f"Unknown export type: {type}")
+
+    def _export_to_pdf(self, nodes, edges, path):
+        raise NotImplementedError("PDF export is not implemented yet")
+
+    def _export_to_html(self, nodes, edges, path):
+        raise NotImplementedError("HTML export is not implemented yet")
+
+    def _export_to_markdown(self, nodes, edges, path):
+        raise NotImplementedError("Markdown export is not implemented yet")
+
+    def _export_to_json(self, nodes, edges, path):
+        raise NotImplementedError("JSON export is not implemented yet")
+
+    def _export_to_stix2(self, nodes, edges, path):
+        raise NotImplementedError("STIX2 export is not implemented yet")

@@ -69,7 +69,7 @@ class SubdomainModule(BaseModule):
                     self._find_by_bruteforce,
                     self._find_by_passive,
                 ]
-                with concurrent.futures.ProcessPoolExecutor() as executor:
+                with concurrent.futures.ThreadPoolExecutor() as executor:
                     futures = {
                         executor.submit(func, target): func.__name__
                         for func in methods_to_run
@@ -270,7 +270,7 @@ class SubdomainModule(BaseModule):
         """Get domains from passive sources."""
         subdomains = set()
 
-        with concurrent.futures.ProcessPoolExecutor() as executor:
+        with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [
                 executor.submit(self.find_by_crt, target),
                 executor.submit(self._find_by_anubis, target),

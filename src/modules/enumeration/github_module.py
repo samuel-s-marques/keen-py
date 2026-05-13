@@ -12,7 +12,7 @@ class GitHubModule(BaseModule):
         "author": "Samuel Marques",
         "version": "1.1.0",
         "options": {
-            "TARGET": ["", True, "The GitHub username to enumerate.", ""],
+            "TARGET": ["", True, "The GitHub username to enumerate.", "username"],
             "GITHUB_TOKEN": [
                 "",
                 False,

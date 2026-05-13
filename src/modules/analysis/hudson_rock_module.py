@@ -188,7 +188,7 @@ class HudsonRockModule(BaseModule):
             passwords = stealer.get("top_passwords", [])
             logins = stealer.get("top_logins", [])
 
-            device_val = f"infected-device:{target}:{comp_name}:{date_comp}"
+            device_val = f"infected-device:{comp_name}:{date_comp}"
             device_uuid = uuid.uuid5(STIX_DEVICE_NAMESPACE, device_val)
 
             # STIX 2.1 Custom infostealer-infection Object
@@ -201,8 +201,6 @@ class HudsonRockModule(BaseModule):
                 "operating_system": os_name,
                 "malware_path": mal_path,
                 "ip_address": ip_val if ip_val != "Unknown" else None,
-                "top_passwords": passwords,
-                "top_logins": logins,
             }
 
             misp_device = {
@@ -241,8 +239,6 @@ class HudsonRockModule(BaseModule):
                     "date_compromised": date_comp,
                     "operating_system": os_name,
                     "malware_path": mal_path,
-                    "top_passwords": passwords,
-                    "top_logins": logins,
                 },
             }
 
@@ -254,6 +250,10 @@ class HudsonRockModule(BaseModule):
                     "source": target,
                     "target": device_val,
                     "relationship": "compromised-device",
+                    "metadata": {
+                        "top_passwords": passwords,
+                        "top_logins": logins,
+                    },
                 }
             )
 
