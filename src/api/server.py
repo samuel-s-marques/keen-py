@@ -162,7 +162,7 @@ def create_workspace(req: WorkspaceCreate, config: ConfigManager = Depends(get_c
     name = get_valid_name(req.name)
 
     db_file = f"cases/{name}.keen"
-    config.add_workspace(req.name, db_file, req.description or "")
+    config.add_workspace(name, db_file, req.description or "")
     return {"success": True, "name": name, "path": db_file}
 
 
