@@ -1,3 +1,4 @@
+from src.utils.config_util import get_valid_name
 import base64
 import json
 import os
@@ -244,6 +245,8 @@ class ConfigManager(DatabaseEngine):
         ws = self.get_workspace(old_name)
         if not ws:
             raise ValueError(f"Workspace {old_name} not found.")
+
+        new_name = get_valid_name(new_name)
 
         old_path = ws["path"]
         new_path = os.path.join(os.path.dirname(old_path), f"{new_name}.keen")
