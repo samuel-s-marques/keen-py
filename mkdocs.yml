@@ -1,0 +1,25 @@
+site_name: Keen
+
+repo_url: https://github.com/samuel-s-marques/keen-py
+repo_name: keen-py
+
+site_author: Samuel Marques
+site_description: Keen, as in keen observation, is a reconnaissance and OSINT tool for ethical hacking and penetration testing.
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Usage: getting-started/usage.md
+      - Modules:
+          - getting-started/modules/index.md
+          - Analysis:
+              - Hudson Rock: getting-started/modules/analysis/hudson_rock.md
+  - Developer:
+      - API: developer/api.md
+  - About:
+      - Contributing: about/contributing.md
+      - License: about/license.md
+      - Roadmap: about/roadmap.md
+      - Changelog: about/changelog.md
+theme: readthedocs
