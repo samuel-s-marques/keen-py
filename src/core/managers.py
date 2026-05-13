@@ -246,7 +246,7 @@ class ConfigManager(DatabaseEngine):
             raise ValueError(f"Workspace {old_name} not found.")
 
         old_path = ws["path"]
-        new_path = os.path.join(os.path.dirname(old_path), f"{new_name}.db")
+        new_path = os.path.join(os.path.dirname(old_path), f"{new_name}.keen")
         new_path = os.path.normpath(new_path).replace("\\", "/")
 
         if os.path.exists(new_path):
