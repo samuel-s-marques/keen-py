@@ -118,22 +118,17 @@ class BaseModule:
                     validators_list = [v.strip() for v in str(validator).split(",") if v.strip()]
 
                 if validators_list:
-                    # An option is valid if it passes AT LEAST ONE of the known validators.
-                    # Unknown validators (like "username") are considered to always accept any input.
-                    passed_at_least_one = False
-                    for v in validators_list:
-                        if v in InputValidator.VALIDATORS:
-                            if InputValidator.VALIDATORS[v](option_value):
-                                passed_at_least_one = True
-                                break
-                        else:
-                            passed_at_least_one = True
-                            break
-                    if not passed_at_least_one:
-                        error(
-                            f"Invalid value for {key.upper()}. It should match at least one of: {', '.join(validators_list)}."
-                        )
-                        return False
+                    known_validators = [v for v in validators_list if v in InputValidator.VALIDATORS]
+
+                    if known_validators:
+                        passed_at_least_one = any(InputValidator.VALIDATORS[v](option_value) for v in known_validators)
+                        if not passed_at_least_one:
+                            error(
+                                f"Invalid value for {key.upper()}. It should match at least one of: {', '.join(validators_list)}."
+                            )
+                            return False
+                    else:
+                        pass
         return True
 
     def pre_run(self) -> bool:
