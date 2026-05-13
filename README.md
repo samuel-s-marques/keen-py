@@ -117,9 +117,6 @@ TODO:
 - [ ] Integrate IntelligenceX
 - [ ] Implement leak checking
   - [ ] Breach Directory API
-  - [x] LeakCheck API
-  - [x] Dehashed API
-  - [x] Have I Been Pwned API
 - [x] Add API key management
 - [ ] Add documentation
   - [ ] Add module creation guide
