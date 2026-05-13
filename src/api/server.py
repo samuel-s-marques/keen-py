@@ -1,3 +1,4 @@
+from src.utils.config_util import get_valid_name
 import os
 import sys
 import json
@@ -30,6 +31,8 @@ app.add_middleware(
 
 os.makedirs("web", exist_ok=True)
 app.mount("/dashboard", StaticFiles(directory="web", html=True), name="web")
+
+WORKSPACE_RE_PATTERN = r"/[^a-zA-Z0-9\s_-]/g"
 
 
 class WorkspaceCreate(BaseModel):
@@ -69,6 +72,7 @@ class NodeCreate(BaseModel):
     type: str
     value: str
     metadata: Optional[Dict[str, Any]] = {}
+
 
 class APIShellContext:
     def __init__(self, workspace: WorkspaceManager | None = None):
@@ -128,15 +132,15 @@ def get_workspaces():
 
 @app.post("/api/workspaces")
 def create_workspace(req: WorkspaceCreate):
-    config = ConfigManager("~/.keen/config.db")
-    if not req.name.isalnum() and "_" not in req.name and "-" not in req.name:
-        return JSONResponse(
-            status_code=400, content={"error": "Invalid workspace name"}
-        )
+    if not req.name.strip():
+        return JSONResponse(status_code=400, content={"error": "Name is required"})
 
-    db_file = f"cases/{req.name}.keen"
+    config = ConfigManager("~/.keen/config.db")
+    name = get_valid_name(req.name)
+
+    db_file = f"cases/{name}.keen"
     config.add_workspace(req.name, db_file, req.description or "")
-    return {"success": True, "name": req.name, "path": db_file}
+    return {"success": True, "name": name, "path": db_file}
 
 
 @app.get("/api/workspaces/{name}/nodes")
@@ -228,9 +232,14 @@ def delete_workspace(name: str):
 
 @app.put("/api/workspaces/{name}")
 def rename_workspace(name: str, req: WorkspaceRename):
+    if not req.new_name.strip():
+        return JSONResponse(status_code=400, content={"error": "Name is required"})
+
+    new_name = get_valid_name(req.new_name)
+
     try:
-        global_config.rename_workspace(name, req.new_name)
-        return {"success": True, "new_name": req.new_name}
+        global_config.rename_workspace(name, new_name)
+        return {"success": True, "new_name": new_name}
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -304,9 +313,12 @@ def update_node_positions(name: str, req: NodePositionsUpdate):
                 node_id = int(node_id_str)
             else:
                 node_id = wm.get_node_id(node_id_str)
-                
+
             if node_id:
-                cursor.execute("UPDATE nodes SET x = ?, y = ? WHERE id = ?", (pos.get("x"), pos.get("y"), node_id))
+                cursor.execute(
+                    "UPDATE nodes SET x = ?, y = ? WHERE id = ?",
+                    (pos.get("x"), pos.get("y"), node_id),
+                )
         wm.conn.commit()
         wm.conn.close()
         return {"success": True}
