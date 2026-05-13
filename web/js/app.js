@@ -565,9 +565,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (compatibleValidators.length > 0 && mod.options) {
                 for (const [optName, optValue] of Object.entries(mod.options)) {
-                    if (compatibleValidators.includes(optValue[3])) {
-                        isMatch = true;
-                        break;
+                    const validator = optValue[3];
+                    if (validator) {
+                        const vals = Array.isArray(validator)
+                            ? validator
+                            : validator.split(',').map(v => v.trim());
+                        if (vals.some(v => compatibleValidators.includes(v))) {
+                            isMatch = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -596,8 +602,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const inputs = moduleForm.querySelectorAll('input');
                 for (const input of inputs) {
                     const optVal = modulesData[firstMatch].options[input.name];
-                    if (optVal && compatibleValidators.includes(optVal[3])) {
-                        input.value = prefillValue;
+                    if (optVal) {
+                        const validator = optVal[3];
+                        if (validator) {
+                            const vals = Array.isArray(validator)
+                                ? validator
+                                : validator.split(',').map(v => v.trim());
+                            if (vals.some(v => compatibleValidators.includes(v))) {
+                                input.value = prefillValue;
+                            }
+                        }
                     }
                 }
             }, 50);
@@ -1063,9 +1077,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (validators.length > 0 && mod.options) {
                 for (const [optName, optValue] of Object.entries(mod.options)) {
-                    if (validators.includes(optValue[3])) {
-                        isMatch = true;
-                        break;
+                    const validator = optValue[3];
+                    if (validator) {
+                        const vals = Array.isArray(validator)
+                            ? validator
+                            : validator.split(',').map(v => v.trim());
+                        if (vals.some(v => validators.includes(v))) {
+                            isMatch = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -1104,8 +1124,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             const inputs = moduleForm.querySelectorAll('input');
                             for (const input of inputs) {
                                 const optVal = modulesData[key].options[input.name];
-                                if (optVal && validators.includes(optVal[3])) {
-                                    input.value = node.value;
+                                if (optVal) {
+                                    const validator = optVal[3];
+                                    if (validator) {
+                                        const vals = Array.isArray(validator)
+                                            ? validator
+                                            : validator.split(',').map(v => v.trim());
+                                        if (vals.some(v => validators.includes(v))) {
+                                            input.value = node.value;
+                                        }
+                                    }
                                 }
                             }
                         }, 50);
