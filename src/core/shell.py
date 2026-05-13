@@ -422,7 +422,13 @@ class Shell(Cmd):
             workspace rename <name> <new_name>  - Rename a workspace
             workspace export <type> <path>      - Export current workspace (PDF, HTML, Markdown, JSON/STIX2)
         """
-        args = arg.strip().split()
+        try:
+            import shlex
+
+            args = shlex.split(arg.strip())
+        except ValueError as e:
+            error(f"Error parsing arguments: {e}")
+            return
         if not args:
             if self.workspace:
                 info(
@@ -525,13 +531,14 @@ class Shell(Cmd):
             name = args[1]
             desc = " ".join(args[2:]) if len(args) > 2 else ""
 
-            if not name.isalnum() and "_" not in name and "-" not in name:
+            if not all(c.isalnum() or c in " _-" for c in name):
                 error(
-                    "Workspace name must be alphanumeric (underscores/hyphens allowed)."
+                    "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."
                 )
                 return
 
-            db_file = f"cases/{name}.keen"
+            filename = name.replace(" ", "_")
+            db_file = f"cases/{filename}.keen"
             self.config.add_workspace(name, db_file, desc)
 
             self.workspace = WorkspaceManager(db_file, name=name)
@@ -552,7 +559,8 @@ class Shell(Cmd):
             name = args[1]
             w: dict | None = self.config.get_workspace(name)
             if not w:
-                db_file = f"cases/{name}.keen"
+                filename = name.replace(" ", "_")
+                db_file = f"cases/{filename}.keen"
                 if os.path.exists(db_file):
                     self.config.add_workspace(
                         name, db_file, "Auto-discovered workspace"
@@ -560,12 +568,12 @@ class Shell(Cmd):
                     w = self.config.get_workspace(name)
                 else:
                     error(
-                        f"Workspace '{name}' does not exist. Use 'workspace create {name}' to create it."
+                        f"Workspace '{name}' does not exist. Use 'workspace create \"{name}\"' to create it."
                     )
                     return
 
             # Defensive check: if w is still None (e.g. due to DB lock or read error), fallback to direct path
-            db_path = w["path"] if w else f"cases/{name}.keen"
+            db_path = w["path"] if w else f"cases/{name.replace(' ', '_')}.keen"
 
             try:
                 self.workspace = WorkspaceManager(db_path, name=name)
@@ -655,7 +663,8 @@ class Shell(Cmd):
                     f"Switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
                 )
             else:
-                db_file = f"cases/{name}.keen"
+                filename = name.replace(" ", "_")
+                db_file = f"cases/{filename}.keen"
                 if os.path.exists(db_file):
                     self.config.add_workspace(
                         name, db_file, "Auto-discovered workspace"
@@ -667,9 +676,9 @@ class Shell(Cmd):
                         f"Discovered and switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
                     )
                 else:
-                    if not name.isalnum() and "_" not in name and "-" not in name:
+                    if not all(c.isalnum() or c in " _-" for c in name):
                         error(
-                            "Workspace name must be alphanumeric (underscores/hyphens allowed)."
+                            "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."
                         )
                         return
                     self.config.add_workspace(name, db_file, f"Workspace for {name}")
