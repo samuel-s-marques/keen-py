@@ -13,14 +13,6 @@ The `Historical_DNS` module analyzes historical DNS data to identify old records
 
 This module gathers information from ViewDNS, HackerTarget, SecurityTrails (when API key is provided), and crt.sh for historical DNS data and IP history. 
 
-## Usage
-
-```bash
-keen > use historical_dns
-keen(discovery/historical_dns) > set target [DOMAIN]
-keen(discovery/historical_dns) > run
-```
-
 ## Options
 
 | Option                   | Description                | Default | Required | Value Type |
@@ -28,28 +20,10 @@ keen(discovery/historical_dns) > run
 | `TARGET`                 | The domain name to analyze | None    | Yes      | `domain`   |
 | `SECURITYTRAILS_API_KEY` | API Key for SecurityTrails | None    | No       | None       |
 
-## Example
+## Usage
 
 ```bash
 keen > use historical_dns
-keen(discovery/historical_dns) > set target globo.com
+keen(discovery/historical_dns) > set target [DOMAIN]
 keen(discovery/historical_dns) > run
-```
-
-## Output
-
-```
-Potentially Abandoned / Vulnerable Subdomains
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
-┃ Subdomain                             ┃ Status                                ┃ IPs            ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
-│ api.cartolafc.globo.com               │ Resolves but returns 404              │ 35.215.214.149 │
-├───────────────────────────────────────┼───────────────────────────────────────┼────────────────┤
-│ comentarios.globo.com                 │ Dangling CNAME:                       │                │
-│                                       │ coral-talk-beta.globo.com.            │                │
-├───────────────────────────────────────┼───────────────────────────────────────┼────────────────┤
-│ sp.globo.com                          │ Dangling CNAME:                       │                │
-│                                       │ cgcom-1247943892.us-east-1.elb.amazo… │                │
-└───────────────────────────────────────┴───────────────────────────────────────┴────────────────┘
-WARNING  | Found 57 potentially abandoned/vulnerable subdomains!
 ```
