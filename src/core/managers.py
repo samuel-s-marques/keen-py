@@ -39,7 +39,6 @@ class ConfigManager(DatabaseEngine):
         with ConfigManager._lock:
             ConfigManager._global_fernet[self.path] = value
 
-
     def _initialize_schema(self) -> None:
         cursor = self.conn.cursor()
         cursor.execute("""
