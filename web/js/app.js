@@ -483,7 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${cat} - ${name}`;
     }
 
-    function handleNodeSelection(node) {
+    function populateNodeInfo(node) {
         // Populate info tab FIRST — this is the primary action
         try {
             const infoEmpty = document.getElementById('node-info-empty');
@@ -513,7 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 metadataHtml += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary); text-transform: capitalize;">${key.replace(/_/g, ' ')}:</strong><br/>${displayVal}</div>`;
                             }
                         }
-                    } catch(e) {
+                    } catch (e) {
                         metadataHtml = `<div style="word-break: break-all;">${node.metadata}</div>`;
                     }
                 }
@@ -538,6 +538,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error('Error populating info tab:', err);
         }
+    }
+
+    function handleNodeSelection(node) {
+        populateNodeInfo(node);
 
         // Build compatible module dropdown
         try {
@@ -546,6 +550,77 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error('Error building module dropdown:', err);
         }
+    }
+
+    function runModuleImmediately(modName, node) {
+        if (!modName || !modulesData[modName]) return;
+
+        const mod = modulesData[modName];
+        const options = {};
+        const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
+
+        if (mod.options) {
+            for (const [key, value] of Object.entries(mod.options)) {
+                let defVal = value[0] || '';
+
+                // Auto-pull API keys if unlocked
+                if (isConfigUnlocked && configKeys[key.toUpperCase()]) {
+                    defVal = configKeys[key.toUpperCase()];
+                }
+
+                // Check if this option should take the node's value
+                const validator = value[3];
+                if (validator) {
+                    const vals = Array.isArray(validator)
+                        ? validator
+                        : validator.split(',').map(v => v.trim());
+                    if (vals.some(v => validators.includes(v))) {
+                        defVal = node.value;
+                    }
+                }
+
+                if (defVal) {
+                    options[key] = defVal.toString().trim();
+                }
+            }
+        }
+
+        termPrint(`[${modName}] Connecting...`, 'sys-msg');
+
+        const ws = new WebSocket(`${WS_BASE}/modules/${modName}/run`);
+        activeSockets.push(ws);
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                workspace_name: activeWorkspace || "",
+                options: options
+            }));
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'log') {
+                    termPrint(`[${modName}] ${data.message}`);
+                } else if (data.type === 'status') {
+                    termPrint(`[${modName}] Completed: ${data.status}`, 'sys-msg');
+                } else if (data.type === 'error') {
+                    termPrint(`[${modName}] Error: ${data.message}`, 'sys-msg');
+                }
+            } catch (e) {
+                termPrint(`[${modName}] ${event.data}`);
+            }
+        };
+
+        ws.onclose = () => {
+            activeSockets = activeSockets.filter(s => s !== ws);
+            termPrint(`[${modName}] Connection closed.`, 'sys-msg');
+
+            // Refresh workspace to show new nodes
+            if (activeWorkspace) {
+                selectWorkspace(activeWorkspace);
+            }
+        };
     }
 
     function buildModuleDropdown(compatibleValidators = [], prefillValue = null) {
@@ -1102,8 +1177,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (found) {
             for (const cat of Object.keys(categories).sort()) {
                 const catItem = document.createElement('div');
+                const capitalizedCat = cat.charAt(0).toUpperCase() + cat.slice(1);
                 catItem.className = 'context-menu-item has-submenu';
-                catItem.innerHTML = `<i class="fa-solid fa-folder"></i> ${cat} <i class="fa-solid fa-chevron-right submenu-arrow"></i>`;
+                catItem.innerHTML = `<i class="fa-solid fa-folder"></i> ${capitalizedCat} <i class="fa-solid fa-chevron-right submenu-arrow"></i>`;
 
                 const submenu = document.createElement('div');
                 submenu.className = 'submenu';
@@ -1116,27 +1192,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     item.onclick = (e) => {
                         e.stopPropagation();
                         contextMenu.classList.add('hidden');
-                        handleNodeSelection(node);
-                        moduleSelect.value = key;
-                        moduleSelect.dispatchEvent(new Event('change'));
-
-                        setTimeout(() => {
-                            const inputs = moduleForm.querySelectorAll('input');
-                            for (const input of inputs) {
-                                const optVal = modulesData[key].options[input.name];
-                                if (optVal) {
-                                    const validator = optVal[3];
-                                    if (validator) {
-                                        const vals = Array.isArray(validator)
-                                            ? validator
-                                            : validator.split(',').map(v => v.trim());
-                                        if (vals.some(v => validators.includes(v))) {
-                                            input.value = node.value;
-                                        }
-                                    }
-                                }
-                            }
-                        }, 50);
+                        populateNodeInfo(node);
+                        runModuleImmediately(key, node);
                     };
                     submenu.appendChild(item);
                 });
