@@ -217,4 +217,5 @@ class BaseModule:
                     source_id=source_id,
                     target_id=target_id,
                     relationship=edge.get("relationship", "RELATED"),
+                    metadata=edge.get("metadata", {}),
                 )

@@ -49,6 +49,7 @@ class EdgeCreate(BaseModel):
     source_id: str
     target_id: str
     relationship: str
+    metadata: Optional[Dict[str, Any]] = {}
 
 
 class ConfigUnlock(BaseModel):
@@ -242,6 +243,12 @@ def get_workspace_edges(name: str, config: ConfigManager = Depends(get_config)):
         cursor = wm.conn.cursor()
         cursor.execute("SELECT * FROM edge")
         edges = [dict(row) for row in cursor.fetchall()]
+        for edge in edges:
+            if edge.get("metadata"):
+                try:
+                    edge["metadata"] = json.loads(edge["metadata"])
+                except Exception:
+                    pass
         wm.close()
         return edges
     except Exception as e:
@@ -361,7 +368,7 @@ def create_workspace_edge(
                 status_code=400, content={"error": "Invalid node references"}
             )
 
-        wm.add_edge(int(source_id), int(target_id), req.relationship)
+        wm.add_edge(int(source_id), int(target_id), req.relationship, req.metadata)
         wm.close()
         return {"success": True}
     except Exception as e:

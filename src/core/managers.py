@@ -301,6 +301,7 @@ class WorkspaceManager(DatabaseEngine):
                 source_id INTEGER,
                 target_id INTEGER,
                 relationship TEXT,
+                metadata TEXT,
                 FOREIGN KEY(source_id) REFERENCES nodes(id),
                 FOREIGN KEY(target_id) REFERENCES nodes(id)
             )
@@ -310,6 +311,12 @@ class WorkspaceManager(DatabaseEngine):
         try:
             cursor.execute("ALTER TABLE nodes ADD COLUMN x REAL")
             cursor.execute("ALTER TABLE nodes ADD COLUMN y REAL")
+        except Exception:
+            pass
+
+        # Add metadata column for edges if it doesn't exist
+        try:
+            cursor.execute("ALTER TABLE edge ADD COLUMN metadata TEXT")
         except Exception:
             pass
 
@@ -336,8 +343,15 @@ class WorkspaceManager(DatabaseEngine):
         self.conn.commit()
         return cursor.lastrowid
 
-    def add_edge(self, source_id: int, target_id: int, relationship: str) -> None:
+    def add_edge(
+        self,
+        source_id: int,
+        target_id: int,
+        relationship: str,
+        metadata: dict | None = None,
+    ) -> None:
         cursor = self.conn.cursor()
+        meta_json = json.dumps(metadata or {})
         # Prevent duplicated edges by checking if the exact edge already exists
         cursor.execute(
             "SELECT 1 FROM edge WHERE source_id = ? AND target_id = ? AND relationship = ?",
@@ -347,8 +361,8 @@ class WorkspaceManager(DatabaseEngine):
             return
 
         cursor.execute(
-            "INSERT INTO edge (source_id, target_id, relationship) VALUES (?, ?, ?)",
-            (source_id, target_id, relationship),
+            "INSERT INTO edge (source_id, target_id, relationship, metadata) VALUES (?, ?, ?, ?)",
+            (source_id, target_id, relationship, meta_json),
         )
         self.conn.commit()
 
