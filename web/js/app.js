@@ -299,6 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Run Module via WebSockets
+    let activeSockets = [];
     btnRunModule.addEventListener('click', () => {
         const modName = moduleSelect.value;
         if (!modName) return;
@@ -312,17 +313,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Connect WS
-        if (activeSocket) {
-            activeSocket.close();
-        }
-
-        termPrint(`Connecting to module execution engine for ${modName}...`, 'sys-msg');
-        btnRunModule.disabled = true;
-        btnRunModule.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Running...';
+        termPrint(`[${modName}] Connecting...`, 'sys-msg');
 
         const ws = new WebSocket(`${WS_BASE}/modules/${modName}/run`);
-        activeSocket = ws;
+        activeSockets.push(ws);
 
         ws.onopen = () => {
             ws.send(JSON.stringify({
@@ -335,22 +329,20 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'log') {
-                    termPrint(data.message);
+                    termPrint(`[${modName}] ${data.message}`);
                 } else if (data.type === 'status') {
-                    termPrint(`Execution completed: ${data.status}`, 'sys-msg');
+                    termPrint(`[${modName}] Completed: ${data.status}`, 'sys-msg');
                 } else if (data.type === 'error') {
-                    termPrint(`Error: ${data.message}`, 'sys-msg');
+                    termPrint(`[${modName}] Error: ${data.message}`, 'sys-msg');
                 }
             } catch (e) {
-                termPrint(event.data);
+                termPrint(`[${modName}] ${event.data}`);
             }
         };
 
         ws.onclose = () => {
-            btnRunModule.disabled = false;
-            btnRunModule.innerHTML = '<i class="fa-solid fa-play"></i> Run Module';
-            termPrint(`Connection closed.`, 'sys-msg');
-            activeSocket = null;
+            activeSockets = activeSockets.filter(s => s !== ws);
+            termPrint(`[${modName}] Connection closed.`, 'sys-msg');
 
             // Refresh workspace to show new nodes
             if (activeWorkspace) {
@@ -370,44 +362,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleNodeSelection(node) {
-        const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
-        buildModuleDropdown(validators, node.value);
+        // Populate info tab FIRST — this is the primary action
+        try {
+            const infoEmpty = document.getElementById('node-info-empty');
+            const infoContent = document.getElementById('node-info-content');
+            if (infoEmpty && infoContent) {
+                infoEmpty.style.display = 'none';
+                infoContent.style.display = 'flex';
 
-        // Populate info tab
-        const infoEmpty = document.getElementById('node-info-empty');
-        const infoContent = document.getElementById('node-info-content');
-        if (infoEmpty && infoContent) {
-            infoEmpty.classList.add('hidden');
-            infoContent.classList.remove('hidden');
-
-            let metadataHtml = '';
-            if (node.metadata) {
-                try {
-                    const meta = typeof node.metadata === 'string' ? JSON.parse(node.metadata) : node.metadata;
-                    for (const [key, val] of Object.entries(meta)) {
-                        let displayVal = val;
-                        if (typeof val === 'object') {
-                            displayVal = `<pre style="margin: 0; padding: 6px; background: var(--term-bg); border: 1px solid var(--border-color); border-radius: 4px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.8rem; color: var(--term-color);">${JSON.stringify(val, null, 2)}</pre>`;
-                        } else if (typeof val === 'string' && val.startsWith('http')) {
-                            displayVal = `<a href="${val}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;">${val}</a>`;
-                        } else {
-                            displayVal = `<span style="word-break: break-all;">${val}</span>`;
+                let metadataHtml = '';
+                if (node.metadata) {
+                    try {
+                        const meta = typeof node.metadata === 'string' ? JSON.parse(node.metadata) : node.metadata;
+                        if (meta && typeof meta === 'object' && Object.keys(meta).length > 0) {
+                            for (const [key, val] of Object.entries(meta)) {
+                                let displayVal = val;
+                                if (val === null || val === undefined) {
+                                    displayVal = '<span style="color: var(--text-secondary); font-style: italic;">N/A</span>';
+                                } else if (Array.isArray(val)) {
+                                    displayVal = val.map(v => `<span class="badge" style="margin-right: 4px;">${v}</span>`).join(' ');
+                                } else if (typeof val === 'object') {
+                                    displayVal = `<pre style="margin: 0; padding: 6px; background: var(--term-bg); border: 1px solid var(--border-color); border-radius: 4px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.8rem; color: var(--term-color);">${JSON.stringify(val, null, 2)}</pre>`;
+                                } else if (typeof val === 'string' && val.startsWith('http')) {
+                                    displayVal = `<a href="${val}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;">${val}</a>`;
+                                } else {
+                                    displayVal = `<span style="word-break: break-all;">${val}</span>`;
+                                }
+                                metadataHtml += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary); text-transform: capitalize;">${key.replace(/_/g, ' ')}:</strong><br/>${displayVal}</div>`;
+                            }
                         }
-                        metadataHtml += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary); text-transform: capitalize;">${key.replace(/_/g, ' ')}:</strong><br/>${displayVal}</div>`;
+                    } catch(e) {
+                        metadataHtml = `<div style="word-break: break-all;">${node.metadata}</div>`;
                     }
-                } catch(e) {
-                    metadataHtml = `<div style="word-break: break-all;">${node.metadata}</div>`;
                 }
-            }
-            if (!metadataHtml) {
-                metadataHtml = `<div>No extra info available.</div>`;
-            }
+                if (!metadataHtml) {
+                    metadataHtml = `<div style="color: var(--text-secondary); font-style: italic;">No extra info available for this node.</div>`;
+                }
 
-            infoContent.innerHTML = `
-                <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${node.value}</div>
-                <div style="margin-bottom: 16px;"><span class="badge">${node.type}</span></div>
-                ${metadataHtml}
-            `;
+                infoContent.innerHTML = `
+                    <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${node.value}</div>
+                    <div style="margin-bottom: 16px;"><span class="badge">${node.type}</span>${node.timestamp ? `<span class="badge" style="margin-left: 6px;">${node.timestamp}</span>` : ''}</div>
+                    ${metadataHtml}
+                `;
+
+                // Auto-switch to Info tab
+                document.querySelectorAll('.right-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.right-tab-content').forEach(c => c.classList.remove('active'));
+                const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
+                if (infoTab) infoTab.classList.add('active');
+                const infoPanel = document.getElementById('tab-node-info');
+                if (infoPanel) infoPanel.classList.add('active');
+            }
+        } catch (err) {
+            console.error('Error populating info tab:', err);
+        }
+
+        // Build compatible module dropdown
+        try {
+            const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
+            buildModuleDropdown(validators, node.value);
+        } catch (err) {
+            console.error('Error building module dropdown:', err);
         }
     }
 
@@ -949,7 +964,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 categories[cat].forEach(({ key, mod }) => {
                     const item = document.createElement('div');
                     item.className = 'context-menu-item';
-                    item.innerHTML = `<i class="fa-solid fa-play"></i> ${formatModuleName(key, mod)}`;
+                    const shortName = mod.name ? mod.name.replace(/[_-]/g, ' ') : key;
+                    item.innerHTML = `<i class="fa-solid fa-play"></i> ${shortName}`;
                     item.onclick = (e) => {
                         e.stopPropagation();
                         contextMenu.classList.add('hidden');
@@ -1007,11 +1023,7 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.classList.remove('hidden');
     }
 
-    function handleNodeSelection(node) {
-        const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
-        buildModuleDropdown(validators, node.value);
-        termPrint(`Selected node: ${node.value} (${node.type}). Auto-filling compatible modules.`, 'sys-msg');
-    }
+
 
     function termPrint(text, extraClass = '') {
         const line = document.createElement('div');
