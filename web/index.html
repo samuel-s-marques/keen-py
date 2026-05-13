@@ -31,7 +31,8 @@
                 <span>KEEN</span>
             </div>
             <div style="display:flex; align-items:center; gap: 16px;">
-                <button id="btn-theme-toggle" class="icon-btn" title="Toggle Light/Dark Theme"><i class="fa-solid fa-sun"></i></button>
+                <button id="btn-theme-toggle" class="icon-btn" title="Toggle Light/Dark Theme"><i
+                        class="fa-solid fa-sun"></i></button>
                 <button id="btn-settings" class="icon-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>
                 <div class="server-status">
                     <div class="status-indicator online"></div>
@@ -66,18 +67,26 @@
                 </div>
 
                 <div class="tab-content active" id="tab-graph">
-                    <div class="graph-wrapper" style="position: relative; width: 100%; height: 100%; display: flex; flex: 1; flex-direction: column;">
+                    <div class="graph-wrapper"
+                        style="position: relative; width: 100%; height: 100%; display: flex; flex: 1; flex-direction: column;">
                         <div class="graph-toolbar">
-                            <button id="btn-layout-force" class="graph-btn active" title="Force Directed Layout"><i class="fa-solid fa-asterisk"></i></button>
-                            <button id="btn-layout-hierarchical" class="graph-btn" title="Hierarchical Layout"><i class="fa-solid fa-sitemap"></i></button>
-                            <button id="btn-layout-circle" class="graph-btn" title="Circular Layout"><i class="fa-solid fa-circle-notch"></i></button>
+                            <button id="btn-layout-force" class="graph-btn active" title="Force Directed Layout"><i
+                                    class="fa-solid fa-asterisk"></i></button>
+                            <button id="btn-layout-hierarchical" class="graph-btn" title="Hierarchical Layout"><i
+                                    class="fa-solid fa-sitemap"></i></button>
+                            <button id="btn-layout-circle" class="graph-btn" title="Circular Layout"><i
+                                    class="fa-solid fa-circle-notch"></i></button>
                             <div class="toolbar-divider"></div>
-                            <button id="btn-add-entity" class="graph-btn" title="Add New Entity" style="color: var(--accent-cyan);"><i class="fa-solid fa-plus"></i></button>
-                            <button id="btn-add-edge" class="graph-btn" title="Draw Edge"><i class="fa-solid fa-link"></i></button>
+                            <button id="btn-add-entity" class="graph-btn" title="Add New Entity"
+                                style="color: var(--accent-cyan);"><i class="fa-solid fa-plus"></i></button>
+                            <button id="btn-add-edge" class="graph-btn" title="Draw Edge"><i
+                                    class="fa-solid fa-link"></i></button>
                             <div class="toolbar-divider"></div>
-                            <button id="btn-toggle-physics" class="graph-btn active" title="Toggle Physics (Freeze/Unfreeze)"><i class="fa-solid fa-magnet"></i></button>
+                            <button id="btn-toggle-physics" class="graph-btn active"
+                                title="Toggle Physics (Freeze/Unfreeze)"><i class="fa-solid fa-magnet"></i></button>
                             <div class="toolbar-divider"></div>
-                            <button id="btn-delete-selected" class="graph-btn" style="color:var(--error);" title="Delete Selected Node(s)/Edge(s)"><i class="fa-solid fa-trash"></i></button>
+                            <button id="btn-delete-selected" class="graph-btn" style="color:var(--error);"
+                                title="Delete Selected Node(s)/Edge(s)"><i class="fa-solid fa-trash"></i></button>
                         </div>
                         <div id="network-canvas" class="graph-container"></div>
                     </div>
@@ -120,10 +129,13 @@
 
             <!-- Right Panel: Module Runner -->
             <aside class="right-panel">
-                <div class="panel-header right-panel-tabs" style="padding: 10px 10px 0 10px; border-bottom: 1px solid var(--border-color);">
+                <div class="panel-header right-panel-tabs"
+                    style="padding: 10px 10px 0 10px; border-bottom: 1px solid var(--border-color);">
                     <div class="tabs" style="margin-bottom: 0;">
-                        <button class="tab right-tab active" data-target="tab-module-runner" style="padding: 10px 16px;"><i class="fa-solid fa-bolt"></i> Runner</button>
-                        <button class="tab right-tab" data-target="tab-node-info" style="padding: 10px 16px;"><i class="fa-solid fa-circle-info"></i> Info</button>
+                        <button class="tab right-tab active" data-target="tab-module-runner"
+                            style="padding: 10px 16px;"><i class="fa-solid fa-bolt"></i> Runner</button>
+                        <button class="tab right-tab" data-target="tab-node-info" style="padding: 10px 16px;"><i
+                                class="fa-solid fa-circle-info"></i> Info</button>
                     </div>
                 </div>
 
@@ -136,7 +148,8 @@
                             </select>
                         </div>
 
-                        <div id="module-details" class="module-details hidden" style="border-bottom: none; padding-bottom: 0;">
+                        <div id="module-details" class="module-details hidden"
+                            style="border-bottom: none; padding-bottom: 0;">
                             <p id="module-description" class="module-desc"></p>
                             <div class="module-meta">
                                 <span class="badge" id="module-author"></span>
@@ -154,8 +167,11 @@
                     </div>
 
                     <div id="tab-node-info" class="tab-content right-tab-content" style="padding: 16px;">
-                        <div id="node-info-empty" style="color: var(--text-secondary); text-align: center; margin-top: 20px;">Select a node to view its info.</div>
-                        <div id="node-info-content" style="display: none; flex-direction: column; gap: 12px; font-size: 0.85rem; color: var(--text-secondary);">
+                        <div id="node-info-empty"
+                            style="color: var(--text-secondary); text-align: center; margin-top: 20px;">Select a node to
+                            view its info.</div>
+                        <div id="node-info-content"
+                            style="display: none; flex-direction: column; gap: 12px; font-size: 0.85rem; color: var(--text-secondary);">
                             <!-- Populated dynamically -->
                         </div>
                     </div>
@@ -189,6 +205,10 @@
                 <div class="form-group">
                     <label>Workspace Name</label>
                     <input type="text" id="input-ws-name" placeholder="e.g. target_corp_1">
+                    <span id="ws-name-warning"
+                        style="display: none; color: var(--accent-magenta, #ff00ff); font-size: 0.8rem; margin-top: 4px; display: none;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Spaces will be replaced with "_".
+                    </span>
                 </div>
                 <div class="form-group">
                     <label>Description</label>
@@ -222,7 +242,8 @@
                 <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="modal-body" id="settings-locked">
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Enter master password to unlock API keys.</p>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Enter master password
+                    to unlock API keys.</p>
                 <div class="form-group">
                     <input type="password" id="input-master-password" placeholder="Master Password">
                 </div>
@@ -232,12 +253,15 @@
                 <div class="form-group">
                     <label>Add/Update API Key</label>
                     <div style="display:flex; gap: 8px;">
-                        <input type="text" id="input-api-service" placeholder="Service (e.g. SHODAN_API_KEY)" style="flex:1;">
+                        <input type="text" id="input-api-service" placeholder="Service (e.g. SHODAN_API_KEY)"
+                            style="flex:1;">
                         <input type="text" id="input-api-key" placeholder="Key" style="flex:2;">
                     </div>
-                    <button id="btn-save-api-key" class="btn-primary full-width" style="margin-top: 12px;">Save Key</button>
+                    <button id="btn-save-api-key" class="btn-primary full-width" style="margin-top: 12px;">Save
+                        Key</button>
                 </div>
-                <div id="api-keys-list" style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary); max-height: 200px; overflow-y: auto;">
+                <div id="api-keys-list"
+                    style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary); max-height: 200px; overflow-y: auto;">
                     <!-- Keys loaded here -->
                 </div>
             </div>
@@ -257,8 +281,10 @@
                     <select id="entity-type-select">
                         <option value="" disabled selected>-- Select Type --</option>
                         <optgroup label="People">
-                            <option value="person" data-props="first_name,last_name,alias,age,location,notes">Person</option>
-                            <option value="user-account" data-props="username,platform,profile_url,bio">User Account</option>
+                            <option value="person" data-props="first_name,last_name,alias,age,location,notes">Person
+                            </option>
+                            <option value="user-account" data-props="username,platform,profile_url,bio">User Account
+                            </option>
                         </optgroup>
                         <optgroup label="Network">
                             <option value="email-addr" data-props="email">Email Address</option>
@@ -266,14 +292,18 @@
                             <option value="ipv4-addr" data-props="ip">IPv4 Address</option>
                             <option value="ipv6-addr" data-props="ip">IPv6 Address</option>
                             <option value="x-url" data-props="url">URL</option>
-                            <option value="x-phone-number" data-props="phone_number,carrier,country">Phone Number</option>
+                            <option value="x-phone-number" data-props="phone_number,carrier,country">Phone Number
+                            </option>
                         </optgroup>
                         <optgroup label="Organization">
-                            <option value="organization" data-props="name,industry,website,country,notes">Organization</option>
+                            <option value="organization" data-props="name,industry,website,country,notes">Organization
+                            </option>
                         </optgroup>
                         <optgroup label="Intelligence">
-                            <option value="x-data-breach" data-props="breach_name,source,breach_date,categories">Data Breach</option>
-                            <option value="x-service" data-props="service_name,url,registered">Service / Platform</option>
+                            <option value="x-data-breach" data-props="breach_name,source,breach_date,categories">Data
+                                Breach</option>
+                            <option value="x-service" data-props="service_name,url,registered">Service / Platform
+                            </option>
                         </optgroup>
                         <optgroup label="Other">
                             <option value="custom" data-props="">Custom</option>
@@ -287,13 +317,15 @@
                 </div>
 
                 <div id="entity-props-container" style="display: none;">
-                    <label style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px; margin-top: 4px;">
+                    <label
+                        style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px; margin-top: 4px;">
                         <i class="fa-solid fa-sliders"></i> Properties (optional)
                     </label>
                     <div id="entity-props-fields" style="display: flex; flex-direction: column; gap: 8px;">
                         <!-- Dynamic property fields -->
                     </div>
-                    <button type="button" id="btn-add-custom-prop" class="icon-btn" style="margin-top: 8px; font-size: 0.8rem; color: var(--accent-cyan);">
+                    <button type="button" id="btn-add-custom-prop" class="icon-btn"
+                        style="margin-top: 8px; font-size: 0.8rem; color: var(--accent-cyan);">
                         <i class="fa-solid fa-plus"></i> Add custom property
                     </button>
                 </div>

@@ -69,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCreateWs = document.getElementById('btn-create-ws');
     const inputWsName = document.getElementById('input-ws-name');
     const inputWsDesc = document.getElementById('input-ws-desc');
+    const wsNameWarning = document.getElementById('ws-name-warning');
 
     const modalRenameWs = document.getElementById('modal-rename-workspace');
     const btnConfirmRenameWs = document.getElementById('btn-confirm-rename-ws');
@@ -101,7 +102,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Modals Handling
-    btnNewWs.addEventListener('click', () => modalNewWs.classList.add('active'));
+    btnNewWs.addEventListener('click', () => {
+        inputWsName.value = '';
+        inputWsDesc.value = '';
+        wsNameWarning.style.display = 'none';
+        modalNewWs.classList.add('active');
+    });
     btnSettings.addEventListener('click', () => {
         modalSettings.classList.add('active');
         if (isConfigUnlocked) fetchApiKeys();
@@ -112,7 +118,16 @@ document.addEventListener('DOMContentLoaded', () => {
         modalSettings.classList.remove('active');
         modalRenameWs.classList.remove('active');
         document.getElementById('modal-create-entity').classList.remove('active');
+        wsNameWarning.style.display = 'none';
     }));
+
+    inputWsName.addEventListener('input', () => {
+        if (inputWsName.value.includes(' ')) {
+            wsNameWarning.style.display = 'block';
+        } else {
+            wsNameWarning.style.display = 'none';
+        }
+    });
 
     // Entity Creation Modal
     const modalCreateEntity = document.getElementById('modal-create-entity');
@@ -316,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 modalNewWs.classList.remove('active');
                 inputWsName.value = '';
                 inputWsDesc.value = '';
+                wsNameWarning.style.display = 'none';
                 await fetchWorkspaces();
                 selectWorkspace(name);
             }
