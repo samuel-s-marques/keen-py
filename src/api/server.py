@@ -354,19 +354,22 @@ def create_workspace_edge(
     try:
         wm = WorkspaceManager(w["path"], name=name)
 
-        source_id = req.source_id
-        if not source_id.isdigit():
-            source_id = wm.get_node_id(source_id)
-        target_id = req.target_id
-        if not target_id.isdigit():
-            target_id = wm.get_node_id(target_id)
+        def resolve_node_id(ref: str) -> int | None:
+            if ref.isdigit():
+                nid = int(ref)
+                if wm.node_exists_by_id(nid):
+                    return nid
+            return wm.get_node_id(ref)
+
+        source_id = resolve_node_id(req.source_id)
+        target_id = resolve_node_id(req.target_id)
 
         if not source_id or not target_id:
             return JSONResponse(
                 status_code=400, content={"error": "Invalid node references"}
             )
 
-        wm.add_edge(int(source_id), int(target_id), req.relationship, req.metadata)
+        wm.add_edge(source_id, target_id, req.relationship, req.metadata)
         wm.close()
         return {"success": True}
     except Exception as e:

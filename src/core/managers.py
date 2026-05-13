@@ -384,6 +384,11 @@ class WorkspaceManager(DatabaseEngine):
         result = cursor.fetchone()
         return result["id"] if result else None
 
+    def node_exists_by_id(self, node_id: int) -> bool:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT 1 FROM nodes WHERE id = ?", (node_id,))
+        return cursor.fetchone() is not None
+
     def delete_node(self, node_id: int) -> None:
         cursor = self.conn.cursor()
         cursor.execute(
