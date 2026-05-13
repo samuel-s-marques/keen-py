@@ -537,17 +537,33 @@ class HistoricalDnsModule(BaseModule):
             if ip_node not in nodes:
                 nodes.append(ip_node)
 
-            edges.append(
-                {
-                    "source": target,
-                    "target": ip_val,
-                    "relationship": "historically-resolved-to",
-                    "metadata": {
-                        "first_seen": date_val,
-                        "reporting_source": source_val,
-                    },
-                }
+            existing_edge = next(
+                (
+                    e
+                    for e in edges
+                    if e["source"] == target
+                    and e["target"] == ip_val
+                    and e["relationship"] == "historically-resolved-to"
+                ),
+                None,
             )
+
+            record_str = f"{date_val} ({source_val})"
+
+            if existing_edge:
+                if record_str not in existing_edge["metadata"]["historical_records"]:
+                    existing_edge["metadata"]["historical_records"].append(record_str)
+            else:
+                edges.append(
+                    {
+                        "source": target,
+                        "target": ip_val,
+                        "relationship": "historically-resolved-to",
+                        "metadata": {
+                            "historical_records": [record_str],
+                        },
+                    }
+                )
 
         new_results = {
             "nodes": nodes,
