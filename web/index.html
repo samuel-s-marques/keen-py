@@ -156,7 +156,7 @@
                                 <span class="badge" id="module-version"></span>
                             </div>
 
-                            <form id="module-form" class="module-form">
+                            <form id="module-form" class="module-form" autocomplete="off">
                                 <!-- Options generated dynamically -->
                             </form>
 
@@ -168,7 +168,8 @@
 
                     <div id="tab-node-info" class="tab-content right-tab-content" style="padding: 16px;">
                         <div id="node-info-empty"
-                            style="color: var(--text-secondary); text-align: center; margin-top: 20px;">Select a node or edge to
+                            style="color: var(--text-secondary); text-align: center; margin-top: 20px;">Select a node or
+                            edge to
                             view its info.</div>
                         <div id="node-info-content"
                             style="display: none; flex-direction: column; gap: 12px; font-size: 0.85rem; color: var(--text-secondary);">
@@ -245,7 +246,7 @@
                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Enter master password
                     to unlock API keys.</p>
                 <div class="form-group">
-                    <input type="password" id="input-master-password" placeholder="Master Password">
+                    <input type="password" id="input-master-password" placeholder="Master Password" autocomplete="off">
                 </div>
                 <button id="btn-unlock-settings" class="btn-primary full-width">Unlock</button>
             </div>
@@ -254,8 +255,8 @@
                     <label>Add/Update API Key</label>
                     <div style="display:flex; gap: 8px;">
                         <input type="text" id="input-api-service" placeholder="Service (e.g. SHODAN_API_KEY)"
-                            style="flex:1;">
-                        <input type="text" id="input-api-key" placeholder="Key" style="flex:2;">
+                            style="flex:1;" autocomplete="off">
+                        <input type="password" id="input-api-key" placeholder="Key" style="flex:2;" autocomplete="off">
                     </div>
                     <button id="btn-save-api-key" class="btn-primary full-width" style="margin-top: 12px;">Save
                         Key</button>

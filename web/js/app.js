@@ -410,7 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const mod = modulesData[modName];
         moduleDesc.textContent = mod.description || 'No description';
         moduleAuthor.textContent = mod.author || 'Unknown';
-        moduleVersion.textContent = `v${mod.version || '1.0'}`;
+        moduleVersion.textContent = `v${mod.version || '1.0.0'}`;
 
         // Build Form
         moduleForm.innerHTML = '';
@@ -436,6 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const input = document.createElement('input');
                 input.type = isSecret ? 'password' : 'text';
                 input.name = key;
+                input.autocomplete = 'off';
                 input.value = defVal;
                 input.placeholder = value[2] || '';
 
