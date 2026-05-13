@@ -6,7 +6,7 @@ Before using any module that requires API keys, you need to unlock the key manag
 
 The API keys are encrypted using a master password set by the user. **This master password is not stored anywhere** and will be required to unlock the key manager every time you start Keen. Only the derived `Fernet` key is held in-memory in the active `ConfigManager` instance for the duration of the session.
 
-Keen uses `PBKDF2-HMAC` with 100,000 iterations of `SHA-256` and a unique, random 16-byte salt to derive the encryption key, which is then used by `Fernet`, to encrypt and decrypt the API keys. The salt is stored along with the encrypted API keys in the configuration manager.
+Keen uses `PBKDF2-HMAC` with 100,000 iterations of `SHA-256` and a unique, random 16-byte salt to derive the encryption key, which is then used by `Fernet` (which uses AES-128 in CBC mode) to encrypt and decrypt the API keys. The salt is stored along with the encrypted API keys in the configuration manager.
 
 If there is an existing master password, Keen will prompt to unlock it up to 3 times when needed. If not, they are prompted to set one. You can skip this step by pressing **Enter** or `ctrl + c`.
 
