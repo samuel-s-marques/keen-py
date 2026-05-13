@@ -18,7 +18,7 @@ class LeakModule(BaseModule):
                 "",
                 True,
                 "The target to check for leaks (email, username or phone).",
-                "",
+                "email,phone,username",
             ],
             "TYPE": [
                 "auto",
