@@ -32,8 +32,6 @@ app.add_middleware(
 os.makedirs("web", exist_ok=True)
 app.mount("/dashboard", StaticFiles(directory="web", html=True), name="web")
 
-WORKSPACE_RE_PATTERN = r"/[^a-zA-Z0-9\s_-]/g"
-
 
 class WorkspaceCreate(BaseModel):
     name: str
