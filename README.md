@@ -80,14 +80,14 @@ TODO:
 - [x] Save ".keen" files for data persistence and sharing
 - [ ] Add tests
 - [ ] Add web interface
-  - [ ] Multi-threading (distributed workers)
-  - [ ] API dashboard
+  - [x] Multi-threading (distributed workers)
+  - [x] API dashboard
   - [ ] Real-time job tracking
   - [ ] Report generation (PDF, JSON/STIX2, HTML interactive map)
   - [ ] REST API for automation
   - [ ] Automation via UI (.keen-playbook recipes)
-  - [ ] Automatic target suggestion system
-  - [ ] Plugin marketplace
+  - [x] Automatic target suggestion system
+  - [x] Plugin marketplace
   - [ ] Multi-language support (i18n)
   - [ ] Mapping and camera integration (Geolocation)
   - [ ] Integration with malshare and similar services
