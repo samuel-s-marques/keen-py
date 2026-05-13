@@ -8,7 +8,7 @@ import uvicorn
 from typing import Optional, Dict, Any
 import io
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -106,6 +106,14 @@ class QueueStdoutRedirector(io.TextIOBase):
         pass
 
 
+def get_config():
+    config = ConfigManager("~/.keen/config.db")
+    try:
+        yield config
+    finally:
+        config.close()
+
+
 @app.get("/")
 def root():
     return {"message": "Keen API is running. Access /dashboard for the UI."}
@@ -117,13 +125,12 @@ def api():
 
 
 @app.get("/api/workspaces")
-def get_workspaces():
+def get_workspaces(config: ConfigManager = Depends(get_config)):
     """Get all workspaces.
 
     Returns:
         List[Dict[str, Any]]: List of workspaces.
     """
-    config = ConfigManager("~/.keen/config.db")
     workspaces = config.get_all_workspaces()
 
     # Enrich with counts
@@ -132,7 +139,7 @@ def get_workspaces():
             wm = WorkspaceManager(w["path"], name=w["name"])
             w["node_count"] = wm.get_node_count()
             w["edge_count"] = wm.get_edge_count()
-            wm.conn.close()
+            wm.close()
         except Exception:
             w["node_count"] = 0
             w["edge_count"] = 0
@@ -141,7 +148,7 @@ def get_workspaces():
 
 
 @app.post("/api/workspaces")
-def create_workspace(req: WorkspaceCreate):
+def create_workspace(req: WorkspaceCreate, config: ConfigManager = Depends(get_config)):
     """Create a new workspace.
 
     Args:
@@ -153,7 +160,6 @@ def create_workspace(req: WorkspaceCreate):
     if not req.name.strip():
         return JSONResponse(status_code=400, content={"error": "Name is required"})
 
-    config = ConfigManager("~/.keen/config.db")
     name = get_valid_name(req.name)
 
     db_file = f"cases/{name}.keen"
@@ -162,7 +168,7 @@ def create_workspace(req: WorkspaceCreate):
 
 
 @app.get("/api/workspaces/{name}/nodes")
-def get_workspace_nodes(name: str):
+def get_workspace_nodes(name: str, config: ConfigManager = Depends(get_config)):
     """Get all nodes in a workspace.
 
     Args:
@@ -171,7 +177,6 @@ def get_workspace_nodes(name: str):
     Returns:
         List[Dict[str, Any]]: List of nodes.
     """
-    config = ConfigManager("~/.keen/config.db")
     w = config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
@@ -187,14 +192,16 @@ def get_workspace_nodes(name: str):
                     node["metadata"] = json.loads(node["metadata"])
                 except Exception:
                     pass
-        wm.conn.close()
+        wm.close()
         return nodes
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.post("/api/workspaces/{name}/nodes")
-def create_workspace_node(name: str, req: NodeCreate):
+def create_workspace_node(
+    name: str, req: NodeCreate, config: ConfigManager = Depends(get_config)
+):
     """Create a new node in a workspace.
 
     Args:
@@ -204,20 +211,20 @@ def create_workspace_node(name: str, req: NodeCreate):
     Returns:
         Dict[str, Any]: Node.
     """
-    w = global_config.get_workspace(name)
+    w = config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
         wm = WorkspaceManager(w["path"], name=name)
         node_id = wm.get_or_add_node(req.type, req.value, req.metadata)
-        wm.conn.close()
+        wm.close()
         return {"success": True, "node_id": node_id}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/workspaces/{name}/edges")
-def get_workspace_edges(name: str):
+def get_workspace_edges(name: str, config: ConfigManager = Depends(get_config)):
     """Get all edges in a workspace.
 
     Args:
@@ -226,7 +233,6 @@ def get_workspace_edges(name: str):
     Returns:
         List[Dict[str, Any]]: List of edges.
     """
-    config = ConfigManager("~/.keen/config.db")
     w = config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
@@ -236,17 +242,14 @@ def get_workspace_edges(name: str):
         cursor = wm.conn.cursor()
         cursor.execute("SELECT * FROM edge")
         edges = [dict(row) for row in cursor.fetchall()]
-        wm.conn.close()
+        wm.close()
         return edges
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-global_config = ConfigManager("~/.keen/config.db")
-
-
 @app.post("/api/config/unlock")
-def unlock_config(req: ConfigUnlock):
+def unlock_config(req: ConfigUnlock, config: ConfigManager = Depends(get_config)):
     """Unlock the config.
 
     Args:
@@ -255,25 +258,25 @@ def unlock_config(req: ConfigUnlock):
     Returns:
         Dict[str, Any]: Success status.
     """
-    if global_config.unlock(req.password):
+    if config.unlock(req.password):
         return {"success": True}
     return JSONResponse(status_code=401, content={"error": "Invalid password"})
 
 
 @app.get("/api/config/keys")
-def get_config_keys():
+def get_config_keys(config: ConfigManager = Depends(get_config)):
     """Get all API keys.
 
     Returns:
         List[Dict[str, Any]]: List of API keys.
     """
-    if not global_config.is_unlocked():
+    if not config.is_unlocked():
         return JSONResponse(status_code=401, content={"error": "Config locked"})
-    return global_config.get_all_api_keys()
+    return config.get_all_api_keys()
 
 
 @app.post("/api/config/keys")
-def set_config_key(req: APIKeyCreate):
+def set_config_key(req: APIKeyCreate, config: ConfigManager = Depends(get_config)):
     """Set an API key.
 
     Args:
@@ -282,14 +285,14 @@ def set_config_key(req: APIKeyCreate):
     Returns:
         Dict[str, Any]: Success status.
     """
-    if not global_config.is_unlocked():
+    if not config.is_unlocked():
         return JSONResponse(status_code=401, content={"error": "Config locked"})
-    global_config.set_api_key(req.service.lower(), req.api_key)
+    config.set_api_key(req.service.lower(), req.api_key)
     return {"success": True}
 
 
 @app.delete("/api/workspaces/{name}")
-def delete_workspace(name: str):
+def delete_workspace(name: str, config: ConfigManager = Depends(get_config)):
     """Delete a workspace.
 
     Args:
@@ -298,12 +301,14 @@ def delete_workspace(name: str):
     Returns:
         Dict[str, Any]: Success status.
     """
-    global_config.delete_workspace(name)
+    config.delete_workspace(name)
     return {"success": True}
 
 
 @app.put("/api/workspaces/{name}")
-def rename_workspace(name: str, req: WorkspaceRename):
+def rename_workspace(
+    name: str, req: WorkspaceRename, config: ConfigManager = Depends(get_config)
+):
     """Rename a workspace.
 
     Args:
@@ -319,14 +324,16 @@ def rename_workspace(name: str, req: WorkspaceRename):
     new_name = get_valid_name(req.new_name)
 
     try:
-        global_config.rename_workspace(name, new_name)
+        config.rename_workspace(name, new_name)
         return {"success": True, "new_name": new_name}
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
 @app.post("/api/workspaces/{name}/edges")
-def create_workspace_edge(name: str, req: EdgeCreate):
+def create_workspace_edge(
+    name: str, req: EdgeCreate, config: ConfigManager = Depends(get_config)
+):
     """Create a new edge in a workspace.
 
     Args:
@@ -336,7 +343,7 @@ def create_workspace_edge(name: str, req: EdgeCreate):
     Returns:
         Dict[str, Any]: Success status.
     """
-    w = global_config.get_workspace(name)
+    w = config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
@@ -355,14 +362,16 @@ def create_workspace_edge(name: str, req: EdgeCreate):
             )
 
         wm.add_edge(int(source_id), int(target_id), req.relationship)
-        wm.conn.close()
+        wm.close()
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.delete("/api/workspaces/{name}/nodes/{node_id}")
-def delete_workspace_node(name: str, node_id: int):
+def delete_workspace_node(
+    name: str, node_id: int, config: ConfigManager = Depends(get_config)
+):
     """Delete a node from a workspace.
 
     Args:
@@ -372,20 +381,22 @@ def delete_workspace_node(name: str, node_id: int):
     Returns:
         Dict[str, Any]: Success status.
     """
-    w = global_config.get_workspace(name)
+    w = config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
         wm = WorkspaceManager(w["path"], name=name)
         wm.delete_node(node_id)
-        wm.conn.close()
+        wm.close()
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.delete("/api/workspaces/{name}/edges/{edge_id}")
-def delete_workspace_edge(name: str, edge_id: int):
+def delete_workspace_edge(
+    name: str, edge_id: int, config: ConfigManager = Depends(get_config)
+):
     """Delete an edge from a workspace.
 
     Args:
@@ -395,20 +406,22 @@ def delete_workspace_edge(name: str, edge_id: int):
     Returns:
         Dict[str, Any]: Success status.
     """
-    w = global_config.get_workspace(name)
+    w = config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
         wm = WorkspaceManager(w["path"], name=name)
         wm.delete_edge(edge_id)
-        wm.conn.close()
+        wm.close()
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.post("/api/workspaces/{name}/nodes/positions")
-def update_node_positions(name: str, req: NodePositionsUpdate):
+def update_node_positions(
+    name: str, req: NodePositionsUpdate, config: ConfigManager = Depends(get_config)
+):
     """Update node positions in a workspace.
 
     Args:
@@ -418,7 +431,7 @@ def update_node_positions(name: str, req: NodePositionsUpdate):
     Returns:
         Dict[str, Any]: Success status.
     """
-    w = global_config.get_workspace(name)
+    w = config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
@@ -437,7 +450,7 @@ def update_node_positions(name: str, req: NodePositionsUpdate):
                     (pos.get("x"), pos.get("y"), node_id),
                 )
         wm.conn.commit()
-        wm.conn.close()
+        wm.close()
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -472,6 +485,7 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
 
     config = ConfigManager("~/.keen/config.db")
     handler_id = None
+    workspace = None
 
     try:
         # Receive configuration payload
@@ -480,7 +494,6 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
         workspace_name = data.get("workspace_name", "")
 
         # Setup workspace context
-        workspace = None
         if workspace_name:
             w = config.get_workspace(workspace_name)
             if w:
@@ -581,6 +594,15 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
         if handler_id is not None:
             try:
                 logger.remove(handler_id)
+            except Exception:
+                pass
+        try:
+            config.close()
+        except Exception:
+            pass
+        if workspace:
+            try:
+                workspace.close()
             except Exception:
                 pass
         try:

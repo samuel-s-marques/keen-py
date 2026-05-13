@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import sqlite3
+import threading
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -10,11 +11,34 @@ from src.core.database_engine import DatabaseEngine
 
 
 class ConfigManager(DatabaseEngine):
+    _global_unlocked = {}
+    _global_fernet = {}
+    _lock = threading.Lock()
+
     def __init__(self, db_path: str) -> None:
         super().__init__(db_path)
         self._initialize_schema()
-        self._unlocked = False
-        self._fernet = None
+
+    @property
+    def _unlocked(self) -> bool:
+        with ConfigManager._lock:
+            return ConfigManager._global_unlocked.get(self.path, False)
+
+    @_unlocked.setter
+    def _unlocked(self, value: bool) -> None:
+        with ConfigManager._lock:
+            ConfigManager._global_unlocked[self.path] = value
+
+    @property
+    def _fernet(self):
+        with ConfigManager._lock:
+            return ConfigManager._global_fernet.get(self.path, None)
+
+    @_fernet.setter
+    def _fernet(self, value) -> None:
+        with ConfigManager._lock:
+            ConfigManager._global_fernet[self.path] = value
+
 
     def _initialize_schema(self) -> None:
         cursor = self.conn.cursor()
@@ -91,49 +115,54 @@ class ConfigManager(DatabaseEngine):
             iterations=100000,
         )
         key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-        self._fernet = Fernet(key)
+        fernet_temp = Fernet(key)
 
         verify_token_enc = self.get_preference("master_password_check")
         if verify_token_enc:
             try:
-                decrypted = self._fernet.decrypt(verify_token_enc.encode()).decode()
+                decrypted = fernet_temp.decrypt(verify_token_enc.encode()).decode()
                 if decrypted == "verification_token":
+                    self._fernet = fernet_temp
                     self._unlocked = True
                     return True
                 else:
-                    self._fernet = None
-                    self._unlocked = False
                     return False
             except Exception:
-                self._fernet = None
-                self._unlocked = False
                 return False
         else:
             # First time setup!
             # Store the verification token encrypted
-            enc = self._fernet.encrypt(b"verification_token").decode()
+            enc = fernet_temp.encrypt(b"verification_token").decode()
             self.set_preference("master_password_check", enc)
+            self._fernet = fernet_temp
             self._unlocked = True
             return True
 
+    def lock(self) -> None:
+        """Locks the configuration manager, clearing keys from memory."""
+        self._unlocked = False
+        self._fernet = None
+
     def get_api_key(self, service: str) -> str | None:
-        if not self._unlocked or not self._fernet:
+        fernet = self._fernet
+        if not self._unlocked or not fernet:
             return None
         cursor = self.conn.cursor()
         cursor.execute("SELECT api_key FROM api_keys WHERE service = ?", (service,))
         result = cursor.fetchone()
         if result:
             try:
-                return self._fernet.decrypt(result["api_key"].encode()).decode()
+                return fernet.decrypt(result["api_key"].encode()).decode()
             except Exception:
                 return None
         return None
 
     def set_api_key(self, service: str, api_key: str) -> None:
-        if not self._unlocked or not self._fernet:
+        fernet = self._fernet
+        if not self._unlocked or not fernet:
             raise RuntimeError("Key manager is locked. Unlock it first.")
         cursor = self.conn.cursor()
-        encrypted_key = self._fernet.encrypt(api_key.encode()).decode()
+        encrypted_key = fernet.encrypt(api_key.encode()).decode()
         cursor.execute(
             "INSERT OR REPLACE INTO api_keys (service, api_key) VALUES (?, ?)",
             (service, encrypted_key),
@@ -141,7 +170,8 @@ class ConfigManager(DatabaseEngine):
         self.conn.commit()
 
     def get_all_api_keys(self) -> list[dict]:
-        if not self._unlocked or not self._fernet:
+        fernet = self._fernet
+        if not self._unlocked or not fernet:
             return []
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM api_keys")
@@ -149,7 +179,7 @@ class ConfigManager(DatabaseEngine):
         for row in cursor.fetchall():
             row_dict = dict(row)
             try:
-                row_dict["api_key"] = self._fernet.decrypt(
+                row_dict["api_key"] = fernet.decrypt(
                     row_dict["api_key"].encode()
                 ).decode()
             except Exception:
