@@ -15,7 +15,9 @@ The `Hudson_Rock` module checks if an email address is associated with devices i
 ## Usage
 
 ```bash
-keen> run analysis/hudson_rock TARGET=[EMAIL_ADDRESS]
+keen > use hudson_rock
+keen(analysis/hudson_rock) > set target [EMAIL_ADDRESS]
+keen(analysis/hudson_rock) > run
 ```
 
 ## Options
