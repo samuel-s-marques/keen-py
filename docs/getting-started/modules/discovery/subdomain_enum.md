@@ -35,6 +35,6 @@ There are four diferent methods:
 
 ```bash
 keen > use subdomain_enum
-keen(discovery/subdomain_enum) > set target [DOMAIN]
+keen(discovery/subdomain_enum) > set target <domain>
 keen(discovery/subdomain_enum) > run
 ```

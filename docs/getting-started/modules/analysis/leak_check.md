@@ -31,6 +31,6 @@ The type `auto` will automatically detect the type of the target.
 
 ```bash
 keen > use leak_check
-keen(analysis/leak_check) > set target [EMAIL_ADDRESS]
+keen(analysis/leak_check) > set target <email>
 keen(analysis/leak_check) > run
 ```

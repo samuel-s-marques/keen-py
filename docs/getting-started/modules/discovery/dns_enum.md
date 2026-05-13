@@ -22,6 +22,6 @@ The `DNS_Enum` module discovers DNS records of a target domain using the dns.py 
 
 ```bash
 keen > use dns_enum
-keen(discovery/dns_enum) > set target [DOMAIN]
+keen(discovery/dns_enum) > set target <domain>
 keen(discovery/dns_enum) > run
 ```

@@ -23,6 +23,6 @@ The `Email_Enrichment` module allows you to retrieve all the information related
 
 ```bash
 keen > use email_enrichment
-keen(enumeration/email_enrichment) > set TARGET [EMAIL_ADDRESS]
+keen(enumeration/email_enrichment) > set TARGET <email>
 keen(enumeration/email_enrichment) > run
 ```

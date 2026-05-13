@@ -22,6 +22,6 @@ The `whois` module is a discovery module that can be used to retrieve registrati
 
 ```bash
 keen > use whois
-keen(discovery/whois) > set target [DOMAIN]
+keen(discovery/whois) > set target <domain>
 keen(discovery/whois) > run
 ```

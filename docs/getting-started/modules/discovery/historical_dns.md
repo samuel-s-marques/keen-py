@@ -24,6 +24,6 @@ This module gathers information from ViewDNS, HackerTarget, SecurityTrails (when
 
 ```bash
 keen > use historical_dns
-keen(discovery/historical_dns) > set target [DOMAIN]
+keen(discovery/historical_dns) > set target <domain>
 keen(discovery/historical_dns) > run
 ```
