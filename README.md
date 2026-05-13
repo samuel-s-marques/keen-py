@@ -88,6 +88,7 @@ TODO:
   - [ ] Automation via UI (.keen-playbook recipes)
   - [x] Automatic target suggestion system
   - [x] Plugin marketplace
+  - [ ] Node/Edge editing
   - [ ] Multi-language support (i18n)
   - [ ] Mapping and camera integration (Geolocation)
   - [ ] Integration with malshare and similar services
