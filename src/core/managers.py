@@ -246,16 +246,21 @@ class ConfigManager(DatabaseEngine):
         if not ws:
             raise ValueError(f"Workspace {old_name} not found.")
 
-        new_name = get_valid_name(new_name)
+        if not all(c.isalnum() or c in " _-" for c in new_name):
+            raise ValueError(
+                "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."
+            )
+
+        filename = new_name.replace(" ", "_")
 
         old_path = ws["path"]
-        new_path = os.path.join(os.path.dirname(old_path), f"{new_name}.keen")
+        new_path = os.path.join(os.path.dirname(old_path), f"{filename}.keen")
         new_path = os.path.normpath(new_path).replace("\\", "/")
 
-        if os.path.exists(new_path):
+        if os.path.exists(new_path) and new_path != old_path:
             raise ValueError(f"A workspace file for {new_name} already exists.")
 
-        if os.path.exists(old_path):
+        if os.path.exists(old_path) and new_path != old_path:
             os.rename(old_path, new_path)
 
         cursor = self.conn.cursor()
