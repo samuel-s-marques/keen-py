@@ -276,14 +276,14 @@ class WorkspaceManager(DatabaseEngine):
                 FOREIGN KEY(target_id) REFERENCES nodes(id)
             )
         """)
-        
+
         # Add positions columns if they don't exist
         try:
             cursor.execute("ALTER TABLE nodes ADD COLUMN x REAL")
             cursor.execute("ALTER TABLE nodes ADD COLUMN y REAL")
         except Exception:
             pass
-            
+
         self.conn.commit()
 
     def get_or_add_node(
@@ -353,3 +353,39 @@ class WorkspaceManager(DatabaseEngine):
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM edge WHERE id = ?", (edge_id,))
         self.conn.commit()
+
+    def export(self, type: str, path: str) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM nodes")
+        nodes = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM edge")
+        edges = [dict(row) for row in cursor.fetchall()]
+
+        match type:
+            case "pdf":
+                self._export_to_pdf(nodes, edges, path)
+            case "html":
+                self._export_to_html(nodes, edges, path)
+            case "markdown":
+                self._export_to_markdown(nodes, edges, path)
+            case "json":
+                self._export_to_json(nodes, edges, path)
+            case "stix2":
+                self._export_to_stix2(nodes, edges, path)
+            case _:
+                raise ValueError(f"Unknown export type: {type}")
+
+    def _export_to_pdf(self, nodes, edges, path):
+        pass
+
+    def _export_to_html(self, nodes, edges, path):
+        pass
+
+    def _export_to_markdown(self, nodes, edges, path):
+        pass
+
+    def _export_to_json(self, nodes, edges, path):
+        pass
+
+    def _export_to_stix2(self, nodes, edges, path):
+        pass
