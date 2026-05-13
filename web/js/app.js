@@ -33,7 +33,10 @@ document.addEventListener('DOMContentLoaded', () => {
         'ipv6-addr': ['ip'],
         'x-phone-number': ['phone'],
         'phone-number': ['phone'],
-        'x-url': ['url']
+        'x-url': ['url'],
+        'person': ['name', 'username'],
+        'user-account': ['username'],
+        'organization': ['name', 'domain'],
     };
 
     // DOM Elements
@@ -108,7 +111,126 @@ document.addEventListener('DOMContentLoaded', () => {
         modalNewWs.classList.remove('active');
         modalSettings.classList.remove('active');
         modalRenameWs.classList.remove('active');
+        document.getElementById('modal-create-entity').classList.remove('active');
     }));
+
+    // Entity Creation Modal
+    const modalCreateEntity = document.getElementById('modal-create-entity');
+    const entityTypeSelect = document.getElementById('entity-type-select');
+    const entityValueInput = document.getElementById('entity-value');
+    const entityPropsContainer = document.getElementById('entity-props-container');
+    const entityPropsFields = document.getElementById('entity-props-fields');
+    const btnAddCustomProp = document.getElementById('btn-add-custom-prop');
+    const btnConfirmCreateEntity = document.getElementById('btn-confirm-create-entity');
+
+    document.getElementById('btn-add-entity').addEventListener('click', () => {
+        if (!activeWorkspace) {
+            alert('Please select a workspace first.');
+            return;
+        }
+        // Reset form
+        entityTypeSelect.value = '';
+        entityValueInput.value = '';
+        entityPropsFields.innerHTML = '';
+        entityPropsContainer.style.display = 'none';
+        modalCreateEntity.classList.add('active');
+    });
+
+    entityTypeSelect.addEventListener('change', () => {
+        const selected = entityTypeSelect.selectedOptions[0];
+        const propsStr = selected.dataset.props || '';
+        entityPropsFields.innerHTML = '';
+
+        if (propsStr || selected.value === 'custom') {
+            entityPropsContainer.style.display = 'block';
+            if (propsStr) {
+                const props = propsStr.split(',');
+                props.forEach(prop => {
+                    addPropertyField(prop.trim(), '');
+                });
+            }
+        } else {
+            entityPropsContainer.style.display = 'none';
+        }
+    });
+
+    function addPropertyField(name = '', value = '', removable = false) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.placeholder = 'Property name';
+        nameInput.value = name;
+        nameInput.style.flex = '1';
+        nameInput.className = 'entity-prop-name';
+        if (name && !removable) nameInput.readOnly = true;
+
+        const valInput = document.createElement('input');
+        valInput.type = 'text';
+        valInput.placeholder = 'Value';
+        valInput.value = value;
+        valInput.style.flex = '2';
+        valInput.className = 'entity-prop-value';
+
+        row.appendChild(nameInput);
+        row.appendChild(valInput);
+
+        if (removable || !name) {
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'icon-btn';
+            removeBtn.style.cssText = 'color: var(--error); font-size: 0.85rem; padding: 4px;';
+            removeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+            removeBtn.onclick = () => row.remove();
+            row.appendChild(removeBtn);
+        }
+
+        entityPropsFields.appendChild(row);
+        return row;
+    }
+
+    btnAddCustomProp.addEventListener('click', () => {
+        addPropertyField('', '', true);
+    });
+
+    btnConfirmCreateEntity.addEventListener('click', async () => {
+        const type = entityTypeSelect.value;
+        const value = entityValueInput.value.trim();
+        if (!type || !value) {
+            alert('Please select a type and enter a value.');
+            return;
+        }
+
+        // Gather properties into metadata
+        const metadata = {};
+        const nameInputs = entityPropsFields.querySelectorAll('.entity-prop-name');
+        const valInputs = entityPropsFields.querySelectorAll('.entity-prop-value');
+        nameInputs.forEach((ni, i) => {
+            const propName = ni.value.trim();
+            const propVal = valInputs[i] ? valInputs[i].value.trim() : '';
+            if (propName && propVal) {
+                metadata[propName] = propVal;
+            }
+        });
+
+        try {
+            const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, value, metadata })
+            });
+            if (res.ok) {
+                modalCreateEntity.classList.remove('active');
+                selectWorkspace(activeWorkspace);
+                termPrint(`Entity created: ${value} (${type})`, 'sys-msg');
+            } else {
+                const err = await res.json();
+                alert(`Failed to create entity: ${err.error || 'Unknown error'}`);
+            }
+        } catch (e) {
+            alert('Failed to create entity. Check server connection.');
+        }
+    });
 
     // Settings API Keys
     btnUnlockSettings.addEventListener('click', async () => {
@@ -627,7 +749,12 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (n.type.includes('domain')) { icon = '\uf0ac'; color = '#00f0ff'; }
             else if (n.type.includes('ip')) { icon = '\uf233'; color = '#ff00ff'; }
             else if (n.type.includes('phone')) { icon = '\uf095'; color = '#00e676'; }
+            else if (n.type.includes('person')) { icon = '\uf007'; color = '#ff6f61'; }
+            else if (n.type.includes('user-account')) { icon = '\uf2bd'; color = '#ab47bc'; }
             else if (n.type.includes('organization')) { icon = '\uf1ad'; color = '#ffb300'; }
+            else if (n.type.includes('url')) { icon = '\uf0c1'; color = '#26c6da'; }
+            else if (n.type.includes('breach')) { icon = '\uf071'; color = '#ff5252'; }
+            else if (n.type.includes('service')) { icon = '\uf233'; color = '#ffa726'; }
 
             const visNode = {
                 id: n.id || n.value,
