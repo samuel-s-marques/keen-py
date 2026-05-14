@@ -1427,7 +1427,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             }
         }
-        editNodeTypeSelect.value = typeFound ? node.type : 'custom';
+        if (!typeFound && node.type) {
+            const newOpt = document.createElement('option');
+            newOpt.value = node.type;
+            newOpt.textContent = `Extended (${node.type})`;
+            editNodeTypeSelect.appendChild(newOpt);
+        }
+        editNodeTypeSelect.value = node.type || 'custom';
 
         editNodePropsFields.innerHTML = '';
         if (node.metadata) {
