@@ -44,5 +44,5 @@ Explore the documentation to get up and running, configure your environment, or 
 
 ### Developer & Community
 - **[Developing New Modules](developer/developing_new_modules.md)**: Guide to developing new modules for the framework.
-- **[Contributing](about/contributing.md)**: Guidelines for contributing code, reporting bugs, and submitting pull requests.
+- **[Contributing](about/contributing_to_keen.md)**: Guidelines for contributing code, reporting bugs, and submitting pull requests.
 - **[Roadmap](about/roadmap.md)**: Planned features, upcoming integrations, and framework milestones.
