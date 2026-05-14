@@ -2,7 +2,7 @@ from typing import Any
 from src.utils.print_utils import warn, error, success
 from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
-import requests
+import httpx
 
 from src.core.base_module import BaseModule
 
@@ -29,6 +29,7 @@ class LeakModule(BaseModule):
             "HIBP_APIKEY": ["", False, "API Key for Have I Been Pwned.", ""],
             "LEAKCHECK_APIKEY": ["", False, "API Key for LeakCheck.", ""],
             "DEHASHED_APIKEY": ["", False, "API Key for DeHashed.", ""],
+            "RAPID_API_KEY": ["", False, "API Key for RapidAPI.", ""],
         },
     }
 
@@ -70,9 +71,15 @@ class LeakModule(BaseModule):
                 dh = await self.loading(
                     f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
+                bd = await self.loading(
+                    f"Checking {target} on BreachDirectory...",
+                    self.check_breach_directory,
+                    target,
+                )
                 all_leaks.extend(lc or [])
                 all_leaks.extend(bv or [])
                 all_leaks.extend(dh or [])
+                all_leaks.extend(bd or [])
             case "email":
                 hb = await self.loading(
                     f"Checking {target} on HIBP...", self.check_HIBP, target
@@ -86,10 +93,16 @@ class LeakModule(BaseModule):
                 dh = await self.loading(
                     f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
+                bd = await self.loading(
+                    f"Checking {target} on BreachDirectory...",
+                    self.check_breach_directory,
+                    target,
+                )
                 all_leaks.extend(hb or [])
                 all_leaks.extend(lc or [])
                 all_leaks.extend(bv or [])
                 all_leaks.extend(dh or [])
+                all_leaks.extend(bd or [])
             case "phone":
                 lc = await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
@@ -123,10 +136,11 @@ class LeakModule(BaseModule):
             return []
 
         try:
-            r = requests.get(
-                f"https://haveibeenpwned.com/api/v3/breachedAccount/{target}",
-                headers={"User-Agent": "keen-py/1.0.0", "hibp-api-key": api_key},
-            )
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.get(
+                    f"https://haveibeenpwned.com/api/v3/breachedAccount/{target}",
+                    headers={"User-Agent": "keen-py/1.0.0", "hibp-api-key": api_key},
+                )
 
             if r.status_code != 200:
                 error(f"{target} not found in any data breach.")
@@ -165,17 +179,18 @@ class LeakModule(BaseModule):
                 "Content-Type": "application/json",
             }
 
-            r = requests.post(
-                "https://breach.vip/api/search", headers=headers, json=payload
-            )
-
-            if r.status_code == 403:
-                warn("BreachVIP returned 403. Attempting via proxy...")
-                r = requests.post(
-                    "https://swolesome.pages.dev/api/proxy",
-                    headers=headers,
-                    json=payload,
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.post(
+                    "https://breach.vip/api/search", headers=headers, json=payload
                 )
+
+                if r.status_code == 403:
+                    warn("BreachVIP returned 403. Attempting via proxy...")
+                    r = await client.post(
+                        "https://swolesome.pages.dev/api/proxy",
+                        headers=headers,
+                        json=payload,
+                    )
 
             try:
                 res = r.json()
@@ -247,7 +262,8 @@ class LeakModule(BaseModule):
             if api_key:
                 url = f"https://leakcheck.io/api/v2/query/{target}"
 
-            r = requests.get(url, headers=headers)
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.get(url, headers=headers)
 
             if r.status_code == 403:
                 error("Limit exceeded for LeakCheck. Try again later.")
@@ -331,9 +347,10 @@ class LeakModule(BaseModule):
                 "DeHashed-Api-Key": api_key,
                 "Content-Type": "application/json",
             }
-            r = requests.post(
-                "https://api.dehashed.com/v2/search", headers=headers, data=payload
-            )
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.post(
+                    "https://api.dehashed.com/v2/search", headers=headers, json=payload
+                )
             res = r.json()
 
             if r.status_code != 200:
@@ -399,6 +416,86 @@ class LeakModule(BaseModule):
 
         except Exception as e:
             error(f"Error checking DeHashed: {e}")
+            return []
+
+    async def check_breach_directory(self, target: str) -> list[dict]:
+        api_key = self.options.get("RAPID_API_KEY")
+
+        if not api_key:
+            warn("API Key not found for BreachDirectory.")
+            return []
+
+        try:
+            headers: dict = {
+                "x-rapidapi-key": api_key,
+                "x-rapidapi-host": "breachdirectory.p.rapidapi.com",
+                "Content-Type": "application/json",
+            }
+            params: dict = {"term": target, "func": "auto"}
+
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.get(
+                    "https://breachdirectory.p.rapidapi.com/",
+                    headers=headers,
+                    params=params,
+                )
+            res = r.json()
+
+            if r.status_code != 200 or res.get("success") is not True:
+                error(
+                    f"Error checking BreachDirectory: {res.get('error', 'Unknown Error')}.\nStatus: {r.status_code}"
+                )
+                return []
+
+            results = res.get("result", [])
+
+            output = []
+
+            def process_result(item: dict) -> list[dict]:
+                processed = []
+                sources = item.get("sources", [])
+                if not sources:
+                    sources = ["Unknown"]
+
+                extra_info = {}
+                for field in ["password", "sha1", "hash"]:
+                    if item.get(field):
+                        extra_info[field] = item[field]
+
+                for source in sources:
+                    extra_data = [f"{k}: {v}" for k, v in extra_info.items()]
+                    extra_str = (
+                        f" - Extra info: {', '.join(extra_data)}" if extra_data else ""
+                    )
+                    success(f"{target} was found in {source} data breach{extra_str}")
+
+                    processed.append(
+                        {
+                            "source": "BreachDirectory",
+                            "breach_name": source,
+                            "date": None,
+                            "categories": [],
+                            "extra_info": extra_info.copy(),
+                        }
+                    )
+                return processed
+
+            import asyncio
+            from concurrent.futures import ThreadPoolExecutor
+
+            loop = asyncio.get_running_loop()
+            with ThreadPoolExecutor() as pool:
+                tasks = [
+                    loop.run_in_executor(pool, process_result, item) for item in results
+                ]
+                if tasks:
+                    batch_results = await asyncio.gather(*tasks)
+                    for sublist in batch_results:
+                        output.extend(sublist)
+
+            return output
+        except Exception as e:
+            error(f"Error checking BreachDirectory: {e}")
             return []
 
     async def _save_results(self, target: str, results: dict) -> None:
