@@ -7,45 +7,48 @@ site_author: Samuel Marques
 site_description: Keen, as in keen observation, is a reconnaissance and OSINT tool for ethical hacking and penetration testing.
 
 nav:
-      - Home: index.md
-      - Getting Started:
-              - Installation: getting-started/installation.md
-              - Usage: getting-started/usage.md
-              - Workspace Management: getting-started/workspace_management.md
-              - API Keys Management: getting-started/api_keys_management.md
-              - Web Server: getting-started/web.md
-      - Modules:
-              - Selecting and Using a Module: modules/index.md
-              - Analysis:
-                      - Hudson Rock: modules/analysis/hudson_rock.md
-                      - Leak Check: modules/analysis/leak_check.md
-              - Discovery:
-                      - DNS Enum: modules/discovery/dns_enum.md
-                      - Historical DNS: modules/discovery/historical_dns.md
-                      - Subdomain Enum: modules/discovery/subdomain_enum.md
-                      - WHOIS: modules/discovery/whois.md
-              - Enumeration:
-                      - Email Enrichment: modules/enumeration/email_enrichment.md
-                      - Email Verification: modules/enumeration/email_verification.md
-                      - Github Enumeration: modules/enumeration/github_enum.md
-                      - Holehe: modules/enumeration/holehe.md
-                      - Phone Verification: modules/enumeration/phone_verification.md
-                      - Sherlock: modules/enumeration/sherlock.md
-                      - SOCMINT: modules/enumeration/socmint.md
-              - Web:
-                      - WAF/CDN Detection: modules/web/waf_detection.md
-              - Helpers:
-                      - Email to Username: modules/helpers/email_to_username.md
-                      - URL to Domain: modules/helpers/url_to_domain.md
-      - Developer:
-              - Developing New Modules: developer/developing_new_modules.md
-      - About:
-              - Contributing: about/contributing_to_keen.md
-              - License: about/license.md
-              - Roadmap: about/roadmap.md
-              - Changelog: about/changelog.md
+        - Home: index.md
+        - Getting Started:
+                  - Installation: getting-started/installation.md
+                  - Usage: getting-started/usage.md
+                  - Workspace Management: getting-started/workspace_management.md
+                  - API Keys Management: getting-started/api_keys_management.md
+                  - Web Server: getting-started/web.md
+        - Modules:
+                  - Selecting and Using a Module: modules/index.md
+                  - Analysis:
+                            - Hudson Rock: modules/analysis/hudson_rock.md
+                            - Leak Check: modules/analysis/leak_check.md
+                  - Discovery:
+                            - DNS Enum: modules/discovery/dns_enum.md
+                            - Historical DNS: modules/discovery/historical_dns.md
+                            - Subdomain Enum: modules/discovery/subdomain_enum.md
+                            - WHOIS: modules/discovery/whois.md
+                  - Enumeration:
+                            - Email Enrichment: modules/enumeration/email_enrichment.md
+                            - Email Verification: modules/enumeration/email_verification.md
+                            - Github Enumeration: modules/enumeration/github_enum.md
+                            - Holehe: modules/enumeration/holehe.md
+                            - Phone Verification: modules/enumeration/phone_verification.md
+                            - Sherlock: modules/enumeration/sherlock.md
+                            - SOCMINT: modules/enumeration/socmint.md
+                  - Web:
+                            - WAF/CDN Detection: modules/web/waf_detection.md
+                  - Helpers:
+                            - Email to Username: modules/helpers/email_to_username.md
+                            - URL to Domain: modules/helpers/url_to_domain.md
+        - Developer:
+                  - Developing New Modules: developer/developing_new_modules.md
+        - About:
+                  - Contributing: about/contributing_to_keen.md
+                  - License: about/license.md
+                  - Roadmap: about/roadmap.md
+                  - Changelog: about/changelog.md
 theme: readthedocs
 markdown_extensions:
-      - admonition
-      - pymdownx.details
-      - pymdownx.superfences
+        - admonition
+        - pymdownx.details
+        - pymdownx.superfences
+
+exclude_docs: |
+        requirements-docs.txt
