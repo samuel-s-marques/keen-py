@@ -1,4 +1,4 @@
-# Workspace
+# Workspace Management
 
 Workspaces allow you to save your investigations and organize your findings. They are stored in `.keen` files, in the `cases` folder.
 
@@ -12,7 +12,7 @@ Workspaces are not required to use Keen. You can use Keen without any workspace,
 
 ### Creating a workspace
 
-To create a new workspace, use the `workspace new` command:
+To create a new workspace, use the `workspace create` command:
 ```
 keen > workspace create <workspace-name> <optional description>
 ```
