@@ -1,3 +1,4 @@
+from src.utils.print_utils import success
 from urllib.parse import urlparse
 
 from src.core.base_module import BaseModule
@@ -25,6 +26,8 @@ class UrlToDomain(BaseModule):
 
         target: str = str(self.options.get("TARGET")).lower()
         domain: str = await self.execute(target)
+
+        success(f"Extracted domain: {domain}")
 
         await self._save_results(domain)
 

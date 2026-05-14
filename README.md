@@ -95,6 +95,7 @@ TODO:
   - [ ] Integration with MISP and similar services
   - [ ] Collaboration features (shared workspaces, role-based access)
   - [ ] Advanced threat intelligence (OSINT correlation, darknet monitoring)
+  - [ ] Add history
 - [ ] Add notifications (Telegram, Discord, Email) for job completion/failure
 - [ ] Add PDF and documents generation capabilities
 - [ ] Add plugins

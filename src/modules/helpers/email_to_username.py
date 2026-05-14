@@ -1,3 +1,4 @@
+from src.utils.print_utils import success
 from src.core.base_module import BaseModule
 
 
@@ -28,6 +29,8 @@ class EmailToUsername(BaseModule):
 
         email: str = str(self.options.get("TARGET")).lower()
         username: str = await self.execute(email)
+
+        success(f"Extracted username: {username}")
 
         await self._save_results(email, username)
 
