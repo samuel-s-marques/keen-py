@@ -1324,7 +1324,6 @@ document.addEventListener('DOMContentLoaded', () => {
         editItem.className = 'context-menu-item';
         editItem.style.borderTop = '1px solid var(--border-color)';
         editItem.style.marginTop = '4px';
-        editItem.style.paddingTop = '8px';
         editItem.innerHTML = `<i class="fa-solid fa-pen"></i> Edit Node`;
         editItem.onclick = (e) => {
             e.stopPropagation();
@@ -1474,6 +1473,26 @@ document.addEventListener('DOMContentLoaded', () => {
         modalEditEdge.classList.add('active');
     }
 
+    function parseMetaValue(val) {
+        if (val === 'true') return true;
+        if (val === 'false') return false;
+        if (val === 'null') return null;
+        try {
+            if (val.startsWith('{') || val.startsWith('[')) {
+                return JSON.parse(val);
+            }
+            if (!isNaN(val) && val !== '') {
+                const num = Number(val);
+                if (Number.isSafeInteger(num)) {
+                    return num;
+                }
+            }
+        } catch (e) {
+            // Fallback to string
+        }
+        return val;
+    }
+
     if (btnConfirmEditNode) {
         btnConfirmEditNode.addEventListener('click', async () => {
             const nodeId = editNodeIdInput.value;
@@ -1492,7 +1511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const propName = ni.value.trim();
                 const propVal = valInputs[i] ? valInputs[i].value.trim() : '';
                 if (propName && propVal) {
-                    metadata[propName] = propVal;
+                    metadata[propName] = parseMetaValue(propVal);
                 }
             });
 
@@ -1533,7 +1552,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const propName = ni.value.trim();
                 const propVal = valInputs[i] ? valInputs[i].value.trim() : '';
                 if (propName && propVal) {
-                    metadata[propName] = propVal;
+                    metadata[propName] = parseMetaValue(propVal);
                 }
             });
 
