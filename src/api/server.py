@@ -73,6 +73,17 @@ class NodeCreate(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
 
 
+class NodeUpdate(BaseModel):
+    type: Optional[str] = None
+    value: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class EdgeUpdate(BaseModel):
+    relationship: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
 class APIShellContext:
     def __init__(self, workspace: WorkspaceManager | None = None):
         self.workspace = workspace
@@ -425,6 +436,62 @@ def delete_workspace_edge(
         wm = WorkspaceManager(w["path"], name=name)
         wm.delete_edge(edge_id)
         wm.close()
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.put("/api/workspaces/{name}/nodes/{node_id}")
+def update_workspace_node(
+    name: str, node_id: int, req: NodeUpdate, config: ConfigManager = Depends(get_config)
+):
+    """Update a node in a workspace.
+
+    Args:
+        name (str): Workspace name.
+        node_id (int): Node ID.
+        req (NodeUpdate): Updated node data.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
+    w = config.get_workspace(name)
+    if not w:
+        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
+    try:
+        wm = WorkspaceManager(w["path"], name=name)
+        updated = wm.update_node(node_id, req.type, req.value, req.metadata)
+        wm.close()
+        if not updated:
+            return JSONResponse(status_code=404, content={"error": "Node not found or no changes made"})
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.put("/api/workspaces/{name}/edges/{edge_id}")
+def update_workspace_edge(
+    name: str, edge_id: int, req: EdgeUpdate, config: ConfigManager = Depends(get_config)
+):
+    """Update an edge in a workspace.
+
+    Args:
+        name (str): Workspace name.
+        edge_id (int): Edge ID.
+        req (EdgeUpdate): Updated edge data.
+
+    Returns:
+        Dict[str, Any]: Success status.
+    """
+    w = config.get_workspace(name)
+    if not w:
+        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
+    try:
+        wm = WorkspaceManager(w["path"], name=name)
+        updated = wm.update_edge(edge_id, req.relationship, req.metadata)
+        wm.close()
+        if not updated:
+            return JSONResponse(status_code=404, content={"error": "Edge not found or no changes made"})
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
