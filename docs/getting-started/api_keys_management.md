@@ -18,6 +18,7 @@ Currently, the following API keys are supported:
 - `APILAYER_EMAIL_VER_APIKEY`: [APILayer Email Verification](https://marketplace.apilayer.com/email_verification-api)
 - `GITHUB_TOKEN`: [GitHub](https://github.com/)
 - `APILAYER_PHONE_VER_APIKEY`: [APILayer Number Verification](https://marketplace.apilayer.com/number_verification-api)
+- `RAPID_API_KEY`: [RapidAPI](https://rapidapi.com/)
 
 ## Usage
 
