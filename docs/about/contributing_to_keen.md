@@ -10,6 +10,7 @@ Whether you're fixing a bug, adding a new intelligence module, improving documen
 
 ### Reporting Bugs
 If you encounter unexpected behavior, crashes, or parsing errors while running Keen, please open an issue on GitHub. Include:
+
 - Your operating system and Python version.
 - The exact command or module you were running.
 - A full traceback / error log if available.
@@ -17,12 +18,14 @@ If you encounter unexpected behavior, crashes, or parsing errors while running K
 
 ### Suggesting Enhancements & Features
 Have an idea for a new third-party integration, UI feature, or reconnaissance technique? Open a feature request issue explaining:
+
 - The goal of the feature.
 - How it enhances the investigation workflow.
 - Any relevant API documentation or third-party services involved.
 
 ### Developing New Modules
 The framework is built to be highly extensible. If you want to build a new OSINT module (e.g., adding Shodan, Censys, or custom scrapers), check out our dedicated guide:
+
 - **[Developing New Modules](../developer/developing_new_modules.md)**
 
 ### Improving Documentation
