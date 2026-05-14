@@ -4,11 +4,20 @@ Keen uses API keys to authenticate with various services. API keys are stored in
 
 Before using any module that requires API keys, you need to unlock the key manager. Keen will automatically prompt you to unlock the key manager when you try to use a module that requires API keys. But you can also unlock it manually using the `api_keys unlock` command.
 
-The API keys are encrypted using a master password set by the user. **This master password is not stored anywhere** and will be required to unlock the key manager every time you start Keen. Only the derived `Fernet` key is held in-memory in the active `ConfigManager` instance for the duration of the session.
+The API keys are encrypted using a master password set by the user. The master password is used to derive an encryption key using `PBKDF2-HMAC` with 100,000 iterations of `SHA-256` and a unique, random 16-byte salt. This derived key is then used by `Fernet` (which uses AES-128 in CBC mode) to encrypt and decrypt the API keys. The salt is stored along with the encrypted API keys in the configuration manager.
 
-Keen uses `PBKDF2-HMAC` with 100,000 iterations of `SHA-256` and a unique, random 16-byte salt to derive the encryption key, which is then used by `Fernet` (which uses AES-128 in CBC mode) to encrypt and decrypt the API keys. The salt is stored along with the encrypted API keys in the configuration manager.
+If there is an existing master password, Keen will prompt to unlock it up to 3 times when needed. If not, they are prompted to set one. You can skip this step by pressing **Enter** or `ctrl + c`. If you skip this step, you will not be able to use any module that requires API keys until you set a master password and unlock the key manager.
 
-If there is an existing master password, Keen will prompt to unlock it up to 3 times when needed. If not, they are prompted to set one. You can skip this step by pressing **Enter** or `ctrl + c`.
+Currently, the following API keys are supported:
+
+- `HIBP_APIKEY`: [Have I Been Pwned](https://haveibeenpwned.com/)
+- `LEAKCHECK_APIKEY`: [LeakCheck](https://leakcheck.io/)
+- `DEHASHED_APIKEY`: [DeHashed](https://dehashed.com/)
+- `SECURITYTRAILS_API_KEY`: [SecurityTrails](https://securitytrails.com/)
+- `HUNTER_IO_APIKEY`: [Hunter.io](https://hunter.io/)
+- `APILAYER_EMAIL_VER_APIKEY`: [APILayer Email Verification](https://marketplace.apilayer.com/email_verification-api)
+- `GITHUB_TOKEN`: [GitHub](https://github.com/)
+- `APILAYER_PHONE_VER_APIKEY`: [APILayer Number Verification](https://marketplace.apilayer.com/number_verification-api)
 
 ## Usage
 
