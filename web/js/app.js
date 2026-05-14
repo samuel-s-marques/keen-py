@@ -129,7 +129,9 @@ document.addEventListener('DOMContentLoaded', () => {
         modalNewWs.classList.remove('active');
         modalSettings.classList.remove('active');
         modalRenameWs.classList.remove('active');
-        document.getElementById('modal-create-entity').classList.remove('active');
+        document.getElementById('modal-create-node').classList.remove('active');
+        document.getElementById('modal-edit-node').classList.remove('active');
+        document.getElementById('modal-edit-edge').classList.remove('active');
         wsNameWarning.style.display = 'none';
     }));
 
@@ -141,35 +143,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Entity Creation Modal
-    const modalCreateEntity = document.getElementById('modal-create-entity');
-    const entityTypeSelect = document.getElementById('entity-type-select');
-    const entityValueInput = document.getElementById('entity-value');
-    const entityPropsContainer = document.getElementById('entity-props-container');
-    const entityPropsFields = document.getElementById('entity-props-fields');
+    // Node Creation Modal
+    const modalCreateNode = document.getElementById('modal-create-node');
+    const nodeTypeSelect = document.getElementById('node-type-select');
+    const nodeValueInput = document.getElementById('node-value');
+    const nodePropsContainer = document.getElementById('node-props-container');
+    const nodePropsFields = document.getElementById('node-props-fields');
     const btnAddCustomProp = document.getElementById('btn-add-custom-prop');
-    const btnConfirmCreateEntity = document.getElementById('btn-confirm-create-entity');
+    const btnConfirmCreateNode = document.getElementById('btn-confirm-create-node');
 
-    document.getElementById('btn-add-entity').addEventListener('click', () => {
+    document.getElementById('btn-add-node').addEventListener('click', () => {
         if (!activeWorkspace) {
             alert('Please select a workspace first.');
             return;
         }
         // Reset form
-        entityTypeSelect.value = '';
-        entityValueInput.value = '';
-        entityPropsFields.innerHTML = '';
-        entityPropsContainer.style.display = 'none';
-        modalCreateEntity.classList.add('active');
+        nodeTypeSelect.value = '';
+        nodeValueInput.value = '';
+        nodePropsFields.innerHTML = '';
+        nodePropsContainer.style.display = 'none';
+        modalCreateNode.classList.add('active');
     });
 
-    entityTypeSelect.addEventListener('change', () => {
-        const selected = entityTypeSelect.selectedOptions[0];
+    nodeTypeSelect.addEventListener('change', () => {
+        const selected = nodeTypeSelect.selectedOptions[0];
         const propsStr = selected.dataset.props || '';
-        entityPropsFields.innerHTML = '';
+        nodePropsFields.innerHTML = '';
 
         if (propsStr || selected.value === 'custom') {
-            entityPropsContainer.style.display = 'block';
+            nodePropsContainer.style.display = 'block';
             if (propsStr) {
                 const props = propsStr.split(',');
                 props.forEach(prop => {
@@ -177,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         } else {
-            entityPropsContainer.style.display = 'none';
+            nodePropsContainer.style.display = 'none';
         }
     });
 
@@ -189,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
         nameInput.placeholder = 'Property name';
         nameInput.value = name;
         nameInput.style.flex = '1';
-        nameInput.className = 'entity-prop-name';
+        nameInput.className = 'node-prop-name';
         if (name && !removable) nameInput.readOnly = true;
 
         const valInput = document.createElement('input');
@@ -197,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
         valInput.placeholder = 'Value';
         valInput.value = value;
         valInput.style.flex = '2';
-        valInput.className = 'entity-prop-value';
+        valInput.className = 'node-prop-value';
 
         row.appendChild(nameInput);
         row.appendChild(valInput);
@@ -212,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
             row.appendChild(removeBtn);
         }
 
-        entityPropsFields.appendChild(row);
+        nodePropsFields.appendChild(row);
         return row;
     }
 
@@ -220,9 +222,9 @@ document.addEventListener('DOMContentLoaded', () => {
         addPropertyField('', '', true);
     });
 
-    btnConfirmCreateEntity.addEventListener('click', async () => {
-        const type = entityTypeSelect.value;
-        const value = entityValueInput.value.trim();
+    btnConfirmCreateNode.addEventListener('click', async () => {
+        const type = nodeTypeSelect.value;
+        const value = nodeValueInput.value.trim();
         if (!type || !value) {
             alert('Please select a type and enter a value.');
             return;
@@ -230,8 +232,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Gather properties into metadata
         const metadata = {};
-        const nameInputs = entityPropsFields.querySelectorAll('.entity-prop-name');
-        const valInputs = entityPropsFields.querySelectorAll('.entity-prop-value');
+        const nameInputs = nodePropsFields.querySelectorAll('.node-prop-name');
+        const valInputs = nodePropsFields.querySelectorAll('.node-prop-value');
         nameInputs.forEach((ni, i) => {
             const propName = ni.value.trim();
             const propVal = valInputs[i] ? valInputs[i].value.trim() : '';
@@ -247,15 +249,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ type, value, metadata })
             });
             if (res.ok) {
-                modalCreateEntity.classList.remove('active');
+                modalCreateNode.classList.remove('active');
                 selectWorkspace(activeWorkspace);
-                termPrint(`Entity created: ${value} (${type})`, 'sys-msg');
+                termPrint(`Node created: ${value} (${type})`, 'sys-msg');
             } else {
                 const err = await res.json();
-                alert(`Failed to create entity: ${err.error || 'Unknown error'}`);
+                alert(`Failed to create node: ${err.error || 'Unknown error'}`);
             }
         } catch (e) {
-            alert('Failed to create entity. Check server connection.');
+            alert('Failed to create node. Check server connection.');
         }
     });
 
@@ -1166,6 +1168,16 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenuItems.innerHTML = '';
 
         if (edgeId !== null) {
+            const editEdgeItem = document.createElement('div');
+            editEdgeItem.className = 'context-menu-item';
+            editEdgeItem.innerHTML = `<i class="fa-solid fa-pen"></i> Edit Edge`;
+            editEdgeItem.onclick = (e) => {
+                e.stopPropagation();
+                contextMenu.classList.add('hidden');
+                openEditEdgeModal(edgeId);
+            };
+            contextMenuItems.appendChild(editEdgeItem);
+
             const deleteEdgeItem = document.createElement('div');
             deleteEdgeItem.className = 'context-menu-item';
             deleteEdgeItem.style.color = 'var(--error)';
@@ -1257,12 +1269,23 @@ document.addEventListener('DOMContentLoaded', () => {
             contextMenuItems.appendChild(empty);
         }
 
+        const editItem = document.createElement('div');
+        editItem.className = 'context-menu-item';
+        editItem.style.borderTop = '1px solid var(--border-color)';
+        editItem.style.marginTop = '4px';
+        editItem.style.paddingTop = '8px';
+        editItem.innerHTML = `<i class="fa-solid fa-pen"></i> Edit Node`;
+        editItem.onclick = (e) => {
+            e.stopPropagation();
+            contextMenu.classList.add('hidden');
+            openEditNodeModal(node);
+        };
+        contextMenuItems.appendChild(editItem);
+
         const deleteItem = document.createElement('div');
         deleteItem.className = 'context-menu-item';
         deleteItem.style.color = 'var(--error)';
-        deleteItem.style.borderTop = '1px solid var(--border-color)';
         deleteItem.style.marginTop = '4px';
-        deleteItem.style.paddingTop = '8px';
         deleteItem.innerHTML = `<i class="fa-solid fa-trash"></i> Delete Node`;
         deleteItem.onclick = (e) => {
             e.stopPropagation();
@@ -1278,6 +1301,203 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.style.left = `${x}px`;
         contextMenu.style.top = `${y}px`;
         contextMenu.classList.remove('hidden');
+    }
+
+    // --- Node / Edge Editing Handlers ---
+
+    const modalEditNode = document.getElementById('modal-edit-node');
+    const editNodeIdInput = document.getElementById('edit-node-id');
+    const editNodeTypeSelect = document.getElementById('edit-node-type');
+    const editNodeValueInput = document.getElementById('edit-node-value');
+    const editNodePropsFields = document.getElementById('edit-node-props-fields');
+    const btnAddEditNodeProp = document.getElementById('btn-add-edit-node-prop');
+    const btnConfirmEditNode = document.getElementById('btn-confirm-edit-node');
+
+    const modalEditEdge = document.getElementById('modal-edit-edge');
+    const editEdgeIdInput = document.getElementById('edit-edge-id');
+    const editEdgeRelationshipInput = document.getElementById('edit-edge-relationship');
+    const editEdgePropsFields = document.getElementById('edit-edge-props-fields');
+    const btnAddEditEdgeProp = document.getElementById('btn-add-edit-edge-prop');
+    const btnConfirmEditEdge = document.getElementById('btn-confirm-edit-edge');
+
+    function createEditPropField(container, name = '', value = '') {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.placeholder = 'Property name';
+        nameInput.value = name;
+        nameInput.style.flex = '1';
+        nameInput.className = 'edit-prop-name';
+
+        const valInput = document.createElement('input');
+        valInput.type = 'text';
+        valInput.placeholder = 'Value';
+        valInput.value = value;
+        valInput.style.flex = '2';
+        valInput.className = 'edit-prop-value';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'icon-btn';
+        removeBtn.style.cssText = 'color: var(--error); font-size: 0.85rem; padding: 4px;';
+        removeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        removeBtn.onclick = () => row.remove();
+
+        row.appendChild(nameInput);
+        row.appendChild(valInput);
+        row.appendChild(removeBtn);
+
+        container.appendChild(row);
+        return row;
+    }
+
+    if (btnAddEditNodeProp) {
+        btnAddEditNodeProp.addEventListener('click', () => {
+            createEditPropField(editNodePropsFields, '', '');
+        });
+    }
+
+    if (btnAddEditEdgeProp) {
+        btnAddEditEdgeProp.addEventListener('click', () => {
+            createEditPropField(editEdgePropsFields, '', '');
+        });
+    }
+
+    function openEditNodeModal(node) {
+        editNodeIdInput.value = node.id || node.value;
+        editNodeValueInput.value = node.value;
+
+        // Set type, if not found in select, fallback to custom
+        let typeFound = false;
+        for (const opt of editNodeTypeSelect.options) {
+            if (opt.value === node.type) {
+                typeFound = true;
+                break;
+            }
+        }
+        editNodeTypeSelect.value = typeFound ? node.type : 'custom';
+
+        editNodePropsFields.innerHTML = '';
+        if (node.metadata) {
+            try {
+                const meta = typeof node.metadata === 'string' ? JSON.parse(node.metadata) : node.metadata;
+                if (meta && typeof meta === 'object') {
+                    for (const [k, v] of Object.entries(meta)) {
+                        createEditPropField(editNodePropsFields, k, typeof v === 'object' ? JSON.stringify(v) : v);
+                    }
+                }
+            } catch (e) {
+                // Ignore parsing error
+            }
+        }
+        modalEditNode.classList.add('active');
+    }
+
+    function openEditEdgeModal(edgeId) {
+        const edge = currentEdges.find(e => e.id === edgeId);
+        if (!edge) return;
+
+        editEdgeIdInput.value = edge.id;
+        editEdgeRelationshipInput.value = edge.relationship;
+
+        editEdgePropsFields.innerHTML = '';
+        if (edge.metadata) {
+            try {
+                const meta = typeof edge.metadata === 'string' ? JSON.parse(edge.metadata) : edge.metadata;
+                if (meta && typeof meta === 'object') {
+                    for (const [k, v] of Object.entries(meta)) {
+                        createEditPropField(editEdgePropsFields, k, typeof v === 'object' ? JSON.stringify(v) : v);
+                    }
+                }
+            } catch (e) {
+                // Ignore parsing error
+            }
+        }
+        modalEditEdge.classList.add('active');
+    }
+
+    if (btnConfirmEditNode) {
+        btnConfirmEditNode.addEventListener('click', async () => {
+            const nodeId = editNodeIdInput.value;
+            const type = editNodeTypeSelect.value;
+            const value = editNodeValueInput.value.trim();
+
+            if (!value) {
+                alert('Please enter a value.');
+                return;
+            }
+
+            const metadata = {};
+            const nameInputs = editNodePropsFields.querySelectorAll('.edit-prop-name');
+            const valInputs = editNodePropsFields.querySelectorAll('.edit-prop-value');
+            nameInputs.forEach((ni, i) => {
+                const propName = ni.value.trim();
+                const propVal = valInputs[i] ? valInputs[i].value.trim() : '';
+                if (propName && propVal) {
+                    metadata[propName] = propVal;
+                }
+            });
+
+            try {
+                const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${nodeId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type, value, metadata })
+                });
+                if (res.ok) {
+                    modalEditNode.classList.remove('active');
+                    selectWorkspace(activeWorkspace);
+                    termPrint(`Node updated: ${value}`, 'sys-msg');
+                } else {
+                    const err = await res.json();
+                    alert(`Failed to update node: ${err.error || 'Unknown error'}`);
+                }
+            } catch (e) {
+                alert('Failed to update node. Check server connection.');
+            }
+        });
+    }
+
+    if (btnConfirmEditEdge) {
+        btnConfirmEditEdge.addEventListener('click', async () => {
+            const edgeId = editEdgeIdInput.value;
+            const relationship = editEdgeRelationshipInput.value.trim();
+
+            if (!relationship) {
+                alert('Please enter a relationship.');
+                return;
+            }
+
+            const metadata = {};
+            const nameInputs = editEdgePropsFields.querySelectorAll('.edit-prop-name');
+            const valInputs = editEdgePropsFields.querySelectorAll('.edit-prop-value');
+            nameInputs.forEach((ni, i) => {
+                const propName = ni.value.trim();
+                const propVal = valInputs[i] ? valInputs[i].value.trim() : '';
+                if (propName && propVal) {
+                    metadata[propName] = propVal;
+                }
+            });
+
+            try {
+                const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${edgeId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ relationship, metadata })
+                });
+                if (res.ok) {
+                    modalEditEdge.classList.remove('active');
+                    selectWorkspace(activeWorkspace);
+                    termPrint(`Edge updated: ${relationship}`, 'sys-msg');
+                } else {
+                    const err = await res.json();
+                    alert(`Failed to update edge: ${err.error || 'Unknown error'}`);
+                }
+            } catch (e) {
+                alert('Failed to update edge. Check server connection.');
+            }
+        });
     }
 
     function termPrint(text, extraClass = '') {
