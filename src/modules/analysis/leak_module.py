@@ -72,7 +72,7 @@ class LeakModule(BaseModule):
                     f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
                 bd = await self.loading(
-                    f"Checking {target} on Breach Directory...",
+                    f"Checking {target} on BreachDirectory...",
                     self.check_breach_directory,
                     target,
                 )
@@ -94,7 +94,7 @@ class LeakModule(BaseModule):
                     f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
                 bd = await self.loading(
-                    f"Checking {target} on Breach Directory...",
+                    f"Checking {target} on BreachDirectory...",
                     self.check_breach_directory,
                     target,
                 )
