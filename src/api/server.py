@@ -179,7 +179,7 @@ def create_workspace(req: WorkspaceCreate, config: ConfigManager = Depends(get_c
             },
         )
 
-    filename = name.replace(" ", "_")
+    filename = get_valid_name(name)
 
     db_file = f"cases/{filename}.keen"
     config.add_workspace(name, db_file, req.description or "")
@@ -347,10 +347,19 @@ def rename_workspace(
         return JSONResponse(status_code=400, content={"error": "Name is required"})
 
     new_name = req.new_name.strip()
+    if not all(c.isalnum() or c in " _-" for c in new_name):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."
+            },
+        )
+
+    new_filename = get_valid_name(new_name)
 
     try:
-        config.rename_workspace(name, new_name)
-        return {"success": True, "new_name": new_name}
+        config.rename_workspace(name, new_filename)
+        return {"success": True, "new_name": new_filename}
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
