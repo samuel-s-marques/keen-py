@@ -460,8 +460,10 @@ def update_workspace_node(
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
         wm = WorkspaceManager(w["path"], name=name)
-        wm.update_node(node_id, req.type, req.value, req.metadata)
+        updated = wm.update_node(node_id, req.type, req.value, req.metadata)
         wm.close()
+        if not updated:
+            return JSONResponse(status_code=404, content={"error": "Node not found or no changes made"})
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -486,8 +488,10 @@ def update_workspace_edge(
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
         wm = WorkspaceManager(w["path"], name=name)
-        wm.update_edge(edge_id, req.relationship, req.metadata)
+        updated = wm.update_edge(edge_id, req.relationship, req.metadata)
         wm.close()
+        if not updated:
+            return JSONResponse(status_code=404, content={"error": "Edge not found or no changes made"})
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})

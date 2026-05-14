@@ -404,7 +404,7 @@ class WorkspaceManager(DatabaseEngine):
         node_type: str | None = None,
         value: str | None = None,
         metadata: dict | None = None,
-    ) -> None:
+    ) -> bool:
         cursor = self.conn.cursor()
         updates = []
         params: list[Any] = []
@@ -423,13 +423,15 @@ class WorkspaceManager(DatabaseEngine):
             query = f"UPDATE nodes SET {', '.join(updates)} WHERE id = ?"
             cursor.execute(query, params)
             self.conn.commit()
+            return cursor.rowcount > 0
+        return False
 
     def update_edge(
         self,
         edge_id: int,
         relationship: str | None = None,
         metadata: dict | None = None,
-    ) -> None:
+    ) -> bool:
         cursor = self.conn.cursor()
         updates = []
         params: list[Any] = []
@@ -445,6 +447,8 @@ class WorkspaceManager(DatabaseEngine):
             query = f"UPDATE edge SET {', '.join(updates)} WHERE id = ?"
             cursor.execute(query, params)
             self.conn.commit()
+            return cursor.rowcount > 0
+        return False
 
     def delete_node(self, node_id: int) -> None:
         cursor = self.conn.cursor()
