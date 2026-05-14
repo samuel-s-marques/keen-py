@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Samuel Marques" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Contributing - Keen</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Contributing";
+        var mkdocs_page_input_path = "about/contributing_to_keen.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> Keen
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Home</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../getting-started/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../getting-started/usage/">Usage</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../getting-started/workspace_management/">Workspace Management</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../getting-started/api_keys_management/">API Keys Management</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../getting-started/web/">Web Server</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../modules/">Selecting and Using a Module</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Analysis</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/analysis/hudson_rock/">Hudson Rock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/analysis/leak_check/">Leak Check</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Discovery</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/dns_enum/">DNS Enum</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/historical_dns/">Historical DNS</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/subdomain_enum/">Subdomain Enum</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/whois/">WHOIS</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Enumeration</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/email_enrichment/">Email Enrichment</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/email_verification/">Email Verification</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/github_enum/">Github Enumeration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/holehe/">Holehe</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/phone_verification/">Phone Verification</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/sherlock/">Sherlock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/socmint/">SOCMINT</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Web</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/web/waf_detection/">WAF/CDN Detection</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Helpers</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/helpers/email_to_username/">Email to Username</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/helpers/url_to_domain/">URL to Domain</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Developer</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../developer/developing_new_modules/">Developing New Modules</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">About</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Contributing</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#how-can-i-contribute">How Can I Contribute?</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#reporting-bugs">Reporting Bugs</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#suggesting-enhancements-features">Suggesting Enhancements &amp; Features</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#developing-new-modules">Developing New Modules</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#improving-documentation">Improving Documentation</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#local-development-setup">Local Development Setup</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#pull-request-process">Pull Request Process</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../license/">License</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../roadmap/">Roadmap</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../changelog/">Changelog</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">Keen</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">About</li>
+      <li class="breadcrumb-item active">Contributing</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/samuel-s-marques/keen-py/edit/master/docs/about/contributing_to_keen.md">Edit on keen-py</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="contributing-to-keen">Contributing to Keen</h1>
+<p>First off, thank you for considering contributing to <strong>Keen</strong>! It's people like you who make open-source security tools powerful, reliable, and accessible for the community.</p>
+<p>Whether you're fixing a bug, adding a new intelligence module, improving documentation, or suggesting a feature, all contributions are highly appreciated.</p>
+<hr />
+<h2 id="how-can-i-contribute">How Can I Contribute?</h2>
+<h3 id="reporting-bugs">Reporting Bugs</h3>
+<p>If you encounter unexpected behavior, crashes, or parsing errors while running Keen, please open an issue on GitHub. Include:
+- Your operating system and Python version.
+- The exact command or module you were running.
+- A full traceback / error log if available.
+- Steps to reproduce the issue.</p>
+<h3 id="suggesting-enhancements-features">Suggesting Enhancements &amp; Features</h3>
+<p>Have an idea for a new third-party integration, UI feature, or reconnaissance technique? Open a feature request issue explaining:
+- The goal of the feature.
+- How it enhances the investigation workflow.
+- Any relevant API documentation or third-party services involved.</p>
+<h3 id="developing-new-modules">Developing New Modules</h3>
+<p>The framework is built to be highly extensible. If you want to build a new OSINT module (e.g., adding Shodan, Censys, or custom scrapers), check out our dedicated guide:
+- <strong><a href="../../developer/developing_new_modules/">Developing New Modules</a></strong></p>
+<h3 id="improving-documentation">Improving Documentation</h3>
+<p>Great documentation is crucial. If you spot typos, missing instructions, or unclear explanations in our MkDocs site, feel free to submit a pull request updating the Markdown files under the <code>docs/</code> directory.</p>
+<hr />
+<h2 id="local-development-setup">Local Development Setup</h2>
+<p>To set up Keen for local development:</p>
+<ol>
+<li>
+<p><strong>Fork and clone the repository:</strong>
+   <div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/samuel-s-marques/keen-py.git
+<span class="nb">cd</span><span class="w"> </span>keen-py
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Create and activate a virtual environment:</strong>
+   <div class="highlight"><pre><span></span><code><span class="c1"># On Linux / macOS</span>
+python3<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>venv
+<span class="nb">source</span><span class="w"> </span>venv/bin/activate
+
+<span class="c1"># On Windows</span>
+python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>venv
+venv<span class="se">\S</span>cripts<span class="se">\a</span>ctivate
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Install project dependencies:</strong>
+   <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Verify your setup by starting the interactive shell:</strong>
+   <div class="highlight"><pre><span></span><code>python<span class="w"> </span>keen.py<span class="w"> </span>--debug
+</code></pre></div></p>
+</li>
+</ol>
+<hr />
+<h2 id="pull-request-process">Pull Request Process</h2>
+<p>When you are ready to submit your changes, follow these standard guidelines:</p>
+<ol>
+<li><strong>Branch cleanly:</strong> Create a descriptive branch from <code>main</code> (e.g., <code>feature/add-shodan-module</code>, <code>bugfix/whois-parser-crash</code>).</li>
+<li><strong>Adhere to Code Style:</strong> Ensure your Python code follows PEP 8 conventions. We recommend using standard linters and formatters like <code>black</code> and <code>flake8</code>.</li>
+<li><strong>Keep Commits Atomic:</strong> Write clear, concise commit messages explaining <em>what</em> was changed and <em>why</em>.</li>
+<li><strong>Open a Pull Request:</strong> Describe your PR thoroughly on GitHub. Mention any issues it resolves (e.g., <code>Fixes #12</code>).</li>
+<li><strong>Code Review:</strong> Maintainers will review your PR, suggest any necessary adjustments, and merge it once approved!</li>
+</ol>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../../developer/developing_new_modules/" class="btn btn-neutral float-left" title="Developing New Modules"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../license/" class="btn btn-neutral float-right" title="License">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/samuel-s-marques/keen-py" class="fa fa-code-fork" style="color: #fcfcfc"> keen-py</a>
+        </span>
+    
+    
+      <span><a href="../../developer/developing_new_modules/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../license/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

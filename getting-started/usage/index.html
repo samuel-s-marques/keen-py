@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Samuel Marques" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Usage - Keen</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Usage";
+        var mkdocs_page_input_path = "getting-started/usage.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> Keen
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Home</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Usage</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#starting-keen">Starting Keen</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#the-interactive-shell">The Interactive Shell</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#workspace-management">Workspace Management</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#module-selection-execution">Module Selection &amp; Execution</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#step-by-step-reconnaissance-workflow">Step-by-Step Reconnaissance Workflow</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#api-key-management">API Key Management</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#global-settings-utilities">Global Settings &amp; Utilities</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../workspace_management/">Workspace Management</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api_keys_management/">API Keys Management</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../web/">Web Server</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../modules/">Selecting and Using a Module</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Analysis</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/analysis/hudson_rock/">Hudson Rock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/analysis/leak_check/">Leak Check</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Discovery</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/dns_enum/">DNS Enum</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/historical_dns/">Historical DNS</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/subdomain_enum/">Subdomain Enum</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/whois/">WHOIS</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Enumeration</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/email_enrichment/">Email Enrichment</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/email_verification/">Email Verification</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/github_enum/">Github Enumeration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/holehe/">Holehe</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/phone_verification/">Phone Verification</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/sherlock/">Sherlock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/socmint/">SOCMINT</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Web</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/web/waf_detection/">WAF/CDN Detection</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Helpers</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/helpers/email_to_username/">Email to Username</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/helpers/url_to_domain/">URL to Domain</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Developer</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../developer/developing_new_modules/">Developing New Modules</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">About</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../about/contributing_to_keen/">Contributing</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../about/license/">License</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../about/roadmap/">Roadmap</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../about/changelog/">Changelog</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">Keen</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Getting Started</li>
+      <li class="breadcrumb-item active">Usage</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/samuel-s-marques/keen-py/edit/master/docs/getting-started/usage.md">Edit on keen-py</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="usage-guide">Usage Guide</h1>
+<p>Keen is an advanced reconnaissance and OSINT framework designed for ethical hackers, penetration testers, and security researchers. It operates primarily through an intuitive interactive command-line interface (CLI) inspired by Metasploit, as well as a Web interface.</p>
+<hr />
+<h2 id="starting-keen">Starting Keen</h2>
+<p>You can start Keen in interactive shell mode or web server mode:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Start the interactive shell</span>
+python<span class="w"> </span>keen.py
+
+<span class="c1"># Start with debug logging enabled</span>
+python<span class="w"> </span>keen.py<span class="w"> </span>--debug
+
+<span class="c1"># Start the REST API web server</span>
+python<span class="w"> </span>keen.py<span class="w"> </span>--web<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span>
+</code></pre></div>
+<hr />
+<h2 id="the-interactive-shell">The Interactive Shell</h2>
+<div class="highlight"><pre><span></span><code>      :::    :::::::::::::::::::::::::::    :::
+     :+:   :+: :+:       :+:       :+:+:   :+:
+    +:+  +:+  +:+       +:+       :+:+:+  +:+
+   +#++:++   +#++:++#  +#++:++#  +#+ +:+ +#+
+  +#+  +#+  +#+       +#+       +#+  +#+#+#
+ #+#   #+# #+#       #+#       #+#   #+#+#
+###    ##########################    ####
+See everything. Understand everything.
+
+Version: 1.0.0
+Welcome to Keen, an information gathering tool.
+</code></pre></div>
+<p>When you enter the Keen interactive shell, you will be greeted by the ASCII banner and a prompt. The prompt dynamically updates to display your currently active workspace and selected module: <code>keen[workspace](module) &gt;</code>.</p>
+<h3 id="workspace-management">Workspace Management</h3>
+<p>Workspaces compartmentalize your reconnaissance investigations. All gathered intelligence, nodes, and relationships are automatically stored in structured SQLite databases under the <code>cases/</code> directory (<code>cases/&lt;workspace_name&gt;.keen</code>).</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Create a new workspace</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>workspace<span class="w"> </span>create<span class="w"> </span>target_corp<span class="w"> </span><span class="s2">&quot;Internal audit for Target Corp&quot;</span>
+
+<span class="c1"># List all available workspaces and view node/edge counts</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>workspace<span class="w"> </span>list
+
+<span class="c1"># Switch to an existing workspace</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>workspace<span class="w"> </span><span class="k">select</span><span class="w"> </span>target_corp
+
+<span class="c1"># Update the description of the active workspace</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>workspace<span class="w"> </span>set-desc<span class="w"> </span><span class="s2">&quot;Updated scope for Phase 2&quot;</span>
+
+<span class="c1"># Rename a workspace</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>workspace<span class="w"> </span>rename<span class="w"> </span>target_corp<span class="w"> </span>target_corp_v2
+
+<span class="c1"># Export workspace intelligence (e.g., to STIX 2.1 JSON, Markdown, HTML, or PDF)</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>workspace<span class="w"> </span><span class="nb">export</span><span class="w"> </span>stix2<span class="w"> </span>output/target_corp.json
+
+<span class="c1"># Unregister a workspace from the registry</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>workspace<span class="w"> </span>delete<span class="w"> </span>target_corp_v2
+</code></pre></div>
+<p><em>For more information, check the <a href="../workspace_management/">Workspace Management</a> documentation.</em></p>
+<hr />
+<h2 id="module-selection-execution">Module Selection &amp; Execution</h2>
+<p>Keen features modular intelligence gathering across categories such as <strong>Analysis</strong>, <strong>Discovery</strong>, <strong>Enumeration</strong>, <strong>Intel</strong>, and <strong>Web</strong>. </p>
+<h3 id="step-by-step-reconnaissance-workflow">Step-by-Step Reconnaissance Workflow</h3>
+<ol>
+<li>
+<p><strong>List available modules:</strong>
+   <div class="highlight"><pre><span></span><code>keen<span class="w"> </span>&gt;<span class="w"> </span>list<span class="w"> </span>modules
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Select a module:</strong>
+   You can specify the module name directly or by its category path.
+   <div class="highlight"><pre><span></span><code>keen<span class="w"> </span>&gt;<span class="w"> </span>use<span class="w"> </span>whois
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Inspect module metadata and required options:</strong>
+   <div class="highlight"><pre><span></span><code>keen<span class="o">[</span>target_corp<span class="o">](</span>discovery/whois<span class="o">)</span><span class="w"> </span>&gt;<span class="w"> </span>show<span class="w"> </span>info
+keen<span class="o">[</span>target_corp<span class="o">](</span>discovery/whois<span class="o">)</span><span class="w"> </span>&gt;<span class="w"> </span>show<span class="w"> </span>options
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Configure target options:</strong>
+   <div class="highlight"><pre><span></span><code>keen<span class="o">[</span>target_corp<span class="o">](</span>discovery/whois<span class="o">)</span><span class="w"> </span>&gt;<span class="w"> </span><span class="nb">set</span><span class="w"> </span>TARGET<span class="w"> </span>example.com
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Execute the module:</strong>
+   Gathered intelligence will automatically be parsed, displayed in the console, and mapped into the active workspace graph as STIX 2.1 / MISP compliant nodes and edges.
+   <div class="highlight"><pre><span></span><code>keen<span class="o">[</span>target_corp<span class="o">](</span>discovery/whois<span class="o">)</span><span class="w"> </span>&gt;<span class="w"> </span>run
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Return to the main prompt:</strong>
+   <div class="highlight"><pre><span></span><code>keen<span class="o">[</span>target_corp<span class="o">](</span>discovery/whois<span class="o">)</span><span class="w"> </span>&gt;<span class="w"> </span>back
+</code></pre></div></p>
+</li>
+</ol>
+<hr />
+<h2 id="api-key-management">API Key Management</h2>
+<p>Some enumeration and intelligence modules require third-party API keys (e.g., Hunter.io, SecurityTrails, DeHashed). Keen securely encrypts and stores your keys in <code>~/.keen/config.db</code> using a master password.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Unlock the key manager for the active session</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>api_keys<span class="w"> </span>unlock
+
+<span class="c1"># Add or update an API key</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>api_keys<span class="w"> </span><span class="nb">set</span><span class="w"> </span>hunter_io_apikey<span class="w"> </span>your_actual_api_key_here
+
+<span class="c1"># List stored API key services (keys are masked for security)</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>api_keys<span class="w"> </span>list
+
+<span class="c1"># Delete an API key</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>api_keys<span class="w"> </span>delete<span class="w"> </span>hunter_io_apikey
+</code></pre></div>
+<p><em>For more detailed information on encryption mechanisms and supported services, consult the <a href="../api_keys_management/">API Keys Management</a> documentation.</em></p>
+<hr />
+<h2 id="global-settings-utilities">Global Settings &amp; Utilities</h2>
+<p>You can adjust global framework settings on the fly or manage your session using built-in utilities:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Enable or disable verbose debug logging at runtime</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span><span class="nb">set</span><span class="w"> </span>debug<span class="w"> </span><span class="nb">true</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span><span class="nb">set</span><span class="w"> </span>debug<span class="w"> </span><span class="nb">false</span>
+
+<span class="c1"># Clear the terminal screen</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>clear
+
+<span class="c1"># Start the web server directly from the interactive shell</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>web<span class="w"> </span>start<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8080</span>
+
+<span class="c1"># Show banner, including current version</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span>show<span class="w"> </span>banner
+
+<span class="c1"># Exit the shell</span>
+keen<span class="w"> </span>&gt;<span class="w"> </span><span class="nb">exit</span>
+</code></pre></div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../installation/" class="btn btn-neutral float-left" title="Installation"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../workspace_management/" class="btn btn-neutral float-right" title="Workspace Management">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/samuel-s-marques/keen-py" class="fa fa-code-fork" style="color: #fcfcfc"> keen-py</a>
+        </span>
+    
+    
+      <span><a href="../installation/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../workspace_management/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

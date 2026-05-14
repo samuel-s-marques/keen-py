@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Samuel Marques" />
+      <link rel="shortcut icon" href="../../../img/favicon.ico" />
+    <title>URL to Domain - Keen</title>
+    <link rel="stylesheet" href="../../../css/theme.css" />
+    <link rel="stylesheet" href="../../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "URL to Domain";
+        var mkdocs_page_input_path = "modules/helpers/url_to_domain.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../../.." class="icon icon-home"> Keen
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../..">Home</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../getting-started/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../getting-started/usage/">Usage</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../getting-started/workspace_management/">Workspace Management</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../getting-started/api_keys_management/">API Keys Management</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../getting-started/web/">Web Server</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../../">Selecting and Using a Module</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Analysis</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../analysis/hudson_rock/">Hudson Rock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../analysis/leak_check/">Leak Check</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Discovery</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../discovery/dns_enum/">DNS Enum</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../discovery/historical_dns/">Historical DNS</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../discovery/subdomain_enum/">Subdomain Enum</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../discovery/whois/">WHOIS</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Enumeration</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../enumeration/email_enrichment/">Email Enrichment</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../enumeration/email_verification/">Email Verification</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../enumeration/github_enum/">Github Enumeration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../enumeration/holehe/">Holehe</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../enumeration/phone_verification/">Phone Verification</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../enumeration/sherlock/">Sherlock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../enumeration/socmint/">SOCMINT</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Web</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../web/waf_detection/">WAF/CDN Detection</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Helpers</a>
+    <ul class="current">
+                <li class="toctree-l2"><a class="reference internal" href="../email_to_username/">Email to Username</a>
+                </li>
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">URL to Domain</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#description">Description</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#options">Options</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#usage">Usage</a>
+    </li>
+    </ul>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Developer</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../developer/developing_new_modules/">Developing New Modules</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">About</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../about/contributing_to_keen/">Contributing</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../about/license/">License</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../about/roadmap/">Roadmap</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../about/changelog/">Changelog</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../..">Keen</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Modules</li>
+          <li class="breadcrumb-item">Helpers</li>
+      <li class="breadcrumb-item active">URL to Domain</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/samuel-s-marques/keen-py/edit/master/docs/modules/helpers/url_to_domain.md">Edit on keen-py</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="url-to-domain">Url To Domain</h1>
+<hr />
+<ul>
+<li><strong>Module Name:</strong> <code>Url_To_Domain</code></li>
+<li><strong>Description:</strong> Extracts the domain name from a URL.</li>
+<li><strong>Author:</strong> Samuel Marques</li>
+<li><strong>Version:</strong> 1.0.0</li>
+<li><strong>Category:</strong> Helper</li>
+</ul>
+<h2 id="description">Description</h2>
+<p>The <code>Url_To_Domain</code> module is a helper module that can be used to extract the domain name from a URL. It removes the scheme and the path, returning the domain only. Mostly useful when using the Web interface, as it adds the domain node to the graph.</p>
+<h2 id="options">Options</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+<th>Required</th>
+<th>Default</th>
+<th>Value Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TARGET</code></td>
+<td>The URL to convert</td>
+<td>Yes</td>
+<td>None</td>
+<td><code>url</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="usage">Usage</h2>
+<div class="highlight"><pre><span></span><code>keen<span class="w"> </span>&gt;<span class="w"> </span>use<span class="w"> </span>url_to_domain
+keen<span class="o">(</span>helpers/url_to_domain<span class="o">)</span><span class="w"> </span>&gt;<span class="w"> </span><span class="nb">set</span><span class="w"> </span>TARGET<span class="w"> </span>&lt;url&gt;
+keen<span class="o">(</span>helpers/url_to_domain<span class="o">)</span><span class="w"> </span>&gt;<span class="w"> </span>run
+</code></pre></div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../email_to_username/" class="btn btn-neutral float-left" title="Email to Username"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../../../developer/developing_new_modules/" class="btn btn-neutral float-right" title="Developing New Modules">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/samuel-s-marques/keen-py" class="fa fa-code-fork" style="color: #fcfcfc"> keen-py</a>
+        </span>
+    
+    
+      <span><a href="../email_to_username/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../../../developer/developing_new_modules/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../../..";</script>
+    <script src="../../../js/theme_extra.js"></script>
+    <script src="../../../js/theme.js"></script>
+      <script src="../../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

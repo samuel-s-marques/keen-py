@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Samuel Marques" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Web Server - Keen</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Web Server";
+        var mkdocs_page_input_path = "getting-started/web.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> Keen
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Home</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../usage/">Usage</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../workspace_management/">Workspace Management</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api_keys_management/">API Keys Management</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Web Server</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#launching-the-web-server">Launching the Web Server</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#the-interactive-ui-dashboard">The Interactive UI Dashboard</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#rest-api-endpoints">REST API Endpoints</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#workspace-case-management">Workspace &amp; Case Management</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#intelligence-graph-nodes-edges">Intelligence Graph (Nodes &amp; Edges)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#framework-configuration-modules">Framework Configuration &amp; Modules</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#real-time-execution-via-websockets">Real-Time Execution via WebSockets</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#real-time-log-streaming">Real-Time Log Streaming</a>
+    </li>
+        </ul>
+    </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../modules/">Selecting and Using a Module</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Analysis</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/analysis/hudson_rock/">Hudson Rock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/analysis/leak_check/">Leak Check</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Discovery</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/dns_enum/">DNS Enum</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/historical_dns/">Historical DNS</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/subdomain_enum/">Subdomain Enum</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/discovery/whois/">WHOIS</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Enumeration</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/email_enrichment/">Email Enrichment</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/email_verification/">Email Verification</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/github_enum/">Github Enumeration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/holehe/">Holehe</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/phone_verification/">Phone Verification</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/sherlock/">Sherlock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/enumeration/socmint/">SOCMINT</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Web</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/web/waf_detection/">WAF/CDN Detection</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Helpers</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/helpers/email_to_username/">Email to Username</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../modules/helpers/url_to_domain/">URL to Domain</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Developer</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../developer/developing_new_modules/">Developing New Modules</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">About</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../about/contributing_to_keen/">Contributing</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../about/license/">License</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../about/roadmap/">Roadmap</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../about/changelog/">Changelog</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">Keen</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Getting Started</li>
+      <li class="breadcrumb-item active">Web Server</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/samuel-s-marques/keen-py/edit/master/docs/getting-started/web.md">Edit on keen-py</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="web-server-rest-api">Web Server &amp; REST API</h1>
+<p>Keen provides a robust Web Server built on <strong>FastAPI</strong> and <strong>Uvicorn</strong>, enabling both an interactive visual dashboard and a fully documented RESTful API for integration and automation.</p>
+<hr />
+<h2 id="launching-the-web-server">Launching the Web Server</h2>
+<p>You can start the web server from your terminal or directly within the Keen interactive shell:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># From the command line</span>
+python<span class="w"> </span>keen.py<span class="w"> </span>--web<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span>
+
+<span class="c1"># With live reloading and debug logging enabled</span>
+python<span class="w"> </span>keen.py<span class="w"> </span>--web<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span><span class="w"> </span>--debug
+</code></pre></div>
+<p>Once running, the web server provides three primary interfaces:</p>
+<ul>
+<li><strong>Interactive UI Dashboard</strong>: <a href="http://127.0.0.1:8000/dashboard">http://127.0.0.1:8000/dashboard</a></li>
+<li><strong>Interactive REST API Docs (Swagger UI)</strong>: <a href="http://127.0.0.1:8000/docs">http://127.0.0.1:8000/docs</a> (or via <code>/api</code>)</li>
+<li><strong>OpenAPI Schema</strong>: <a href="http://127.0.0.1:8000/openapi.json">http://127.0.0.1:8000/openapi.json</a></li>
+</ul>
+<hr />
+<h2 id="the-interactive-ui-dashboard">The Interactive UI Dashboard</h2>
+<p>Mounted at <code>/dashboard</code>, the web interface provides a rich environment for security investigators:</p>
+<ul>
+<li><strong>Graph Visualization</strong>: Visually explore intelligence nodes and relationship edges. Drag, drop, and rearrange nodes to uncover connections. Node positions are automatically saved across sessions.</li>
+<li><strong>Case Management</strong>: Switch between active workspaces, create new cases, or export complete intelligence graphs in standard formats.</li>
+<li><strong>Module Execution</strong>: Configure target options and trigger reconnaissance modules directly from your browser.</li>
+</ul>
+<p><img alt="View of the web server dashboard, showing an investigation into the BusinessCorp domain." src="../../assets/images/dashboard_screenshot.png" /></p>
+<hr />
+<h2 id="rest-api-endpoints">REST API Endpoints</h2>
+<p>FastAPI automatically generates comprehensive OpenAPI documentation. Navigating to <code>/docs</code> allows you to inspect request schemas, test endpoints live, and review responses.</p>
+<p>Below is an overview of the core REST API endpoints available:</p>
+<h3 id="workspace-case-management">Workspace &amp; Case Management</h3>
+<ul>
+<li><code>GET /api/workspaces</code>: Retrieve all registered workspaces along with active node and edge metrics.</li>
+<li><code>POST /api/workspaces</code>: Create a new workspace database.</li>
+<li><code>PUT /api/workspaces/{name}</code>: Rename an existing workspace.</li>
+<li><code>DELETE /api/workspaces/{name}</code>: Delete a workspace from the registry.</li>
+</ul>
+<h3 id="intelligence-graph-nodes-edges">Intelligence Graph (Nodes &amp; Edges)</h3>
+<ul>
+<li><code>GET /api/workspaces/{name}/nodes</code>: Fetch all intelligence nodes (STIX 2.1 / MISP objects) in a workspace.</li>
+<li><code>POST /api/workspaces/{name}/nodes</code>: Manually create a custom intelligence node.</li>
+<li><code>DELETE /api/workspaces/{name}/nodes/{node_id}</code>: Remove a specific node from the investigation graph.</li>
+<li><code>GET /api/workspaces/{name}/edges</code>: Retrieve all relationship edges linking nodes.</li>
+<li><code>POST /api/workspaces/{name}/edges</code>: Create a directional relationship between two nodes.</li>
+<li><code>DELETE /api/workspaces/{name}/edges/{edge_id}</code>: Remove a relationship edge.</li>
+<li><code>POST /api/workspaces/{name}/nodes/positions</code>: Update and persist 2D graph layout coordinates (<code>x</code>, <code>y</code>).</li>
+</ul>
+<h3 id="framework-configuration-modules">Framework Configuration &amp; Modules</h3>
+<ul>
+<li><code>GET /api/modules</code>: List all loaded intelligence modules and their required configuration options.</li>
+<li><code>POST /api/config/unlock</code>: Unlock the secure credential manager using your master password.</li>
+<li><code>GET /api/config/keys</code>: Retrieve all stored API key services (masked).</li>
+<li><code>POST /api/config/keys</code>: Securely store a new third-party API key.</li>
+</ul>
+<hr />
+<h2 id="real-time-execution-via-websockets">Real-Time Execution via WebSockets</h2>
+<p>To support long-running reconnaissance tasks without blocking HTTP requests, Keen uses <strong>WebSockets</strong> for module execution:</p>
+<div class="highlight"><pre><span></span><code>Endpoint: ws://&lt;host&gt;:&lt;port&gt;/ws/modules/{module_name}/run
+</code></pre></div>
+<h3 id="real-time-log-streaming">Real-Time Log Streaming</h3>
+<p>When a WebSocket connection triggers an execution request, the server instantiates the module within an asynchronous task. It intercepts both structured debug logs and standard console output/error streams, streaming them back to the client in real time. This ensures investigators can monitor discovery progress, network probes, and scraped artifacts exactly as they occur.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../api_keys_management/" class="btn btn-neutral float-left" title="API Keys Management"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../../modules/" class="btn btn-neutral float-right" title="Selecting and Using a Module">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/samuel-s-marques/keen-py" class="fa fa-code-fork" style="color: #fcfcfc"> keen-py</a>
+        </span>
+    
+    
+      <span><a href="../api_keys_management/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../../modules/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
