@@ -7,6 +7,7 @@ import threading
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from typing import Any
 
 from src.core.database_engine import DatabaseEngine
 
@@ -396,6 +397,54 @@ class WorkspaceManager(DatabaseEngine):
         cursor = self.conn.cursor()
         cursor.execute("SELECT 1 FROM nodes WHERE id = ?", (node_id,))
         return cursor.fetchone() is not None
+
+    def update_node(
+        self,
+        node_id: int,
+        node_type: str | None = None,
+        value: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        cursor = self.conn.cursor()
+        updates = []
+        params: list[Any] = []
+        if node_type is not None:
+            updates.append("type = ?")
+            params.append(node_type)
+        if value is not None:
+            updates.append("value = ?")
+            params.append(value)
+        if metadata is not None:
+            updates.append("metadata = ?")
+            params.append(json.dumps(metadata))
+
+        if updates:
+            params.append(node_id)
+            query = f"UPDATE nodes SET {', '.join(updates)} WHERE id = ?"
+            cursor.execute(query, params)
+            self.conn.commit()
+
+    def update_edge(
+        self,
+        edge_id: int,
+        relationship: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        cursor = self.conn.cursor()
+        updates = []
+        params: list[Any] = []
+        if relationship is not None:
+            updates.append("relationship = ?")
+            params.append(relationship)
+        if metadata is not None:
+            updates.append("metadata = ?")
+            params.append(json.dumps(metadata))
+
+        if updates:
+            params.append(edge_id)
+            query = f"UPDATE edge SET {', '.join(updates)} WHERE id = ?"
+            cursor.execute(query, params)
+            self.conn.commit()
 
     def delete_node(self, node_id: int) -> None:
         cursor = self.conn.cursor()
