@@ -2,7 +2,7 @@ from typing import Any
 from src.utils.print_utils import warn, error, success
 from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
-import requests
+import httpx
 
 from src.core.base_module import BaseModule
 
@@ -29,6 +29,7 @@ class LeakModule(BaseModule):
             "HIBP_APIKEY": ["", False, "API Key for Have I Been Pwned.", ""],
             "LEAKCHECK_APIKEY": ["", False, "API Key for LeakCheck.", ""],
             "DEHASHED_APIKEY": ["", False, "API Key for DeHashed.", ""],
+            "RAPID_API_KEY": ["", False, "API Key for RapidAPI.", ""],
         },
     }
 
@@ -123,10 +124,11 @@ class LeakModule(BaseModule):
             return []
 
         try:
-            r = requests.get(
-                f"https://haveibeenpwned.com/api/v3/breachedAccount/{target}",
-                headers={"User-Agent": "keen-py/1.0.0", "hibp-api-key": api_key},
-            )
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.get(
+                    f"https://haveibeenpwned.com/api/v3/breachedAccount/{target}",
+                    headers={"User-Agent": "keen-py/1.0.0", "hibp-api-key": api_key},
+                )
 
             if r.status_code != 200:
                 error(f"{target} not found in any data breach.")
@@ -165,17 +167,18 @@ class LeakModule(BaseModule):
                 "Content-Type": "application/json",
             }
 
-            r = requests.post(
-                "https://breach.vip/api/search", headers=headers, json=payload
-            )
-
-            if r.status_code == 403:
-                warn("BreachVIP returned 403. Attempting via proxy...")
-                r = requests.post(
-                    "https://swolesome.pages.dev/api/proxy",
-                    headers=headers,
-                    json=payload,
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.post(
+                    "https://breach.vip/api/search", headers=headers, json=payload
                 )
+
+                if r.status_code == 403:
+                    warn("BreachVIP returned 403. Attempting via proxy...")
+                    r = await client.post(
+                        "https://swolesome.pages.dev/api/proxy",
+                        headers=headers,
+                        json=payload,
+                    )
 
             try:
                 res = r.json()
@@ -247,7 +250,8 @@ class LeakModule(BaseModule):
             if api_key:
                 url = f"https://leakcheck.io/api/v2/query/{target}"
 
-            r = requests.get(url, headers=headers)
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.get(url, headers=headers)
 
             if r.status_code == 403:
                 error("Limit exceeded for LeakCheck. Try again later.")
@@ -331,9 +335,10 @@ class LeakModule(BaseModule):
                 "DeHashed-Api-Key": api_key,
                 "Content-Type": "application/json",
             }
-            r = requests.post(
-                "https://api.dehashed.com/v2/search", headers=headers, data=payload
-            )
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.post(
+                    "https://api.dehashed.com/v2/search", headers=headers, json=payload
+                )
             res = r.json()
 
             if r.status_code != 200:
@@ -400,6 +405,9 @@ class LeakModule(BaseModule):
         except Exception as e:
             error(f"Error checking DeHashed: {e}")
             return []
+
+    async def check_breach_directory(self, target: str) -> list[dict]:
+        return []
 
     async def _save_results(self, target: str, results: dict) -> None:
         import uuid
