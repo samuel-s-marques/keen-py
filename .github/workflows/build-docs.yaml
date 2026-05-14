@@ -12,12 +12,6 @@ jobs:
       - name: Checkout main
         uses: actions/checkout@v2
 
-      - name: Setup Python
-        uses: actions/setup-python@v6.2.0
-        with:
-          python-version: 3.11.0
-          pip-version: 26.1.1
-
       - name: Deploy docs
         uses: mhausenblas/mkdocs-deploy-gh-pages@nomaterial
         # Or use mhausenblas/mkdocs-deploy-gh-pages@nomaterial to build without the mkdocs-material theme
@@ -27,4 +21,4 @@ jobs:
           CONFIG_FILE: mkdocs.yml
           EXTRA_PACKAGES: build-base
           # GITHUB_DOMAIN: github.myenterprise.com
-          REQUIREMENTS: requirements-dev.txt
+          REQUIREMENTS: requirements-docs.txt
