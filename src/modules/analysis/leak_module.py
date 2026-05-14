@@ -71,9 +71,15 @@ class LeakModule(BaseModule):
                 dh = await self.loading(
                     f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
+                bd = await self.loading(
+                    f"Checking {target} on Breach Directory...",
+                    self.check_breach_directory,
+                    target,
+                )
                 all_leaks.extend(lc or [])
                 all_leaks.extend(bv or [])
                 all_leaks.extend(dh or [])
+                all_leaks.extend(bd or [])
             case "email":
                 hb = await self.loading(
                     f"Checking {target} on HIBP...", self.check_HIBP, target
@@ -87,10 +93,16 @@ class LeakModule(BaseModule):
                 dh = await self.loading(
                     f"Checking {target} on DeHashed...", self.check_dehashed, target
                 )
+                bd = await self.loading(
+                    f"Checking {target} on Breach Directory...",
+                    self.check_breach_directory,
+                    target,
+                )
                 all_leaks.extend(hb or [])
                 all_leaks.extend(lc or [])
                 all_leaks.extend(bv or [])
                 all_leaks.extend(dh or [])
+                all_leaks.extend(bd or [])
             case "phone":
                 lc = await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
@@ -407,7 +419,84 @@ class LeakModule(BaseModule):
             return []
 
     async def check_breach_directory(self, target: str) -> list[dict]:
-        return []
+        api_key = self.options.get("RAPID_API_KEY")
+
+        if not api_key:
+            warn("API Key not found for BreachDirectory.")
+            return []
+
+        try:
+            headers: dict = {
+                "x-rapidapi-key": api_key,
+                "x-rapidapi-host": "breachdirectory.p.rapidapi.com",
+                "Content-Type": "application/json",
+            }
+            params: dict = {"term": target, "func": "auto"}
+
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.get(
+                    "https://breachdirectory.p.rapidapi.com/",
+                    headers=headers,
+                    params=params,
+                )
+            res = r.json()
+
+            if r.status_code != 200 or res.get("success") is not True:
+                error(
+                    f"Error checking BreachDirectory: {res.get('error', 'Unknown Error')}.\nStatus: {r.status_code}"
+                )
+                return []
+
+            results = res.get("result", [])
+
+            output = []
+
+            def process_result(item: dict) -> list[dict]:
+                processed = []
+                sources = item.get("sources", [])
+                if not sources:
+                    sources = ["Unknown"]
+
+                extra_info = {}
+                for field in ["password", "sha1", "hash"]:
+                    if item.get(field):
+                        extra_info[field] = item[field]
+
+                for source in sources:
+                    extra_data = [f"{k}: {v}" for k, v in extra_info.items()]
+                    extra_str = (
+                        f" - Extra info: {', '.join(extra_data)}" if extra_data else ""
+                    )
+                    success(f"{target} was found in {source} data breach{extra_str}")
+
+                    processed.append(
+                        {
+                            "source": "BreachDirectory",
+                            "breach_name": source,
+                            "date": None,
+                            "categories": [],
+                            "extra_info": extra_info.copy(),
+                        }
+                    )
+                return processed
+
+            import asyncio
+            from concurrent.futures import ThreadPoolExecutor
+
+            loop = asyncio.get_running_loop()
+            with ThreadPoolExecutor() as pool:
+                tasks = [
+                    loop.run_in_executor(pool, process_result, item) for item in results
+                ]
+                if tasks:
+                    batch_results = await asyncio.gather(*tasks)
+                    for sublist in batch_results:
+                        output.extend(sublist)
+
+            return output
+        except Exception as e:
+            error(f"Error checking BreachDirectory: {e}")
+            return []
 
     async def _save_results(self, target: str, results: dict) -> None:
         import uuid
