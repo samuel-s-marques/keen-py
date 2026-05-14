@@ -893,9 +893,15 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (n.type.includes('breach')) { icon = '\uf071'; color = '#ff5252'; }
             else if (n.type.includes('service')) { icon = '\uf233'; color = '#ffa726'; }
 
+            const fullText = n.value;
+            const shortText = fullText.length > 20 ? fullText.substring(0, 18) + '...' : fullText;
+
             const visNode = {
                 id: n.id || n.value,
-                label: n.value,
+                label: shortText,
+                title: fullText,
+                fullLabel: fullText,
+                shortLabel: shortText,
                 group: n.type,
                 shape: 'icon',
                 icon: {
@@ -1160,6 +1166,51 @@ document.addEventListener('DOMContentLoaded', () => {
                     moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
                     moduleDetails.classList.add('hidden');
                 }
+            }
+        });
+
+        let currentlyExpandedNodeId = null;
+
+        network.on('selectNode', function (params) {
+            if (currentlyExpandedNodeId !== null) {
+                const prevObj = data.nodes.get(currentlyExpandedNodeId);
+                if (prevObj && prevObj.shortLabel) {
+                    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                    data.nodes.update({
+                        id: currentlyExpandedNodeId,
+                        label: prevObj.shortLabel,
+                        font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: 'transparent' }
+                    });
+                }
+            }
+
+            if (params.nodes.length > 0) {
+                const nodeId = params.nodes[0];
+                const nodeObj = data.nodes.get(nodeId);
+                if (nodeObj && nodeObj.fullLabel) {
+                    currentlyExpandedNodeId = nodeId;
+                    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                    data.nodes.update({
+                        id: nodeId,
+                        label: nodeObj.fullLabel,
+                        font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: isLight ? '#ffffff' : '#111318' }
+                    });
+                }
+            }
+        });
+
+        network.on('deselectNode', function (params) {
+            if (currentlyExpandedNodeId !== null) {
+                const prevObj = data.nodes.get(currentlyExpandedNodeId);
+                if (prevObj && prevObj.shortLabel) {
+                    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                    data.nodes.update({
+                        id: currentlyExpandedNodeId,
+                        label: prevObj.shortLabel,
+                        font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: 'transparent' }
+                    });
+                }
+                currentlyExpandedNodeId = null;
             }
         });
     }
