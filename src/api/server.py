@@ -172,7 +172,12 @@ def create_workspace(req: WorkspaceCreate, config: ConfigManager = Depends(get_c
 
     name = req.name.strip()
     if not all(c.isalnum() or c in " _-" for c in name):
-        return JSONResponse(status_code=400, content={"error": "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."})
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."
+            },
+        )
 
     filename = name.replace(" ", "_")
 
@@ -443,7 +448,10 @@ def delete_workspace_edge(
 
 @app.put("/api/workspaces/{name}/nodes/{node_id}")
 def update_workspace_node(
-    name: str, node_id: int, req: NodeUpdate, config: ConfigManager = Depends(get_config)
+    name: str,
+    node_id: int,
+    req: NodeUpdate,
+    config: ConfigManager = Depends(get_config),
 ):
     """Update a node in a workspace.
 
@@ -455,6 +463,11 @@ def update_workspace_node(
     Returns:
         Dict[str, Any]: Success status.
     """
+    if req.type is None and req.value is None and req.metadata is None:
+        return JSONResponse(
+            status_code=400, content={"error": "No fields provided to update"}
+        )
+
     w = config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
@@ -463,7 +476,9 @@ def update_workspace_node(
         updated = wm.update_node(node_id, req.type, req.value, req.metadata)
         wm.close()
         if not updated:
-            return JSONResponse(status_code=404, content={"error": "Node not found or no changes made"})
+            return JSONResponse(
+                status_code=404, content={"error": "Node not found or no changes made"}
+            )
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -471,7 +486,10 @@ def update_workspace_node(
 
 @app.put("/api/workspaces/{name}/edges/{edge_id}")
 def update_workspace_edge(
-    name: str, edge_id: int, req: EdgeUpdate, config: ConfigManager = Depends(get_config)
+    name: str,
+    edge_id: int,
+    req: EdgeUpdate,
+    config: ConfigManager = Depends(get_config),
 ):
     """Update an edge in a workspace.
 
@@ -483,6 +501,11 @@ def update_workspace_edge(
     Returns:
         Dict[str, Any]: Success status.
     """
+    if req.relationship is None and req.metadata is None:
+        return JSONResponse(
+            status_code=400, content={"error": "No fields provided to update"}
+        )
+
     w = config.get_workspace(name)
     if not w:
         return JSONResponse(status_code=404, content={"error": "Workspace not found"})
@@ -491,7 +514,9 @@ def update_workspace_edge(
         updated = wm.update_edge(edge_id, req.relationship, req.metadata)
         wm.close()
         if not updated:
-            return JSONResponse(status_code=404, content={"error": "Edge not found or no changes made"})
+            return JSONResponse(
+                status_code=404, content={"error": "Edge not found or no changes made"}
+            )
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
