@@ -1,5 +1,8 @@
+import os
+import uuid
 from typing import Any
 from src.core.result_builder import ResultBuilder, NodeFactory
+from src.core.managers import ConfigManager
 
 
 class PatternExtractor:
@@ -8,6 +11,7 @@ class PatternExtractor:
     # Map of field keys (lowercase) to (node_type, relationship_type, should_isolate)
     # should_isolate=True means the node value will be prefixed with the source node value
     # to avoid false merging of common values like names.
+    # Note: These defaults can be overridden by user preference.
     FIELD_MAP = {
         "fname": ("x-first-name", "has-first-name", False),
         "first_name": ("x-first-name", "has-first-name", False),
@@ -32,15 +36,26 @@ class PatternExtractor:
             source_node_val: The value of the source node (e.g. breach ID or target email).
             data: The dictionary to extract fields from.
         """
+        # Read user preference for extraction mode
+        # Modes: 'merge', 'isolate', 'isolate_with_service'
+        # Default to 'merge' to support searching by default
+        extraction_mode = "merge"
+        try:
+            config = ConfigManager(os.path.expanduser("~/.keen/config.db"))
+            pref = config.get_preference("extraction_mode")
+            if pref:
+                extraction_mode = pref.lower()
+        except Exception:
+            # Fallback if config cannot be read
+            pass
+
         for key, val in data.items():
             if not val:
                 continue
 
             key_lower = key.lower()
             if key_lower in PatternExtractor.FIELD_MAP:
-                node_type, relationship, should_isolate = PatternExtractor.FIELD_MAP[
-                    key_lower
-                ]
+                node_type, relationship, _ = PatternExtractor.FIELD_MAP[key_lower]
 
                 # Handle lists or strings
                 values = val if isinstance(val, list) else [val]
@@ -49,23 +64,23 @@ class PatternExtractor:
                     if not v:
                         continue
                     v_str = str(v)
+                    if node_type != "x-password":
+                        v_str = v_str.strip()
 
-                    # Determine node value
-                    if should_isolate:
-                        # Isolate node by prefixing with source node value
-                        # This prevents false merging of common names/usernames
+                    # Determine node value based on mode
+                    if extraction_mode == "isolate_with_service":
                         graph_val = f"{source_node_val}:{v_str}"
-                    else:
+                    elif extraction_mode == "isolate":
+                        # Append a short unique ID to separate nodes
+                        graph_val = f"{v_str}#{uuid.uuid4().hex[:4]}"
+                    else:  # merge
                         graph_val = v_str
 
                     # Create node
                     if node_type == "user-account":
-                        # In NodeFactory.user_account, value is the unique account identifier.
-                        # We use graph_val to ensure uniqueness if needed.
                         builder.add_node(NodeFactory.user_account(graph_val))
                     else:
                         builder.add_node(NodeFactory.custom(node_type, graph_val))
 
                     # Add edge
-                    # We link the source node to the extracted node
                     builder.add_edge(source_node_val, graph_val, relationship)
