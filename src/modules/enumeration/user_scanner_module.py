@@ -37,8 +37,6 @@ class UserScannerModule(BaseModule):
         )
 
     async def execute(self, target: str) -> None:
-        import json
-
         is_email: bool = InputValidator.is_valid_email(target)
 
         self.logger.debug(
