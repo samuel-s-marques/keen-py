@@ -10,7 +10,7 @@
 
 ## Description
 
-The `Socmint` module is an enumeration module that uses different modules to perform SOCMINT on a target. It can retrieve details like registered platforms, recovery emails, and phone numbers. It uses Sherlock for usernames, Holehe for emails, and Phone Verification for phone numbers.
+The `Socmint` module is an enumeration module that uses different modules to perform SOCMINT on a target. It can retrieve details like registered platforms, recovery emails, and phone numbers. It uses Sherlock or User_Scanner for usernames, User_Scanner for emails, and Phone Verification for phone numbers.
 
 ## Options
 
