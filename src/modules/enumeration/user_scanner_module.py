@@ -52,7 +52,7 @@ class UserScannerModule(BaseModule):
         # Status can be 'Registered' (email) or 'Found' (username)
         registered_results = []
         for res in results:
-            res_dict = json.loads(res.to_json())
+            res_dict = res.as_dict()
             status = res_dict.get("status")
 
             if status in ["Registered", "Found"]:
