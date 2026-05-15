@@ -97,11 +97,17 @@ class LeakModule(BaseModule):
                     self.check_breach_directory,
                     target,
                 )
+                pn = await self.loading(
+                    f"Checking {target} on ProxyNova...",
+                    self.check_proxynova,
+                    target,
+                )
                 all_leaks.extend(hb or [])
                 all_leaks.extend(lc or [])
                 all_leaks.extend(bv or [])
                 all_leaks.extend(dh or [])
                 all_leaks.extend(bd or [])
+                all_leaks.extend(pn or [])
             case "phone":
                 lc = await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
@@ -495,6 +501,63 @@ class LeakModule(BaseModule):
             return output
         except Exception as e:
             error(f"Error checking BreachDirectory: {e}")
+            return []
+
+    async def check_proxynova(self, target: str) -> list:
+        if len(target) < 5:
+            warn("ProxyNova: Target is too short.")
+            return []
+
+        try:
+            headers: dict = {
+                "Content-Type": "application/json",
+                "User-Agent": UserAgents.get(),
+            }
+
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.get(
+                    f"https://api.proxynova.com/comb?query={target}&start=0&limit=20",
+                    headers=headers,
+                )
+            res = r.json()
+
+            if r.status_code != 200:
+                error(
+                    f"Error checking ProxyNova: {res.get('message', 'Unknown Error')}.\nStatus: {r.status_code}"
+                )
+                return []
+
+            results = res.get("result", [])
+
+            output = []
+
+            # Proxynova only returns email:password
+            for item in results:
+                email = item.get("email")
+                password = item.get("password")
+
+                if not email or not password:
+                    continue
+
+                # Proxynova usually returns different domains for the same target
+                if email != target:
+                    continue
+
+                success(f"{email}:{password} was found in ProxyNova data breach")
+
+                output.append(
+                    {
+                        "source": "ProxyNova",
+                        "breach_name": "Unknown",
+                        "date": None,
+                        "categories": [],
+                        "extra_info": {"email": email, "password": password},
+                    }
+                )
+
+            return output
+        except Exception as e:
+            error(f"Error checking ProxyNova: {e}")
             return []
 
     async def _save_results(self, target: str, results: dict) -> None:
