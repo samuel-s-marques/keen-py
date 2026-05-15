@@ -139,45 +139,18 @@ class HudsonRockModule(BaseModule):
             )
 
     async def _save_results(self, target: str, results: dict) -> None:
-        import uuid
+        from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces
 
         stealers = results.get("stealers", [])
 
-        # STIX 2.1 Standard Email-Address Object
-        STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
-        email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, target)
-
-        stix2_email = {
-            "type": "email-addr",
-            "id": f"email-addr--{email_uuid}",
-            "spec_version": "2.1",
-            "value": target,
-        }
-
-        misp_email = {
-            "type": "email-dst",
-            "value": target,
-        }
-
-        primary_node = {
-            "type": "email-addr",
-            "value": target,
-            "metadata": {
-                "stix2": stix2_email,
-                "misp": misp_email,
-                "message": results.get("message"),
-                "total_corporate_services": results.get("total_corporate_services", 0),
-                "total_user_services": results.get("total_user_services", 0),
-                "infections_count": len(stealers),
-            },
-        }
-
-        nodes: list[dict[str, Any]] = [primary_node]
-        edges: list[dict[str, Any]] = []
-
-        # Namespaces for UUIDv5
-        STIX_DEVICE_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa9")
-        STIX_IP_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa0")
+        builder = ResultBuilder()
+        builder.add_node(NodeFactory.email(
+            target,
+            message=results.get("message"),
+            total_corporate_services=results.get("total_corporate_services", 0),
+            total_user_services=results.get("total_user_services", 0),
+            infections_count=len(stealers),
+        ))
 
         for index, stealer in enumerate(stealers, start=1):
             comp_name = stealer.get("computer_name", "Unknown")
@@ -189,105 +162,48 @@ class HudsonRockModule(BaseModule):
             logins = stealer.get("top_logins", [])
 
             device_val = f"infected-device:{comp_name}:{date_comp}"
-            device_uuid = uuid.uuid5(STIX_DEVICE_NAMESPACE, device_val)
 
-            # STIX 2.1 Custom infostealer-infection Object
-            stix2_device = {
-                "type": "x-infected-device",
-                "id": f"x-infected-device--{device_uuid}",
-                "spec_version": "2.1",
-                "computer_name": comp_name,
-                "date_compromised": date_comp,
-                "operating_system": os_name,
-                "malware_path": mal_path,
-                "ip_address": ip_val if ip_val != "Unknown" else None,
-            }
-
-            misp_device = {
-                "type": "stealer-infection",
-                "attributes": [
-                    {
-                        "type": "text",
-                        "value": comp_name,
-                        "object_relation": "computer-name",
-                    },
-                    {
-                        "type": "text",
-                        "value": date_comp,
-                        "object_relation": "date-compromised",
-                    },
-                    {
-                        "type": "text",
-                        "value": os_name,
-                        "object_relation": "operating-system",
-                    },
-                    {
-                        "type": "filename",
-                        "value": mal_path,
-                        "object_relation": "malware-path",
-                    },
-                ],
-            }
-
-            device_node = {
-                "type": "x-infected-device",
-                "value": device_val,
-                "metadata": {
-                    "stix2": stix2_device,
-                    "misp": misp_device,
+            builder.add_node(NodeFactory.custom(
+                "x-infected-device",
+                device_val,
+                namespace=STIXNamespaces.DEVICE,
+                stix2_extra={
                     "computer_name": comp_name,
                     "date_compromised": date_comp,
                     "operating_system": os_name,
                     "malware_path": mal_path,
+                    "ip_address": ip_val if ip_val != "Unknown" else None,
                 },
+                misp_type="stealer-infection",
+                computer_name=comp_name,
+                date_compromised=date_comp,
+                operating_system=os_name,
+                malware_path=mal_path,
+            ))
+            # Override MISP with structured attributes
+            device_node = builder._nodes[-1]
+            device_node["metadata"]["misp"] = {
+                "type": "stealer-infection",
+                "attributes": [
+                    {"type": "text", "value": comp_name, "object_relation": "computer-name"},
+                    {"type": "text", "value": date_comp, "object_relation": "date-compromised"},
+                    {"type": "text", "value": os_name, "object_relation": "operating-system"},
+                    {"type": "filename", "value": mal_path, "object_relation": "malware-path"},
+                ],
             }
 
-            if device_node not in nodes:
-                nodes.append(device_node)
+            builder.add_edge(target, device_val, "compromised-device", metadata={
+                "top_passwords": passwords,
+                "top_logins": logins,
+            })
 
-            edges.append(
-                {
-                    "source": target,
-                    "target": device_val,
-                    "relationship": "compromised-device",
-                    "metadata": {
-                        "top_passwords": passwords,
-                        "top_logins": logins,
-                    },
-                }
-            )
-
-            # Map IP Node if present and valid
+            # IP node if present
             if ip_val and ip_val != "Unknown":
-                ip_uuid = uuid.uuid5(STIX_IP_NAMESPACE, ip_val)
-                stix2_ip = {
-                    "type": "ipv4-addr",
-                    "id": f"ipv4-addr--{ip_uuid}",
-                    "spec_version": "2.1",
-                    "value": ip_val,
-                }
-                ip_node = {
-                    "type": "ipv4-addr",
-                    "value": ip_val,
-                    "metadata": {
-                        "stix2": stix2_ip,
-                        "misp": {"type": "ip-src", "value": ip_val},
-                    },
-                }
-                if ip_node not in nodes:
-                    nodes.append(ip_node)
+                builder.add_node(NodeFactory.ip(ip_val))
+                # Override MISP type to ip-src
+                ip_node = builder._nodes[-1]
+                ip_node["metadata"]["misp"] = {"type": "ip-src", "value": ip_val}
 
-                edges.append(
-                    {
-                        "source": device_val,
-                        "target": ip_val,
-                        "relationship": "had-ip",
-                    }
-                )
+                builder.add_edge(device_val, ip_val, "had-ip")
 
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())

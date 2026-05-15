@@ -189,210 +189,84 @@ class GitHubModule(BaseModule):
         return emails
 
     async def _save_results(self, target: str, results: dict) -> None:
-        import uuid
+        from src.core.result_builder import ResultBuilder, NodeFactory
 
         profile = results.get("profile", {})
         orgs = results.get("orgs", [])
         repos = results.get("repos", [])
         emails = results.get("emails", [])
 
-        # STIX 2.1 Standard User-Account Object
-        STIX_ACCOUNT_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa6")
-        acc_uuid = uuid.uuid5(STIX_ACCOUNT_NAMESPACE, f"github:{target}")
+        builder = ResultBuilder()
 
-        stix2_acc = {
-            "type": "user-account",
-            "id": f"user-account--{acc_uuid}",
-            "spec_version": "2.1",
-            "account_login": target,
-            "account_type": "github",
-            "display_name": profile.get("name"),
-        }
+        # Primary account node
+        account_val = f"github:{target}"
+        acc_node = NodeFactory.user_account(
+            account_val,
+            bio=profile.get("bio"),
+            blog=profile.get("blog"),
+            company=profile.get("company"),
+            followers=profile.get("followers"),
+            following=profile.get("following"),
+            public_repos=profile.get("public_repos"),
+            public_gists=profile.get("public_gists"),
+        )
+        acc_node["metadata"]["stix2"]["account_login"] = target
+        acc_node["metadata"]["stix2"]["account_type"] = "github"
+        acc_node["metadata"]["stix2"]["display_name"] = profile.get("name")
+        acc_node["metadata"]["misp"] = {"type": "github-username", "value": target}
+        builder.add_node(acc_node)
 
-        # MISP representation
-        misp_acc = {
-            "type": "github-username",
-            "value": target,
-        }
-
-        primary_node = {
-            "type": "user-account",
-            "value": f"github:{target}",
-            "metadata": {
-                "stix2": stix2_acc,
-                "misp": misp_acc,
-                "bio": profile.get("bio"),
-                "blog": profile.get("blog"),
-                "company": profile.get("company"),
-                "followers": profile.get("followers"),
-                "following": profile.get("following"),
-                "public_repos": profile.get("public_repos"),
-                "public_gists": profile.get("public_gists"),
-            },
-        }
-
-        nodes: list[dict[str, Any]] = [primary_node]
-        edges: list[dict[str, Any]] = []
-
-        # Public Profile Email Mapping (email-addr Node)
+        # Public profile email
         profile_email = profile.get("email")
-        STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
         if profile_email:
-            email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, profile_email)
-            stix2_email = {
-                "type": "email-addr",
-                "id": f"email-addr--{email_uuid}",
-                "spec_version": "2.1",
-                "value": profile_email,
-            }
-            email_node = {
-                "type": "email-addr",
-                "value": profile_email,
-                "metadata": {
-                    "stix2": stix2_email,
-                    "misp": {"type": "email-dst", "value": profile_email},
-                },
-            }
-            nodes.append(email_node)
-            edges.append(
-                {
-                    "source": f"github:{target}",
-                    "target": profile_email,
-                    "relationship": "has-profile-email",
-                }
-            )
+            builder.add_node(NodeFactory.email(profile_email))
+            builder.add_edge(account_val, profile_email, "has-profile-email")
 
-        # Commit History Emails Mapping (email-addr Node)
+        # Commit history emails
         for email in emails:
             if email == profile_email:
                 continue
-            email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, email)
-            stix2_email = {
-                "type": "email-addr",
-                "id": f"email-addr--{email_uuid}",
-                "spec_version": "2.1",
-                "value": email,
-            }
-            email_node = {
-                "type": "email-addr",
-                "value": email,
-                "metadata": {
-                    "stix2": stix2_email,
-                    "misp": {"type": "email-dst", "value": email},
-                },
-            }
-            if email_node not in nodes:
-                nodes.append(email_node)
+            builder.add_node(NodeFactory.email(email))
+            builder.add_edge(account_val, email, "committed-with-email")
 
-            edges.append(
-                {
-                    "source": f"github:{target}",
-                    "target": email,
-                    "relationship": "committed-with-email",
-                }
-            )
-
-        # 3. Location Mapping (location Node)
+        # Location
         location = profile.get("location")
         if location:
-            STIX_LOCATION_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa4")
-            loc_uuid = uuid.uuid5(STIX_LOCATION_NAMESPACE, location)
-            stix2_loc = {
-                "type": "location",
-                "id": f"location--{loc_uuid}",
-                "spec_version": "2.1",
-                "name": location,
-            }
-            loc_node = {
-                "type": "location",
-                "value": location,
-                "metadata": {
-                    "stix2": stix2_loc,
-                    "misp": {"type": "target-location", "value": location},
-                },
-            }
-            nodes.append(loc_node)
-            edges.append(
-                {
-                    "source": f"github:{target}",
-                    "target": location,
-                    "relationship": "located-in",
-                }
-            )
+            builder.add_node(NodeFactory.location(location))
+            builder.add_edge(account_val, location, "located-in")
 
-        # Organizations Mapping (organization Node)
+        # Organizations
         for org in orgs:
             org_login = org.get("login")
             if org_login:
-                STIX_IDENTITY_NAMESPACE = uuid.UUID(
-                    "f070f381-8b38-5fdf-9730-802526e84fa3"
-                )
-                org_uuid = uuid.uuid5(STIX_IDENTITY_NAMESPACE, org_login)
-                stix2_org = {
-                    "type": "identity",
-                    "id": f"identity--{org_uuid}",
-                    "spec_version": "2.1",
-                    "name": org_login,
-                    "identity_class": "organization",
-                }
-                org_node = {
-                    "type": "organization",
-                    "value": org_login,
-                    "metadata": {
-                        "stix2": stix2_org,
-                        "misp": {"type": "target-org", "value": org_login},
-                        "description": org.get("description"),
-                    },
-                }
-                nodes.append(org_node)
-                edges.append(
-                    {
-                        "source": f"github:{target}",
-                        "target": org_login,
-                        "relationship": "member-of-org",
-                    }
-                )
+                builder.add_node(NodeFactory.organization(
+                    org_login,
+                    description=org.get("description"),
+                ))
+                # Override MISP to target-org
+                org_node = builder._nodes[-1]
+                org_node["metadata"]["misp"] = {"type": "target-org", "value": org_login}
+                builder.add_edge(account_val, org_login, "member-of-org")
 
-        # Repositories Mapping (repository Node)
+        # Repositories
         for repo in repos:
             repo_name = repo.get("full_name")
             if repo_name:
-                STIX_URL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa5")
-                repo_url = repo.get("html_url")
-                repo_uuid = uuid.uuid5(STIX_URL_NAMESPACE, repo_url or repo_name)
-                stix2_repo = {
-                    "type": "url",
-                    "id": f"url--{repo_uuid}",
-                    "spec_version": "2.1",
-                    "value": repo_url or f"https://github.com/{repo_name}",
-                }
-                repo_node = {
-                    "type": "repository",
-                    "value": repo_name,
-                    "metadata": {
-                        "stix2": stix2_repo,
-                        "misp": {
-                            "type": "link",
-                            "value": repo_url or f"https://github.com/{repo_name}",
-                        },
-                        "description": repo.get("description"),
-                        "stars": repo.get("stargazers_count"),
-                        "forks": repo.get("forks_count"),
-                        "language": repo.get("language"),
-                    },
-                }
-                nodes.append(repo_node)
-                edges.append(
-                    {
-                        "source": f"github:{target}",
-                        "target": repo_name,
-                        "relationship": "owns-repository",
-                    }
-                )
+                repo_url = repo.get("html_url") or f"https://github.com/{repo_name}"
+                builder.add_node(NodeFactory.custom(
+                    "url",
+                    repo_url,
+                    node_type="repository",
+                    misp_type="link",
+                    misp_value=repo_url,
+                    description=repo.get("description"),
+                    stars=repo.get("stargazers_count"),
+                    forks=repo.get("forks_count"),
+                    language=repo.get("language"),
+                ))
+                # Override value to be the repo name for graph display
+                repo_node = builder._nodes[-1]
+                repo_node["value"] = repo_name
+                builder.add_edge(account_val, repo_name, "owns-repository")
 
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())

@@ -40,74 +40,14 @@ class EmailToUsername(BaseModule):
         return email
 
     async def _save_results(self, email: str, username: str) -> None:
-        import uuid
-        from typing import Any
-
         if not email or not username:
             return
 
-        # STIX 2.1 Standard Email-Address Object
-        STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
-        email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, email)
+        from src.core.result_builder import ResultBuilder, NodeFactory
 
-        stix2_email = {
-            "type": "email-addr",
-            "id": f"email-addr--{email_uuid}",
-            "spec_version": "2.1",
-            "value": email,
-        }
+        builder = ResultBuilder()
+        builder.add_node(NodeFactory.email(email))
+        builder.add_node(NodeFactory.user_account(username))
+        builder.add_edge(email, username, "has-username")
 
-        misp_email = {
-            "type": "email-dst",
-            "value": email,
-        }
-
-        email_node = {
-            "type": "email-addr",
-            "value": email,
-            "metadata": {
-                "stix2": stix2_email,
-                "misp": misp_email,
-            },
-        }
-
-        # STIX 2.1 Standard User-Account Object
-        STIX_ACCOUNT_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa6")
-        user_uuid = uuid.uuid5(STIX_ACCOUNT_NAMESPACE, username)
-
-        stix2_user = {
-            "type": "user-account",
-            "id": f"user-account--{user_uuid}",
-            "spec_version": "2.1",
-            "user_id": username,
-        }
-
-        misp_user = {
-            "type": "text",
-            "value": username,
-        }
-
-        user_node = {
-            "type": "user-account",
-            "value": username,
-            "metadata": {
-                "stix2": stix2_user,
-                "misp": misp_user,
-            },
-        }
-
-        nodes: list[dict[str, Any]] = [email_node, user_node]
-        edges: list[dict[str, Any]] = [
-            {
-                "source": email,
-                "target": username,
-                "relationship": "has-username",
-            }
-        ]
-
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())

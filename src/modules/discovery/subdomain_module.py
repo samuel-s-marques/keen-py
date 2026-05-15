@@ -1,6 +1,6 @@
-from typing import Any
+import asyncio
 from src.utils.user_agents import UserAgents
-import requests
+import httpx
 import re
 import concurrent.futures
 import socket
@@ -64,25 +64,16 @@ class SubdomainModule(BaseModule):
 
         try:
             if method == "all":
-                methods_to_run: list = [
-                    self._find_by_dns,
-                    self._find_by_bruteforce,
-                    self._find_by_passive,
-                ]
+                # Run DNS and Bruteforce in threads, Passive as async
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    futures = {
-                        executor.submit(func, target): func.__name__
-                        for func in methods_to_run
-                    }
-                    for future in concurrent.futures.as_completed(futures):
-                        try:
-                            result = future.result()
-                            if result:
-                                subdomains |= result
-                        except Exception as exc:
-                            error(
-                                f"Method {futures[future]} generated an exception: {exc}"
-                            )
+                    dns_task = asyncio.to_thread(self._find_by_dns, target)
+                    brute_task = asyncio.to_thread(self._find_by_bruteforce, target)
+                    passive_task = self._find_by_passive(target)
+
+                    results = await asyncio.gather(dns_task, brute_task, passive_task)
+                    for result in results:
+                        if result:
+                            subdomains |= result
             elif method == "dns":
                 subdomains = await self.loading(
                     f"Executing DNS subdomain discovery on {target}...",
@@ -113,28 +104,29 @@ class SubdomainModule(BaseModule):
             error(f"Error: {str(e)}")
             return
 
-    def find_by_crt(self, target: str) -> set[str]:
+    async def find_by_crt(self, target: str) -> set[str]:
         """Get subdomains from crt.sh free API."""
         subdomains: set[str] = set()
 
         try:
-            r: requests.Response = requests.get(
-                f"https://crt.sh/?q=%25.{target}&output=json",
-                timeout=60,
-                headers={"User-Agent": UserAgents.get()},
-            )
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"https://crt.sh/?q=%25.{target}&output=json",
+                    timeout=60,
+                    headers={"User-Agent": UserAgents.get()},
+                )
 
-            if r.status_code != 200:
-                return set()
+                if r.status_code != 200:
+                    return set()
 
-            certs = r.json()
+                certs = r.json()
 
-            for cert in certs:
-                name: str = cert.get("name_value", "")
-                for line in name.split("\n"):
-                    line: str = line.strip().lower()
-                    if line and "*" not in line:
-                        subdomains.add(line)
+                for cert in certs:
+                    name: str = cert.get("name_value", "")
+                    for line in name.split("\n"):
+                        line: str = line.strip().lower()
+                        if line and "*" not in line:
+                            subdomains.add(line)
 
         except Exception:
             pass
@@ -266,149 +258,89 @@ class SubdomainModule(BaseModule):
         except socket.gaierror:
             return None
 
-    def _find_by_passive(self, target: str) -> set:
+    async def _find_by_passive(self, target: str) -> set:
         """Get domains from passive sources."""
         subdomains = set()
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(self.find_by_crt, target),
-                executor.submit(self._find_by_anubis, target),
-                executor.submit(self._find_by_rapiddns, target),
-            ]
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    result = future.result()
-                    if result:
-                        subdomains |= result
-                except Exception:
-                    pass
+        results = await asyncio.gather(
+            self.find_by_crt(target),
+            self._find_by_anubis(target),
+            self._find_by_rapiddns(target),
+            return_exceptions=True,
+        )
+
+        for result in results:
+            if isinstance(result, set):
+                subdomains |= result
+            elif isinstance(result, Exception):
+                pass
 
         return subdomains
 
-    def _find_by_anubis(self, target: str) -> set:
+    async def _find_by_anubis(self, target: str) -> set:
         """Get domains from anubis.db free API."""
         subdomains = set()
 
         try:
-            r = requests.get(
-                f"https://anubisdb.com/anubis/subdomains/{target}",
-                timeout=60,
-                headers={"User-Agent": UserAgents.get()},
-            )
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"https://anubisdb.com/anubis/subdomains/{target}",
+                    timeout=60,
+                    headers={"User-Agent": UserAgents.get()},
+                )
 
-            if r.status_code != 200:
-                return set()
+                if r.status_code != 200:
+                    return set()
 
-            data = r.json()
+                data = r.json()
 
-            for line in data:
-                subdomains.add(line)
+                for line in data:
+                    subdomains.add(line)
         except Exception:
             pass
 
         return subdomains
 
-    def _find_by_rapiddns(self, target: str) -> set:
+    async def _find_by_rapiddns(self, target: str) -> set:
         """Get domains from rapiddns.io free API."""
         subdomains = set()
 
         try:
-            r = requests.get(
-                f"https://rapiddns.io/subdomain/{target}?full=1",
-                timeout=30,
-                headers={"User-Agent": UserAgents.get()},
-            )
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"https://rapiddns.io/subdomain/{target}?full=1",
+                    timeout=30,
+                    headers={"User-Agent": UserAgents.get()},
+                )
 
-            if r.status_code != 200:
-                return set()
+                if r.status_code != 200:
+                    return set()
 
-            pattern = rf"^(?:[a-zA-Z0-9-]+\.).*{re.escape(target)}$"
+                pattern = rf"^(?:[a-zA-Z0-9-]+\.).*{re.escape(target)}$"
 
-            subdomains = set(
-                match.group(0) for match in re.finditer(pattern, r.text, re.MULTILINE)
-            )
+                subdomains = set(
+                    match.group(0)
+                    for match in re.finditer(pattern, r.text, re.MULTILINE)
+                )
         except Exception:
             pass
 
         return subdomains
 
     async def _save_results(self, target: str, results: dict) -> None:
-        import uuid
+        from src.core.result_builder import ResultBuilder, NodeFactory
 
         subdomains = results.get("subdomains", [])
 
-        # STIX 2.1 Standard Domain-Name Object
-        STIX_DOMAIN_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa7")
-        domain_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, target)
+        builder = ResultBuilder()
+        builder.add_node(NodeFactory.domain(target, subdomains_count=len(subdomains)))
 
-        stix2_domain = {
-            "type": "domain-name",
-            "id": f"domain-name--{domain_uuid}",
-            "spec_version": "2.1",
-            "value": target,
-        }
-
-        misp_domain = {
-            "type": "domain",
-            "value": target,
-        }
-
-        primary_node = {
-            "type": "domain-name",
-            "value": target,
-            "metadata": {
-                "stix2": stix2_domain,
-                "misp": misp_domain,
-                "subdomains_count": len(subdomains),
-            },
-        }
-
-        nodes: list[dict[str, Any]] = [primary_node]
-        edges: list[dict[str, Any]] = []
-
-        # Map each subdomain
         for sub in subdomains:
             sub_cleaned = sub.strip().lower()
             if not sub_cleaned:
                 continue
 
-            sub_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, sub_cleaned)
-            stix2_sub = {
-                "type": "domain-name",
-                "id": f"domain-name--{sub_uuid}",
-                "spec_version": "2.1",
-                "value": sub_cleaned,
-            }
+            builder.add_node(NodeFactory.domain(sub_cleaned))
+            builder.add_edge(target, sub_cleaned, "has-subdomain")
 
-            misp_sub = {
-                "type": "domain",
-                "value": sub_cleaned,
-            }
-
-            sub_node = {
-                "type": "domain-name",
-                "value": sub_cleaned,
-                "metadata": {
-                    "stix2": stix2_sub,
-                    "misp": misp_sub,
-                },
-            }
-
-            if sub_node not in nodes:
-                nodes.append(sub_node)
-
-            edges.append(
-                {
-                    "source": target,
-                    "target": sub_cleaned,
-                    "relationship": "has-subdomain",
-                }
-            )
-
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())

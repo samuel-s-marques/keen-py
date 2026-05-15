@@ -121,42 +121,11 @@ class SherlockModule(BaseModule):
         )
 
     async def _save_results(self, target: str, results: dict[str, str]) -> None:
-        import uuid
-        from typing import Any
+        from src.core.result_builder import ResultBuilder, NodeFactory
 
-        # STIX 2.1 User-Account Namespace
-        STIX_ACCOUNT_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa6")
-        target_uuid = uuid.uuid5(STIX_ACCOUNT_NAMESPACE, target)
+        builder = ResultBuilder()
+        builder.add_node(NodeFactory.user_account(target, accounts_found_count=len(results)))
 
-        stix2_target = {
-            "type": "user-account",
-            "id": f"user-account--{target_uuid}",
-            "spec_version": "2.1",
-            "user_id": target,
-        }
-
-        misp_target = {
-            "type": "github-username",
-            "value": target,
-        }
-
-        primary_node = {
-            "type": "user-account",
-            "value": target,
-            "metadata": {
-                "stix2": stix2_target,
-                "misp": misp_target,
-                "accounts_found_count": len(results),
-            },
-        }
-
-        nodes: list[dict[str, Any]] = [primary_node]
-        edges: list[dict[str, Any]] = []
-
-        # Standard Namespaces
-        STIX_IDENTITY_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa3")
-
-        # Map each found profile
         for platform, profile_url in results.items():
             if not platform or not profile_url:
                 continue
@@ -164,84 +133,26 @@ class SherlockModule(BaseModule):
             platform_cleaned = platform.strip()
             profile_url_cleaned = profile_url.strip()
 
-            # Create Platform Organization node
-            org_uuid = uuid.uuid5(STIX_IDENTITY_NAMESPACE, platform_cleaned)
-            stix2_org = {
-                "type": "identity",
-                "id": f"identity--{org_uuid}",
-                "spec_version": "2.1",
-                "name": platform_cleaned,
-                "identity_class": "organization",
-            }
+            # Organization node for the platform
+            builder.add_node(NodeFactory.organization(platform_cleaned))
 
-            org_node = {
-                "type": "organization",
-                "value": platform_cleaned,
-                "metadata": {
-                    "stix2": stix2_org,
-                    "misp": {"type": "text", "value": platform_cleaned},
-                },
-            }
-
-            if org_node not in nodes:
-                nodes.append(org_node)
-
-            # Create specific social user-account node
+            # Social profile account node
             profile_id_str = f"{platform_cleaned}:{target}"
-            profile_uuid = uuid.uuid5(STIX_ACCOUNT_NAMESPACE, profile_id_str)
+            builder.add_node(NodeFactory.user_account(
+                profile_id_str,
+                platform=platform_cleaned,
+                profile_url=profile_url_cleaned,
+            ))
+            # Override the stix2 fields for social-media specifics
+            profile_node = builder._nodes[-1]
+            profile_node["metadata"]["stix2"]["display_name"] = f"{target} on {platform_cleaned}"
+            profile_node["metadata"]["stix2"]["account_type"] = "social-media"
+            profile_node["metadata"]["stix2"]["account_login"] = target
+            profile_node["metadata"]["stix2"]["x_profile_url"] = profile_url_cleaned
+            profile_node["metadata"]["misp"] = {"type": "link", "value": profile_url_cleaned}
 
-            stix2_profile = {
-                "type": "user-account",
-                "id": f"user-account--{profile_uuid}",
-                "spec_version": "2.1",
-                "user_id": target,
-                "display_name": f"{target} on {platform_cleaned}",
-                "account_type": "social-media",
-                "account_login": target,
-                "x_profile_url": profile_url_cleaned,
-            }
+            # Edges
+            builder.add_edge(target, profile_id_str, "owns-account")
+            builder.add_edge(profile_id_str, platform_cleaned, "registered-on")
 
-            misp_profile = {
-                "type": "link",
-                "value": profile_url_cleaned,
-            }
-
-            profile_node = {
-                "type": "user-account",
-                "value": profile_id_str,
-                "metadata": {
-                    "stix2": stix2_profile,
-                    "misp": misp_profile,
-                    "platform": platform_cleaned,
-                    "profile_url": profile_url_cleaned,
-                },
-            }
-
-            if profile_node not in nodes:
-                nodes.append(profile_node)
-
-            # Create relations:
-            # Target owns the social profile
-            edges.append(
-                {
-                    "source": target,
-                    "target": profile_id_str,
-                    "relationship": "owns-account",
-                }
-            )
-
-            # Social profile is registered-on the platform organization
-            edges.append(
-                {
-                    "source": profile_id_str,
-                    "target": platform_cleaned,
-                    "relationship": "registered-on",
-                }
-            )
-
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())

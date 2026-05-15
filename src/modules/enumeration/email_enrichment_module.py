@@ -1,4 +1,3 @@
-from typing import Any
 import httpx
 from rich.console import Console
 from rich.table import Table
@@ -176,26 +175,8 @@ class EmailEnrichmentModule(BaseModule):
         success(f"Enrichment completed for {email}")
 
     async def _save_results(self, email: str, results: dict) -> None:
-        import uuid
+        from src.core.result_builder import ResultBuilder, NodeFactory
 
-        # STIX 2.1 Standard Email-Address Object
-        STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
-        email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, email)
-
-        stix2_email = {
-            "type": "email-addr",
-            "id": f"email-addr--{email_uuid}",
-            "spec_version": "2.1",
-            "value": email,
-        }
-
-        # MISP representation
-        misp_email = {
-            "type": "email-dst",
-            "value": email,
-        }
-
-        # General target personal details
         name_data = results.get("name", {})
         full_name = name_data.get("fullName")
         first_name = name_data.get("firstName")
@@ -206,156 +187,55 @@ class EmailEnrichmentModule(BaseModule):
         site = results.get("site")
         provider = results.get("emailProvider")
 
-        primary_node = {
-            "type": "email-addr",
-            "value": email,
-            "metadata": {
-                "stix2": stix2_email,
-                "misp": misp_email,
-                "full_name": full_name,
-                "first_name": first_name,
-                "last_name": last_name,
-                "bio": bio,
-                "location": location,
-                "provider": provider,
-            },
-        }
+        builder = ResultBuilder()
+        builder.add_node(
+            NodeFactory.email(
+                email,
+                full_name=full_name,
+                first_name=first_name,
+                last_name=last_name,
+                bio=bio,
+                location=location,
+                provider=provider,
+            )
+        )
 
-        nodes: list[dict[str, Any]] = [primary_node]
-        edges: list[dict[str, Any]] = []
-
-        # Employment Mapping (Organization Node)
+        # Employment
         employment = results.get("employment", {})
         company_name = employment.get("name")
         if company_name and company_name.strip():
-            # Build STIX 2.1 Identity (Organization) Object
-            STIX_IDENTITY_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa3")
-            org_uuid = uuid.uuid5(STIX_IDENTITY_NAMESPACE, company_name)
-            stix2_org = {
-                "type": "identity",
-                "id": f"identity--{org_uuid}",
-                "spec_version": "2.1",
-                "name": company_name,
-                "identity_class": "organization",
-            }
-            misp_org = {
-                "type": "target-org",
-                "value": company_name,
-            }
-            org_node = {
-                "type": "organization",
-                "value": company_name,
-                "metadata": {
-                    "stix2": stix2_org,
-                    "misp": misp_org,
-                    "title": employment.get("title"),
-                    "role": employment.get("role"),
-                    "seniority": employment.get("seniority"),
-                },
-            }
-            nodes.append(org_node)
-            edges.append(
-                {
-                    "source": email,
-                    "target": company_name,
-                    "relationship": "employed-by",
-                }
+            builder.add_node(
+                NodeFactory.organization(
+                    company_name,
+                    title=employment.get("title"),
+                    role=employment.get("role"),
+                    seniority=employment.get("seniority"),
+                )
             )
+            # Override MISP type
+            org_node = builder._nodes[-1]
+            org_node["metadata"]["misp"] = {"type": "target-org", "value": company_name}
+            builder.add_edge(email, company_name, "employed-by")
 
-        # Location Mapping (Location Node)
+        # Location
         if location and location != "Unknown":
-            STIX_LOCATION_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa4")
-            loc_uuid = uuid.uuid5(STIX_LOCATION_NAMESPACE, location)
-            stix2_loc = {
-                "type": "location",
-                "id": f"location--{loc_uuid}",
-                "spec_version": "2.1",
-                "name": location,
-            }
-            misp_loc = {
-                "type": "target-location",
-                "value": location,
-            }
-            loc_node = {
-                "type": "location",
-                "value": location,
-                "metadata": {
-                    "stix2": stix2_loc,
-                    "misp": misp_loc,
-                },
-            }
-            nodes.append(loc_node)
-            edges.append(
-                {
-                    "source": email,
-                    "target": location,
-                    "relationship": "located-in",
-                }
-            )
+            builder.add_node(NodeFactory.location(location))
+            builder.add_edge(email, location, "located-in")
 
-        # Phone Mapping (x-phone-number Node)
+        # Phone
         if phone:
-            STIX_PHONE_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa1")
-            phone_uuid = uuid.uuid5(STIX_PHONE_NAMESPACE, phone)
-            stix2_phone = {
-                "type": "x-phone-number",
-                "id": f"x-phone-number--{phone_uuid}",
-                "spec_version": "2.1",
-                "value": phone,
-            }
-            misp_phone = {
-                "type": "phone-number",
-                "value": phone,
-            }
-            phone_node = {
-                "type": "x-phone-number",
-                "value": phone,
-                "metadata": {
-                    "stix2": stix2_phone,
-                    "misp": misp_phone,
-                },
-            }
-            nodes.append(phone_node)
-            edges.append(
-                {
-                    "source": email,
-                    "target": phone,
-                    "relationship": "associated-phone",
-                }
-            )
+            builder.add_node(NodeFactory.phone(phone))
+            builder.add_edge(email, phone, "associated-phone")
 
-        # Website Mapping (url Node)
+        # Website
         if site:
-            STIX_URL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa5")
-            url_uuid = uuid.uuid5(STIX_URL_NAMESPACE, site)
-            stix2_url = {
-                "type": "url",
-                "id": f"url--{url_uuid}",
-                "spec_version": "2.1",
-                "value": site,
-            }
-            misp_url = {
-                "type": "url",
-                "value": site,
-            }
-            url_node = {
-                "type": "url",
-                "value": site,
-                "metadata": {
-                    "stix2": stix2_url,
-                    "misp": misp_url,
-                },
-            }
-            nodes.append(url_node)
-            edges.append(
-                {
-                    "source": email,
-                    "target": site,
-                    "relationship": "associated-website",
-                }
-            )
+            builder.add_node(NodeFactory.url(site))
+            # Override MISP type to url
+            url_node = builder._nodes[-1]
+            url_node["metadata"]["misp"] = {"type": "url", "value": site}
+            builder.add_edge(email, site, "associated-website")
 
-        # Social Media Accounts Mapping
+        # Social Media Accounts
         social_types = {
             "facebook": "facebook-id",
             "github": "github-username",
@@ -367,43 +247,19 @@ class EmailEnrichmentModule(BaseModule):
         for s_type, misp_type in social_types.items():
             handle = results.get(s_type, {}).get("handle")
             if handle:
-                STIX_ACCOUNT_NAMESPACE = uuid.UUID(
-                    "f070f381-8b38-5fdf-9730-802526e84fa6"
+                acc_val = f"{s_type}:{handle}"
+                builder.add_node(
+                    NodeFactory.user_account(
+                        acc_val,
+                        platform=s_type,
+                        handle=handle,
+                    )
                 )
-                acc_uuid = uuid.uuid5(STIX_ACCOUNT_NAMESPACE, f"{s_type}:{handle}")
-                stix2_acc = {
-                    "type": "user-account",
-                    "id": f"user-account--{acc_uuid}",
-                    "spec_version": "2.1",
-                    "account_login": handle,
-                    "account_type": s_type,
-                }
-                misp_acc = {
-                    "type": misp_type,
-                    "value": handle,
-                }
-                acc_node = {
-                    "type": "user-account",
-                    "value": f"{s_type}:{handle}",
-                    "metadata": {
-                        "stix2": stix2_acc,
-                        "misp": misp_acc,
-                        "platform": s_type,
-                        "handle": handle,
-                    },
-                }
-                nodes.append(acc_node)
-                edges.append(
-                    {
-                        "source": email,
-                        "target": f"{s_type}:{handle}",
-                        "relationship": "owns-account",
-                    }
-                )
+                # Override stix2/misp specifics
+                acc_node = builder._nodes[-1]
+                acc_node["metadata"]["stix2"]["account_login"] = handle
+                acc_node["metadata"]["stix2"]["account_type"] = s_type
+                acc_node["metadata"]["misp"] = {"type": misp_type, "value": handle}
+                builder.add_edge(email, acc_val, "owns-account")
 
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())
