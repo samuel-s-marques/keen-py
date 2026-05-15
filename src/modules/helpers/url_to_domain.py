@@ -37,84 +37,19 @@ class UrlToDomain(BaseModule):
         return domain
 
     async def _save_results(self, domain: str) -> None:
-        import uuid
-        from typing import Any
+        from src.core.result_builder import ResultBuilder, NodeFactory
 
         url: str = str(self.options.get("TARGET")).lower()
         if not url:
             return
 
-        # STIX 2.1 Standard URL Object
-        STIX_URL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa5")
-        url_uuid = uuid.uuid5(STIX_URL_NAMESPACE, url)
-
-        stix2_url = {
-            "type": "url",
-            "id": f"url--{url_uuid}",
-            "spec_version": "2.1",
-            "value": url,
-        }
-
-        misp_url = {
-            "type": "link",
-            "value": url,
-        }
-
-        url_node = {
-            "type": "url",
-            "value": url,
-            "metadata": {
-                "stix2": stix2_url,
-                "misp": misp_url,
-            },
-        }
-
-        nodes: list[dict[str, Any]] = [url_node]
-        edges: list[dict[str, Any]] = []
+        builder = ResultBuilder()
+        builder.add_node(NodeFactory.url(url))
 
         if domain:
             domain_cleaned = domain.strip().lower()
             if domain_cleaned:
-                # STIX 2.1 Standard Domain-Name Object
-                STIX_DOMAIN_NAMESPACE = uuid.UUID(
-                    "f070f381-8b38-5fdf-9730-802526e84fa7"
-                )
-                domain_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, domain_cleaned)
+                builder.add_node(NodeFactory.domain(domain_cleaned))
+                builder.add_edge(url, domain_cleaned, "hosted-on")
 
-                stix2_domain = {
-                    "type": "domain-name",
-                    "id": f"domain-name--{domain_uuid}",
-                    "spec_version": "2.1",
-                    "value": domain_cleaned,
-                }
-
-                misp_domain = {
-                    "type": "domain",
-                    "value": domain_cleaned,
-                }
-
-                domain_node = {
-                    "type": "domain-name",
-                    "value": domain_cleaned,
-                    "metadata": {
-                        "stix2": stix2_domain,
-                        "misp": misp_domain,
-                    },
-                }
-
-                nodes.append(domain_node)
-
-                edges.append(
-                    {
-                        "source": url,
-                        "target": domain_cleaned,
-                        "relationship": "hosted-on",
-                    }
-                )
-
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())

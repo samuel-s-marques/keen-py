@@ -1,5 +1,5 @@
 from src.utils.user_agents import UserAgents
-import requests
+import httpx
 import dns.resolver
 import asyncio
 import re
@@ -110,13 +110,13 @@ class WafModule(BaseModule):
             # HTTP Analysis (Headers)
             url = target if target.startswith("http") else f"https://{target}"
             try:
-                response = await asyncio.to_thread(
-                    requests.get,
-                    url,
-                    timeout=10,
-                    verify=False,
-                    headers={"User-Agent": UserAgents.get()},
-                )
+                async with httpx.AsyncClient(verify=False) as client:
+                    response = await client.get(
+                        url,
+                        timeout=10,
+                        headers={"User-Agent": UserAgents.get()},
+                        follow_redirects=True,
+                    )
                 headers = {k.lower(): v.lower() for k, v in response.headers.items()}
                 server_header = headers.get("server", "")
 
@@ -164,8 +164,27 @@ class WafModule(BaseModule):
                 console = Console()
                 console.print(table)
                 success(f"Detected CDN/WAF infrastructure for {target}.")
+
+                # Save results to workspace
+                await self._save_results(target, unique_results)
             else:
                 info(f"No known CDN or WAF detected for {target}.")
 
         except Exception as e:
             error(f"Detection failed: {e}")
+
+    async def _save_results(self, target: str, results: list) -> None:
+        from src.core.result_builder import ResultBuilder, NodeFactory
+
+        builder = ResultBuilder()
+        builder.add_node(NodeFactory.url(target, waf_detections_count=len(results)))
+
+        # Unique providers detected
+        providers_seen = set()
+        for provider, method, evidence in results:
+            if provider not in providers_seen:
+                builder.add_node(NodeFactory.organization(provider))
+                builder.add_edge(target, provider, "protected-by")
+                providers_seen.add(provider)
+
+        await self.post_run(builder.build())

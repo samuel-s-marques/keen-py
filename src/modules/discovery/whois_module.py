@@ -98,8 +98,8 @@ class WhoisModule(BaseModule):
         )
 
     async def _save_results(self, target: str, results: dict) -> None:
-        import uuid
         from datetime import datetime
+        from src.core.result_builder import ResultBuilder, NodeFactory
 
         # Helper to convert datetime to string safely
         def format_date(d) -> str | None:
@@ -137,169 +137,48 @@ class WhoisModule(BaseModule):
         emails = get_clean_list(results.get("emails"))
         name_servers = get_clean_list(results.get("name_servers"))
 
-        # STIX 2.1 Standard Domain-Name Object
-        STIX_DOMAIN_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa7")
-        domain_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, target)
+        builder = ResultBuilder()
 
-        stix2_domain = {
-            "type": "domain-name",
-            "id": f"domain-name--{domain_uuid}",
-            "spec_version": "2.1",
-            "value": target,
-        }
+        builder.add_node(NodeFactory.domain(
+            target,
+            creation_date=creation_date,
+            updated_date=updated_date,
+            expiration_date=expiration_date,
+            registrar=registrar,
+            registrant_org=org,
+            name_servers=name_servers,
+            emails=emails,
+        ))
 
-        misp_domain = {
-            "type": "domain",
-            "value": target,
-        }
-
-        primary_node = {
-            "type": "domain-name",
-            "value": target,
-            "metadata": {
-                "stix2": stix2_domain,
-                "misp": misp_domain,
-                "creation_date": creation_date,
-                "updated_date": updated_date,
-                "expiration_date": expiration_date,
-                "registrar": registrar,
-                "registrant_org": org,
-                "name_servers": name_servers,
-                "emails": emails,
-            },
-        }
-
-        nodes: list[dict[str, Any]] = [primary_node]
-        edges: list[dict[str, Any]] = []
-
-        # Namespaces for UUIDv5
-        STIX_IDENTITY_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa3")
-        STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
-
-        # 1. Map Registrar
+        # Registrar
         if registrar:
-            reg_uuid = uuid.uuid5(STIX_IDENTITY_NAMESPACE, registrar)
-            stix2_reg = {
-                "type": "identity",
-                "id": f"identity--{reg_uuid}",
-                "spec_version": "2.1",
-                "name": registrar,
-                "identity_class": "organization",
-            }
-            reg_node = {
-                "type": "organization",
-                "value": registrar,
-                "metadata": {
-                    "stix2": stix2_reg,
-                    "misp": {"type": "registrar", "value": registrar},
-                },
-            }
-            if reg_node not in nodes:
-                nodes.append(reg_node)
+            builder.add_node(NodeFactory.organization(registrar))
+            # Override MISP type
+            reg_node = builder._nodes[-1]
+            reg_node["metadata"]["misp"] = {"type": "registrar", "value": registrar}
+            builder.add_edge(target, registrar, "registered-by")
 
-            edges.append(
-                {
-                    "source": target,
-                    "target": registrar,
-                    "relationship": "registered-by",
-                }
-            )
-
-        # 2. Map Registrant Organization
+        # Registrant Organization
         if org and org != registrar:
-            org_uuid = uuid.uuid5(STIX_IDENTITY_NAMESPACE, org)
-            stix2_org = {
-                "type": "identity",
-                "id": f"identity--{org_uuid}",
-                "spec_version": "2.1",
-                "name": org,
-                "identity_class": "organization",
-            }
-            org_node = {
-                "type": "organization",
-                "value": org,
-                "metadata": {
-                    "stix2": stix2_org,
-                    "misp": {"type": "registrar", "value": org},
-                },
-            }
-            if org_node not in nodes:
-                nodes.append(org_node)
+            builder.add_node(NodeFactory.organization(org))
+            # Override MISP type
+            org_node = builder._nodes[-1]
+            org_node["metadata"]["misp"] = {"type": "registrar", "value": org}
+            builder.add_edge(target, org, "registrant")
 
-            edges.append(
-                {
-                    "source": target,
-                    "target": org,
-                    "relationship": "registrant",
-                }
-            )
-
-        # 3. Map Name Servers
+        # Name Servers
         for ns in name_servers:
             ns_cleaned = ns.rstrip(".")
             if not ns_cleaned:
                 continue
+            builder.add_node(NodeFactory.domain(ns_cleaned))
+            builder.add_edge(target, ns_cleaned, "has-ns-record")
 
-            ns_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, ns_cleaned)
-            stix2_ns = {
-                "type": "domain-name",
-                "id": f"domain-name--{ns_uuid}",
-                "spec_version": "2.1",
-                "value": ns_cleaned,
-            }
-            ns_node = {
-                "type": "domain-name",
-                "value": ns_cleaned,
-                "metadata": {
-                    "stix2": stix2_ns,
-                    "misp": {"type": "domain", "value": ns_cleaned},
-                },
-            }
-            if ns_node not in nodes:
-                nodes.append(ns_node)
-
-            edges.append(
-                {
-                    "source": target,
-                    "target": ns_cleaned,
-                    "relationship": "has-ns-record",
-                }
-            )
-
-        # 4. Map Contact Emails
+        # Contact Emails
         for email in emails:
             if not email:
                 continue
+            builder.add_node(NodeFactory.email(email))
+            builder.add_edge(target, email, "has-contact-email")
 
-            email_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, email)
-            stix2_email = {
-                "type": "email-addr",
-                "id": f"email-addr--{email_uuid}",
-                "spec_version": "2.1",
-                "value": email,
-            }
-            email_node = {
-                "type": "email-addr",
-                "value": email,
-                "metadata": {
-                    "stix2": stix2_email,
-                    "misp": {"type": "email-dst", "value": email},
-                },
-            }
-            if email_node not in nodes:
-                nodes.append(email_node)
-
-            edges.append(
-                {
-                    "source": target,
-                    "target": email,
-                    "relationship": "has-contact-email",
-                }
-            )
-
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())

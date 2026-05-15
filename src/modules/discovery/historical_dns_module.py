@@ -1,5 +1,5 @@
 import asyncio
-import requests
+import httpx
 import dns.resolver
 from bs4 import BeautifulSoup
 from rich.table import Table
@@ -58,14 +58,14 @@ class HistoricalDnsModule(BaseModule):
 
         # Fetch HackerTarget IP History
         info("Fetching HackerTarget IP history...")
-        ht_data = await asyncio.to_thread(self._get_hackertarget_history, target)
+        ht_data = await self._get_hackertarget_history(target)
         for entry in ht_data:
             ip_history_data.append(entry)
             historical_ips.add(entry["ip"])
 
         # Fetch ViewDNS IP History
         info("Fetching ViewDNS IP history...")
-        vd_data = await asyncio.to_thread(self._get_viewdns_history, target)
+        vd_data = await self._get_viewdns_history(target)
         for entry in vd_data:
             ip_history_data.append(entry)
             historical_ips.add(entry["ip"])
@@ -73,8 +73,8 @@ class HistoricalDnsModule(BaseModule):
         # Fetch SecurityTrails Data (if key is present)
         if api_key:
             info("Fetching SecurityTrails historical data...")
-            st_data, st_subdomains = await asyncio.to_thread(
-                self._get_securitytrails_data, target, api_key
+            st_data, st_subdomains = await self._get_securitytrails_data(
+                target, api_key
             )
             for entry in st_data:
                 ip_history_data.append(entry)
@@ -84,9 +84,7 @@ class HistoricalDnsModule(BaseModule):
             warn(
                 "SecurityTrails API key not provided. Falling back to crt.sh for subdomain history."
             )
-            crt_subdomains = await asyncio.to_thread(
-                SubdomainModule().find_by_crt, target
-            )
+            crt_subdomains = await SubdomainModule().find_by_crt(target)
             subdomains.update(crt_subdomains)
 
         # Print Historical IPs
@@ -143,102 +141,107 @@ class HistoricalDnsModule(BaseModule):
         }
         await self._save_results(target, results_dict)
 
-    def _get_hackertarget_history(self, target: str) -> list[dict]:
+    async def _get_hackertarget_history(self, target: str) -> list[dict]:
         results = []
         try:
-            r = requests.get(
-                f"https://api.hackertarget.com/iphistory/?q={target}",
-                timeout=15,
-                headers={"User-Agent": UserAgents.get()},
-            )
-            if r.status_code == 200 and "error" not in r.text.lower():
-                lines = r.text.strip().split("\n")
-                for line in lines:
-                    parts = line.split(",")
-                    if len(parts) >= 2:
-                        ip = parts[0].strip()
-                        # HackerTarget returns: ip, target
-                        # Unfortunately, it doesn't always give dates in this endpoint.
-                        results.append(
-                            {"ip": ip, "date": "Unknown", "source": "HackerTarget"}
-                        )
-        except Exception as _:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"https://api.hackertarget.com/iphistory/?q={target}",
+                    timeout=15,
+                    headers={"User-Agent": UserAgents.get()},
+                )
+                if r.status_code == 200 and "error" not in r.text.lower():
+                    lines = r.text.strip().split("\n")
+                    for line in lines:
+                        parts = line.split(",")
+                        if len(parts) >= 2:
+                            ip = parts[0].strip()
+                            # HackerTarget returns: ip, target
+                            # Unfortunately, it doesn't always give dates in this endpoint.
+                            results.append(
+                                {"ip": ip, "date": "Unknown", "source": "HackerTarget"}
+                            )
+        except Exception:
             pass
         return results
 
-    def _get_viewdns_history(self, target: str) -> list[dict]:
+    async def _get_viewdns_history(self, target: str) -> list[dict]:
         results = []
         try:
             url = f"https://viewdns.info/iphistory/?domain={target}"
-            r = requests.get(url, timeout=15, headers={"User-Agent": UserAgents.get()})
-            if r.status_code == 200:
-                soup = BeautifulSoup(r.text, "html.parser")
-                # Find the table containing the history
-                tables = soup.find_all("table", border="1")
-                if tables:
-                    history_table = tables[0]
-                    rows = history_table.find_all("tr")[1:]  # Skip header
-                    for row in rows:
-                        cols = row.find_all("td")
-                        if len(cols) >= 4:
-                            ip = cols[0].text.strip()
-                            # location = cols[1].text.strip()
-                            # owner = cols[2].text.strip()
-                            date = cols[3].text.strip()
-                            results.append(
-                                {"ip": ip, "date": date, "source": "ViewDNS"}
-                            )
-        except Exception as _:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    url, timeout=15, headers={"User-Agent": UserAgents.get()}
+                )
+                if r.status_code == 200:
+                    soup = BeautifulSoup(r.text, "html.parser")
+                    # Find the table containing the history
+                    tables = soup.find_all("table", border="1")
+                    if tables:
+                        history_table = tables[0]
+                        rows = history_table.find_all("tr")[1:]  # Skip header
+                        for row in rows:
+                            cols = row.find_all("td")
+                            if len(cols) >= 4:
+                                ip = cols[0].text.strip()
+                                # location = cols[1].text.strip()
+                                # owner = cols[2].text.strip()
+                                date = cols[3].text.strip()
+                                results.append(
+                                    {"ip": ip, "date": date, "source": "ViewDNS"}
+                                )
+        except Exception:
             pass
         return results
 
-    def _get_securitytrails_data(
+    async def _get_securitytrails_data(
         self, target: str, api_key: str
     ) -> tuple[list[dict], set[str]]:
         history = []
         subdomains = set()
         headers = {"accept": "application/json", "APIKEY": api_key}
 
-        # Get History
-        try:
-            r = requests.get(
-                f"https://api.securitytrails.com/v1/history/{target}/dns/a",
-                headers=headers,
-                timeout=20,
-            )
-            if r.status_code == 200:
-                data = r.json()
-                records = data.get("records", [])
-                for record in records:
-                    values = record.get("values", [])
-                    for val in values:
-                        ip = val.get("ip")
-                        first_seen = record.get("first_seen", "Unknown")
-                        if ip:
-                            history.append(
-                                {
-                                    "ip": ip,
-                                    "date": first_seen,
-                                    "source": "SecurityTrails",
-                                }
-                            )
-        except Exception:
-            pass
+        async with httpx.AsyncClient() as client:
+            # Get History
+            try:
+                r = await client.get(
+                    f"https://api.securitytrails.com/v1/history/{target}/dns/a",
+                    headers=headers,
+                    timeout=20,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    records = data.get("records", [])
+                    for record in records:
+                        values = record.get("values", [])
+                        for val in values:
+                            ip = val.get("ip")
+                            first_seen = record.get("first_seen", "Unknown")
+                            if ip:
+                                history.append(
+                                    {
+                                        "ip": ip,
+                                        "date": first_seen,
+                                        "source": "SecurityTrails",
+                                    }
+                                )
+            except Exception:
+                pass
 
-        # Get Subdomains
-        try:
-            r = requests.get(
-                f"https://api.securitytrails.com/v1/domain/{target}/subdomains?children_only=false",
-                headers=headers,
-                timeout=20,
-            )
-            if r.status_code == 200:
-                data = r.json()
-                subs = data.get("subdomains", [])
-                for sub in subs:
-                    subdomains.add(f"{sub}.{target}")
-        except Exception:
-            pass
+            # Get Subdomains
+            try:
+                r = await client.get(
+                    f"https://api.securitytrails.com/v1/domain/{target}/subdomains?children_only=false",
+                    headers=headers,
+                    timeout=20,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    subs = data.get("subdomains", [])
+                    for sub in subs:
+                        subdomains.add(f"{sub}.{target}")
+            except Exception:
+                pass
 
         return history, subdomains
 
@@ -328,7 +331,7 @@ class HistoricalDnsModule(BaseModule):
             "The specified bucket does not exist",
         ]
 
-        async def check_sub(sub):
+        async def check_sub(client, sub):
             try:
                 # Resolve DNS
                 answers = await asyncio.to_thread(dns.resolver.resolve, sub, "A")
@@ -336,11 +339,11 @@ class HistoricalDnsModule(BaseModule):
 
                 # If it resolves, perform HTTP request to check for takeover signatures
                 try:
-                    r = await asyncio.to_thread(
-                        requests.get,
+                    r = await client.get(
                         f"http://{sub}",
                         timeout=5,
                         headers={"User-Agent": UserAgents.get()},
+                        follow_redirects=True,
                     )
                     content = r.text
                     for sig in signatures:
@@ -368,19 +371,18 @@ class HistoricalDnsModule(BaseModule):
             return None
 
         # Check in batches
-        import concurrent.futures
+        async with httpx.AsyncClient() as client:
+            tasks = [check_sub(client, sub) for sub in subdomains]
 
-        tasks = [check_sub(sub) for sub in subdomains]
-
-        # Limit concurrency to avoid flooding
-        # Doing this manually with chunks
-        chunk_size = 20
-        for i in range(0, len(tasks), chunk_size):
-            chunk = tasks[i : i + chunk_size]
-            results = await asyncio.gather(*chunk)
-            for res in results:
-                if res:
-                    vulnerable.append(res)
+            # Limit concurrency to avoid flooding
+            # Doing this manually with chunks
+            chunk_size = 20
+            for i in range(0, len(tasks), chunk_size):
+                chunk = tasks[i : i + chunk_size]
+                results = await asyncio.gather(*chunk)
+                for res in results:
+                    if res:
+                        vulnerable.append(res)
 
         if vulnerable:
             table = Table(
@@ -408,46 +410,21 @@ class HistoricalDnsModule(BaseModule):
         return vulnerable
 
     async def _save_results(self, target: str, results: dict) -> None:
-        import uuid
-        from typing import Any
+        from src.core.result_builder import ResultBuilder, NodeFactory
 
         ip_history = results.get("ip_history", [])
         subdomains = results.get("subdomains", [])
         vulnerable_subs = results.get("vulnerable_subdomains", [])
 
-        # STIX 2.1 Standard Domain-Name Object
-        STIX_DOMAIN_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa7")
-        domain_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, target)
-
-        stix2_domain = {
-            "type": "domain-name",
-            "id": f"domain-name--{domain_uuid}",
-            "spec_version": "2.1",
-            "value": target,
-        }
-
-        misp_domain = {
-            "type": "domain",
-            "value": target,
-        }
-
-        primary_node = {
-            "type": "domain-name",
-            "value": target,
-            "metadata": {
-                "stix2": stix2_domain,
-                "misp": misp_domain,
-                "historical_ips_count": len(set(x["ip"] for x in ip_history)),
-                "historical_subdomains_count": len(subdomains),
-                "vulnerable_subdomains_count": len(vulnerable_subs),
-            },
-        }
-
-        nodes: list[dict[str, Any]] = [primary_node]
-        edges: list[dict[str, Any]] = []
-
-        # Standard CTI Namespaces
-        STIX_IP_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa0")
+        builder = ResultBuilder()
+        builder.add_node(
+            NodeFactory.domain(
+                target,
+                historical_ips_count=len(set(x["ip"] for x in ip_history)),
+                historical_subdomains_count=len(subdomains),
+                vulnerable_subdomains_count=len(vulnerable_subs),
+            )
+        )
 
         # Create lookup dictionary for vulnerable subdomain statuses
         vuln_lookup = {}
@@ -464,48 +441,25 @@ class HistoricalDnsModule(BaseModule):
             if not sub_cleaned:
                 continue
 
-            sub_uuid = uuid.uuid5(STIX_DOMAIN_NAMESPACE, sub_cleaned)
             vuln_info = vuln_lookup.get(
                 sub_cleaned, {"vulnerable": False, "status": None, "ips": []}
             )
 
-            stix2_sub = {
-                "type": "domain-name",
-                "id": f"domain-name--{sub_uuid}",
-                "spec_version": "2.1",
-                "value": sub_cleaned,
-                "x_vulnerable_takeover": vuln_info["vulnerable"],
-                "x_takeover_status": vuln_info["status"],
-            }
-
-            misp_sub = {
-                "type": "domain",
-                "value": sub_cleaned,
-            }
-
-            sub_node = {
-                "type": "domain-name",
-                "value": sub_cleaned,
-                "metadata": {
-                    "stix2": stix2_sub,
-                    "misp": misp_sub,
-                    "takeover_vulnerable": vuln_info["vulnerable"],
-                    "takeover_status": vuln_info["status"],
-                    "vulnerable_ips": vuln_info["ips"],
-                    "historical": True,
-                },
-            }
-
-            if sub_node not in nodes:
-                nodes.append(sub_node)
-
-            edges.append(
-                {
-                    "source": target,
-                    "target": sub_cleaned,
-                    "relationship": "has-subdomain",
-                }
+            sub_node = NodeFactory.domain(
+                sub_cleaned,
+                takeover_vulnerable=vuln_info["vulnerable"],
+                takeover_status=vuln_info["status"],
+                vulnerable_ips=vuln_info["ips"],
+                historical=True,
             )
+            # Add extended STIX2 fields for vulnerability info
+            sub_node["metadata"]["stix2"]["x_vulnerable_takeover"] = vuln_info[
+                "vulnerable"
+            ]
+            sub_node["metadata"]["stix2"]["x_takeover_status"] = vuln_info["status"]
+
+            builder.add_node(sub_node)
+            builder.add_edge(target, sub_cleaned, "has-subdomain")
 
         # Map Historical IP Addresses
         for ip_entry in ip_history:
@@ -516,31 +470,15 @@ class HistoricalDnsModule(BaseModule):
             if not ip_val:
                 continue
 
-            ip_uuid = uuid.uuid5(STIX_IP_NAMESPACE, ip_val)
-            stix2_ip = {
-                "type": "ipv4-addr",
-                "id": f"ipv4-addr--{ip_uuid}",
-                "spec_version": "2.1",
-                "value": ip_val,
-            }
+            builder.add_node(NodeFactory.ip(ip_val, historical=True))
 
-            ip_node = {
-                "type": "ipv4-addr",
-                "value": ip_val,
-                "metadata": {
-                    "stix2": stix2_ip,
-                    "misp": {"type": "ip-dst", "value": ip_val},
-                    "historical": True,
-                },
-            }
+            record_str = f"{date_val} ({source_val})"
 
-            if ip_node not in nodes:
-                nodes.append(ip_node)
-
+            # Check if edge already exists and append to metadata
             existing_edge = next(
                 (
                     e
-                    for e in edges
+                    for e in builder._edges
                     if e["source"] == target
                     and e["target"] == ip_val
                     and e["relationship"] == "historically-resolved-to"
@@ -548,26 +486,17 @@ class HistoricalDnsModule(BaseModule):
                 None,
             )
 
-            record_str = f"{date_val} ({source_val})"
-
             if existing_edge:
                 if record_str not in existing_edge["metadata"]["historical_records"]:
                     existing_edge["metadata"]["historical_records"].append(record_str)
             else:
-                edges.append(
-                    {
-                        "source": target,
-                        "target": ip_val,
-                        "relationship": "historically-resolved-to",
-                        "metadata": {
-                            "historical_records": [record_str],
-                        },
-                    }
+                builder.add_edge(
+                    target,
+                    ip_val,
+                    "historically-resolved-to",
+                    metadata={
+                        "historical_records": [record_str],
+                    },
                 )
 
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())

@@ -499,88 +499,33 @@ class LeakModule(BaseModule):
             return []
 
     async def _save_results(self, target: str, results: dict) -> None:
-        import uuid
+        from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces
 
         target_type = results.get("type", "email")
         leaks = results.get("leaks", [])
 
-        # Primary Target Node Construction
-        stix2_target: dict = {}
-        misp_target: dict = {}
+        builder = ResultBuilder()
 
-        if target_type == "email":
-            STIX_EMAIL_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa2")
-            target_uuid = uuid.uuid5(STIX_EMAIL_NAMESPACE, target)
-            stix2_target = {
-                "type": "email-addr",
-                "id": f"email-addr--{target_uuid}",
-                "spec_version": "2.1",
-                "value": target,
-            }
-            misp_target = {
-                "type": "email-dst",
-                "value": target,
-            }
-            primary_node = {
-                "type": "email-addr",
-                "value": target,
-                "metadata": {
-                    "stix2": stix2_target,
-                    "misp": misp_target,
-                    "leaks_count": len(leaks),
-                },
-            }
-        elif target_type == "phone":
-            STIX_PHONE_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa1")
-            target_uuid = uuid.uuid5(STIX_PHONE_NAMESPACE, target)
-            stix2_target = {
-                "type": "x-phone-number",
-                "id": f"x-phone-number--{target_uuid}",
-                "spec_version": "2.1",
-                "value": target,
-            }
-            misp_target = {
-                "type": "phone-number",
-                "value": target,
-            }
-            primary_node = {
-                "type": "x-phone-number",
-                "value": target,
-                "metadata": {
-                    "stix2": stix2_target,
-                    "misp": misp_target,
-                    "leaks_count": len(leaks),
-                },
-            }
-        else:  # username
-            STIX_ACCOUNT_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa6")
-            target_uuid = uuid.uuid5(STIX_ACCOUNT_NAMESPACE, f"username:{target}")
-            stix2_target = {
-                "type": "user-account",
-                "id": f"user-account--{target_uuid}",
-                "spec_version": "2.1",
-                "account_login": target,
-                "account_type": "username",
-            }
-            misp_target = {
-                "type": "text",
-                "value": target,
-            }
-            primary_node = {
-                "type": "user-account",
-                "value": f"username:{target}",
-                "metadata": {
-                    "stix2": stix2_target,
-                    "misp": misp_target,
-                    "leaks_count": len(leaks),
-                },
-            }
+        # Primary target node
+        match target_type:
+            case "email":
+                builder.add_node(NodeFactory.email(target, leaks_count=len(leaks)))
+            case "phone":
+                builder.add_node(NodeFactory.phone(target, leaks_count=len(leaks)))
+            case _:
+                builder.add_node(NodeFactory.user_account(
+                    f"username:{target}",
+                    leaks_count=len(leaks),
+                ))
+                # Override stix2 specifics for username
+                primary = builder._nodes[-1]
+                primary["metadata"]["stix2"]["account_login"] = target
+                primary["metadata"]["stix2"]["account_type"] = "username"
+                primary["metadata"]["misp"] = {"type": "text", "value": target}
 
-        nodes: list[dict[str, Any]] = [primary_node]
-        edges: list[dict[str, Any]] = []
+        source_val = target if target_type in ["email", "phone"] else f"username:{target}"
 
-        # Map Leak Nodes
-        STIX_BREACH_NAMESPACE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa8")
+        # Breach nodes + edges
         for leak in leaks:
             breach_name = leak.get("breach_name", "Unknown")
             source = leak.get("source", "Unknown")
@@ -588,55 +533,27 @@ class LeakModule(BaseModule):
             categories = leak.get("categories", [])
             extra_info = leak.get("extra_info", {})
 
-            # Standard STIX 2.1 custom observable for a data breach
-            breach_uuid = uuid.uuid5(STIX_BREACH_NAMESPACE, f"{source}:{breach_name}")
-            stix2_breach = {
-                "type": "x-data-breach",
-                "id": f"x-data-breach--{breach_uuid}",
-                "spec_version": "2.1",
-                "name": breach_name,
-                "description": f"Target was compromised in {breach_name} breach (reported by {source})",
-                "source": source,
-                "breach_date": date,
-                "categories": categories,
-            }
+            breach_val = f"{source}:{breach_name}"
 
-            misp_breach = {
-                "type": "leak-source",
-                "value": f"{source} ({breach_name})",
-            }
-
-            breach_node = {
-                "type": "x-data-breach",
-                "value": f"{source}:{breach_name}",
-                "metadata": {
-                    "stix2": stix2_breach,
-                    "misp": misp_breach,
+            builder.add_node(NodeFactory.custom(
+                "x-data-breach",
+                breach_val,
+                namespace=STIXNamespaces.BREACH,
+                stix2_extra={
+                    "name": breach_name,
+                    "description": f"Target was compromised in {breach_name} breach (reported by {source})",
+                    "source": source,
                     "breach_date": date,
+                    "categories": categories,
                 },
-            }
+                misp_type="leak-source",
+                misp_value=f"{source} ({breach_name})",
+                breach_date=date,
+            ))
 
-            if breach_node not in nodes:
-                nodes.append(breach_node)
+            builder.add_edge(source_val, breach_val, "compromised-in", metadata={
+                "categories": categories,
+                "extra_info": extra_info,
+            })
 
-            source_val = (
-                target if target_type in ["email", "phone"] else f"username:{target}"
-            )
-            edges.append(
-                {
-                    "source": source_val,
-                    "target": f"{source}:{breach_name}",
-                    "relationship": "compromised-in",
-                    "metadata": {
-                        "categories": categories,
-                        "extra_info": extra_info,
-                    },
-                }
-            )
-
-        new_results = {
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-        await self.post_run(new_results)
+        await self.post_run(builder.build())
