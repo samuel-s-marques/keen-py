@@ -2,7 +2,7 @@ from src.utils.print_utils import error
 from src.utils.validator import InputValidator
 from src.core.base_module import BaseModule
 from src.modules.enumeration.sherlock_module import SherlockModule
-from src.modules.enumeration.holehe_module import HoleheModule
+from src.modules.enumeration.user_scanner_module import UserScannerModule
 from src.modules.enumeration.phone_verification_module import PhoneVerificationModule
 from src.modules.enumeration.email_verification_module import EmailVerificationModule
 from src.modules.enumeration.email_enrichment_module import EmailEnrichmentModule
@@ -109,13 +109,13 @@ class SOCMINTModule(BaseModule):
         timeout = int(self.options.get("TIMEOUT", 15))
 
         # Initialize modules
-        holehe = HoleheModule()
+        user_scanner = UserScannerModule()
         email_ver = EmailVerificationModule()
         email_enr = EmailEnrichmentModule()
 
         # Run concurrently
         await asyncio.gather(
-            holehe.holehe(target),
+            user_scanner.execute(target),
             email_ver.execute(target, timeout=timeout),
             email_enr.execute(target),
             return_exceptions=True,
@@ -124,11 +124,13 @@ class SOCMINTModule(BaseModule):
     async def _check_username(self, target: str) -> None:
         # Initialize modules
         sherlock = SherlockModule()
+        user_scanner = UserScannerModule()
         github = GitHubModule()
 
         # Run concurrently
         await asyncio.gather(
             sherlock.sherlock(target),
+            user_scanner.execute(target),
             github.execute(target),
             return_exceptions=True,
         )
