@@ -1,6 +1,5 @@
 from src.utils.config_util import get_valid_name
 import os
-import sys
 import json
 import asyncio
 import contextlib
@@ -9,7 +8,7 @@ from typing import Optional, Dict, Any
 import io
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -701,7 +700,7 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
     except Exception as e:
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
-        except:
+        except Exception:
             pass
     finally:
         if handler_id is not None:
