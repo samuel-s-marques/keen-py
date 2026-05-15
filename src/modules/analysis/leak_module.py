@@ -1,4 +1,3 @@
-from typing import Any
 from src.utils.print_utils import warn, error, success
 from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
@@ -500,6 +499,7 @@ class LeakModule(BaseModule):
 
     async def _save_results(self, target: str, results: dict) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces
+        from src.core.pattern_extractor import PatternExtractor
 
         target_type = results.get("type", "email")
         leaks = results.get("leaks", [])
@@ -513,17 +513,21 @@ class LeakModule(BaseModule):
             case "phone":
                 builder.add_node(NodeFactory.phone(target, leaks_count=len(leaks)))
             case _:
-                builder.add_node(NodeFactory.user_account(
-                    f"username:{target}",
-                    leaks_count=len(leaks),
-                ))
+                builder.add_node(
+                    NodeFactory.user_account(
+                        f"username:{target}",
+                        leaks_count=len(leaks),
+                    )
+                )
                 # Override stix2 specifics for username
                 primary = builder._nodes[-1]
                 primary["metadata"]["stix2"]["account_login"] = target
                 primary["metadata"]["stix2"]["account_type"] = "username"
                 primary["metadata"]["misp"] = {"type": "text", "value": target}
 
-        source_val = target if target_type in ["email", "phone"] else f"username:{target}"
+        source_val = (
+            target if target_type in ["email", "phone"] else f"username:{target}"
+        )
 
         # Breach nodes + edges
         for leak in leaks:
@@ -535,25 +539,35 @@ class LeakModule(BaseModule):
 
             breach_val = f"{source}:{breach_name}"
 
-            builder.add_node(NodeFactory.custom(
-                "x-data-breach",
-                breach_val,
-                namespace=STIXNamespaces.BREACH,
-                stix2_extra={
-                    "name": breach_name,
-                    "description": f"Target was compromised in {breach_name} breach (reported by {source})",
-                    "source": source,
-                    "breach_date": date,
-                    "categories": categories,
-                },
-                misp_type="leak-source",
-                misp_value=f"{source} ({breach_name})",
-                breach_date=date,
-            ))
+            builder.add_node(
+                NodeFactory.custom(
+                    "x-data-breach",
+                    breach_val,
+                    namespace=STIXNamespaces.BREACH,
+                    stix2_extra={
+                        "name": breach_name,
+                        "description": f"Target was compromised in {breach_name} breach (reported by {source})",
+                        "source": source,
+                        "breach_date": date,
+                        "categories": categories,
+                    },
+                    misp_type="leak-source",
+                    misp_value=f"{source} ({breach_name})",
+                    breach_date=date,
+                )
+            )
 
-            builder.add_edge(source_val, breach_val, "compromised-in", metadata={
-                "categories": categories,
-                "extra_info": extra_info,
-            })
+            builder.add_edge(
+                source_val,
+                breach_val,
+                "compromised-in",
+                metadata={
+                    "categories": categories,
+                    "extra_info": extra_info,
+                },
+            )
+
+            # Extract patterns from extra_info
+            PatternExtractor.extract_and_link(builder, breach_val, extra_info)
 
         await self.post_run(builder.build())
