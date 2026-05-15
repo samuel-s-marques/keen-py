@@ -9,13 +9,13 @@ class PatternExtractor:
     # should_isolate=True means the node value will be prefixed with the source node value
     # to avoid false merging of common values like names.
     FIELD_MAP = {
-        "fname": ("x-first-name", "has-first-name", True),
-        "first_name": ("x-first-name", "has-first-name", True),
-        "lname": ("x-last-name", "has-last-name", True),
-        "last_name": ("x-last-name", "has-last-name", True),
-        "name": ("x-name", "has-name", True),
-        "full_name": ("x-name", "has-name", True),
-        "username": ("user-account", "has-username", True),
+        "fname": ("x-first-name", "has-first-name", False),
+        "first_name": ("x-first-name", "has-first-name", False),
+        "lname": ("x-last-name", "has-last-name", False),
+        "last_name": ("x-last-name", "has-last-name", False),
+        "name": ("x-name", "has-name", False),
+        "full_name": ("x-name", "has-name", False),
+        "username": ("user-account", "has-username", False),
         "password": ("x-password", "has-password", False),
         "fb_id": ("x-facebook-id", "has-facebook-id", False),
         "fbid": ("x-facebook-id", "has-facebook-id", False),
