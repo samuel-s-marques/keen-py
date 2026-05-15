@@ -85,6 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsUnlocked = document.getElementById('settings-unlocked');
     const btnSaveApiKey = document.getElementById('btn-save-api-key');
     const apiKeysList = document.getElementById('api-keys-list');
+    const prefExtractionMode = document.getElementById('pref-extraction-mode');
+    const btnSavePreferences = document.getElementById('btn-save-preferences');
 
     const closeModals = document.querySelectorAll('.close-modal');
 
@@ -295,6 +297,16 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchApiKeys();
     });
 
+    btnSavePreferences.addEventListener('click', async () => {
+        const value = prefExtractionMode.value;
+        await fetch(`${API_BASE}/config/preferences`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: 'extraction_mode', value })
+        });
+        alert('Preferences saved!');
+    });
+
     async function fetchApiKeys() {
         if (!isConfigUnlocked) return;
         const res = await fetch(`${API_BASE}/config/keys`);
@@ -325,6 +337,18 @@ document.addEventListener('DOMContentLoaded', () => {
             // Re-render form if a module is selected to auto-inject keys
             if (moduleSelect.value) {
                 moduleSelect.dispatchEvent(new Event('change'));
+            }
+        }
+        // Also fetch preferences
+        fetchPreferences();
+    }
+
+    async function fetchPreferences() {
+        const res = await fetch(`${API_BASE}/config/preferences`);
+        if (res.ok) {
+            const prefs = await res.json();
+            if (prefs.extraction_mode) {
+                prefExtractionMode.value = prefs.extraction_mode;
             }
         }
     }
