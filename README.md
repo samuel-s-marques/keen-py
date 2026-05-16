@@ -40,7 +40,6 @@ This module focuses on extracting as much detail as possible from targets.
 Available modules:
 - Holehe: Check if an username/email exists on social media.
 - Sherlock: Find usernames across multiple social media platforms.
-- SOCMINT_Enum: Combines Holehe, Sherlock and more to check for social media accounts.
 
 TODO:
 - [ ] Add email enumeration (breach checking)

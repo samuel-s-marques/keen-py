@@ -28,10 +28,10 @@ nav:
                   - Enumeration:
                             - Email Enrichment: modules/enumeration/email_enrichment.md
                             - Email Verification: modules/enumeration/email_verification.md
+                            - Email Finder: modules/enumeration/email_finder.md
                             - Github Enumeration: modules/enumeration/github_enum.md
                             - Phone Verification: modules/enumeration/phone_verification.md
                             - Sherlock: modules/enumeration/sherlock.md
-                            - SOCMINT: modules/enumeration/socmint.md
                             - User Scanner: modules/enumeration/user_scanner.md
                   - Web:
                             - WAF/CDN Detection: modules/web/waf_detection.md

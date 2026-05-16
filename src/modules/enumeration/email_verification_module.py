@@ -88,6 +88,7 @@ class EmailVerificationModule(BaseModule):
         super().__init__()
 
         self.options = {k: v[0] for k, v in self.metadata["options"].items()}
+        self._mx_cache = {}
 
     async def run(self) -> None:
         if not self.pre_run():
@@ -96,14 +97,30 @@ class EmailVerificationModule(BaseModule):
         target: str = str(self.options.get("TARGET")).lower()
         timeout: int = int(self.options.get("TIMEOUT", 10))
 
-        await self.loading(
+        res = await self.loading(
             f"Verifying email {target}...", self.execute, target, timeout
         )
 
-    async def execute(self, email: str, timeout: int) -> None:
+        self.display_results(
+            target,
+            res.get("local_part"),
+            res.get("domain"),
+            res.get("is_role"),
+            res.get("is_disposable"),
+            res.get("mx_records"),
+            res.get("deliverable"),
+            res.get("inbox_full"),
+            res.get("disabled"),
+            res.get("catch_all"),
+            res.get("score"),
+        )
+
+        await self._save_results(target, res)
+
+    async def execute(self, email: str, timeout: int) -> dict:
         if not InputValidator.is_valid_email(email):
             error(f"Invalid email format: {email}")
-            return
+            return {}
 
         local_part, domain = email.split("@")
 
@@ -147,20 +164,6 @@ class EmailVerificationModule(BaseModule):
             deliverable, is_role, is_disposable, catch_all, mx_records
         )
 
-        self.display_results(
-            email,
-            local_part,
-            domain,
-            is_role,
-            is_disposable,
-            mx_records,
-            deliverable,
-            inbox_full,
-            disabled,
-            catch_all,
-            score,
-        )
-
         results = {
             "is_role": is_role,
             "is_disposable": is_disposable,
@@ -171,9 +174,13 @@ class EmailVerificationModule(BaseModule):
             "catch_all": catch_all,
             "score": score,
         }
-        await self._save_results(email, results)
+
+        return results
 
     async def get_mx_records(self, domain: str, timeout: int) -> list[tuple[int, str]]:
+        if domain in self._mx_cache:
+            return self._mx_cache[domain]
+
         records = []
         try:
             answers = await asyncio.to_thread(
@@ -184,6 +191,8 @@ class EmailVerificationModule(BaseModule):
             records.sort(key=lambda x: x[0])
         except Exception:
             pass
+            
+        self._mx_cache[domain] = records
         return records
 
     async def smtp_verify(

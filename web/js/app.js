@@ -462,7 +462,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const input = document.createElement('input');
                 input.type = isSecret ? 'password' : 'text';
                 input.name = key;
-                input.autocomplete = 'off';
+                // Use 'new-password' and 'one-time-code' to prevent aggressive browser autofill
+                input.autocomplete = isSecret ? 'new-password' : 'one-time-code';
                 input.value = defVal;
                 input.placeholder = value[2] || '';
 

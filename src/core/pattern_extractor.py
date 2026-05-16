@@ -36,6 +36,10 @@ class PatternExtractor:
             source_node_val: The value of the source node (e.g. breach ID or target email).
             data: The dictionary to extract fields from.
         """
+        # If data is not a dict, return
+        if not isinstance(data, dict):
+            return
+
         # Read user preference for extraction mode
         # Modes: 'merge', 'isolate', 'isolate_with_service'
         # Default to 'merge' to support searching by default

@@ -68,6 +68,7 @@ SUCCESS  | Preference 'extraction_mode' set to 'isolate'.
 ## Security / Blocked Keys
 
 To prevent accidental modification or exposure of sensitive internal data, certain keys are blocked and cannot be accessed, listed, or modified via the `pref` command:
+
 - `last_workspace`
 - `api_keys_salt`
 - `master_password_check`
