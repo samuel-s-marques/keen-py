@@ -11,6 +11,7 @@ nav:
         - Getting Started:
                   - Installation: getting-started/installation.md
                   - Usage: getting-started/usage.md
+                  - Preferences: getting-started/preferences.md
                   - Workspace Management: getting-started/workspace_management.md
                   - API Keys Management: getting-started/api_keys_management.md
                   - Web Server: getting-started/web.md
