@@ -1,4 +1,3 @@
-from typing import Any
 from src.utils.print_utils import warn, error, success
 from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
@@ -98,11 +97,17 @@ class LeakModule(BaseModule):
                     self.check_breach_directory,
                     target,
                 )
+                pn = await self.loading(
+                    f"Checking {target} on ProxyNova...",
+                    self.check_proxynova,
+                    target,
+                )
                 all_leaks.extend(hb or [])
                 all_leaks.extend(lc or [])
                 all_leaks.extend(bv or [])
                 all_leaks.extend(dh or [])
                 all_leaks.extend(bd or [])
+                all_leaks.extend(pn or [])
             case "phone":
                 lc = await self.loading(
                     f"Checking {target} on LeakCheck...", self.check_leak_check, target
@@ -498,8 +503,66 @@ class LeakModule(BaseModule):
             error(f"Error checking BreachDirectory: {e}")
             return []
 
+    async def check_proxynova(self, target: str) -> list:
+        if len(target) < 5:
+            warn("ProxyNova: Target is too short.")
+            return []
+
+        try:
+            headers: dict = {
+                "Content-Type": "application/json",
+                "User-Agent": UserAgents.get(),
+            }
+
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                r = await client.get(
+                    f"https://api.proxynova.com/comb?query={target}&start=0&limit=20",
+                    headers=headers,
+                )
+            res = r.json()
+
+            if r.status_code != 200:
+                error(
+                    f"Error checking ProxyNova: {res.get('message', 'Unknown Error')}.\nStatus: {r.status_code}"
+                )
+                return []
+
+            results = res.get("result", [])
+
+            output = []
+
+            # Proxynova only returns email:password
+            for item in results:
+                email = item.get("email")
+                password = item.get("password")
+
+                if not email or not password:
+                    continue
+
+                # Proxynova usually returns different domains for the same target
+                if email != target:
+                    continue
+
+                success(f"{email}:{password} was found in ProxyNova data breach")
+
+                output.append(
+                    {
+                        "source": "ProxyNova",
+                        "breach_name": "Unknown",
+                        "date": None,
+                        "categories": [],
+                        "extra_info": {"email": email, "password": password},
+                    }
+                )
+
+            return output
+        except Exception as e:
+            error(f"Error checking ProxyNova: {e}")
+            return []
+
     async def _save_results(self, target: str, results: dict) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces
+        from src.core.pattern_extractor import PatternExtractor
 
         target_type = results.get("type", "email")
         leaks = results.get("leaks", [])
@@ -513,17 +576,21 @@ class LeakModule(BaseModule):
             case "phone":
                 builder.add_node(NodeFactory.phone(target, leaks_count=len(leaks)))
             case _:
-                builder.add_node(NodeFactory.user_account(
-                    f"username:{target}",
-                    leaks_count=len(leaks),
-                ))
+                builder.add_node(
+                    NodeFactory.user_account(
+                        f"username:{target}",
+                        leaks_count=len(leaks),
+                    )
+                )
                 # Override stix2 specifics for username
                 primary = builder._nodes[-1]
                 primary["metadata"]["stix2"]["account_login"] = target
                 primary["metadata"]["stix2"]["account_type"] = "username"
                 primary["metadata"]["misp"] = {"type": "text", "value": target}
 
-        source_val = target if target_type in ["email", "phone"] else f"username:{target}"
+        source_val = (
+            target if target_type in ["email", "phone"] else f"username:{target}"
+        )
 
         # Breach nodes + edges
         for leak in leaks:
@@ -535,25 +602,35 @@ class LeakModule(BaseModule):
 
             breach_val = f"{source}:{breach_name}"
 
-            builder.add_node(NodeFactory.custom(
-                "x-data-breach",
-                breach_val,
-                namespace=STIXNamespaces.BREACH,
-                stix2_extra={
-                    "name": breach_name,
-                    "description": f"Target was compromised in {breach_name} breach (reported by {source})",
-                    "source": source,
-                    "breach_date": date,
-                    "categories": categories,
-                },
-                misp_type="leak-source",
-                misp_value=f"{source} ({breach_name})",
-                breach_date=date,
-            ))
+            builder.add_node(
+                NodeFactory.custom(
+                    "x-data-breach",
+                    breach_val,
+                    namespace=STIXNamespaces.BREACH,
+                    stix2_extra={
+                        "name": breach_name,
+                        "description": f"Target was compromised in {breach_name} breach (reported by {source})",
+                        "source": source,
+                        "breach_date": date,
+                        "categories": categories,
+                    },
+                    misp_type="leak-source",
+                    misp_value=f"{source} ({breach_name})",
+                    breach_date=date,
+                )
+            )
 
-            builder.add_edge(source_val, breach_val, "compromised-in", metadata={
-                "categories": categories,
-                "extra_info": extra_info,
-            })
+            builder.add_edge(
+                source_val,
+                breach_val,
+                "compromised-in",
+                metadata={
+                    "categories": categories,
+                    "extra_info": extra_info,
+                },
+            )
+
+            # Extract patterns from extra_info
+            PatternExtractor.extract_and_link(builder, breach_val, extra_info)
 
         await self.post_run(builder.build())

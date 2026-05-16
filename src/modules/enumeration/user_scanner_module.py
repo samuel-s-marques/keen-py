@@ -1,3 +1,4 @@
+from src.core.pattern_extractor import PatternExtractor
 from user_scanner.core.result import Result
 from src.utils.validator import InputValidator
 from user_scanner.core import engine as us_engine
@@ -140,5 +141,8 @@ class UserScannerModule(BaseModule):
             # Edges
             builder.add_edge(target, account_id_str, "owns-account")
             builder.add_edge(account_id_str, site_name, "registered-on")
+
+            # Extract patterns from extra_info
+            PatternExtractor.extract_and_link(builder, account_id_str, extra)
 
         await self.post_run(builder.build())

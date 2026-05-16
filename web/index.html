@@ -265,6 +265,16 @@
                     style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary); max-height: 200px; overflow-y: auto;">
                     <!-- Keys loaded here -->
                 </div>
+
+                <div class="form-group" style="margin-top: 16px;">
+                    <label>Data Extraction Mode</label>
+                    <select id="pref-extraction-mode" style="width: 100%;">
+                        <option value="merge">Merge Data (Same value -> One node)</option>
+                        <option value="isolate">Isolate Data (Separate nodes for same value)</option>
+                        <option value="isolate_with_service">Isolate Data with Service (Source:Value)</option>
+                    </select>
+                    <button id="btn-save-preferences" class="btn-primary full-width" style="margin-top: 12px;">Save Preferences</button>
+                </div>
             </div>
         </div>
     </div>

@@ -70,6 +70,12 @@ class ConfigManager(DatabaseEngine):
             )
         """)
 
+        # Preferences
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('extraction_mode', 'merge')
+        """)
+
         # Handle migration for existing databases missing the description column
         try:
             cursor.execute(
