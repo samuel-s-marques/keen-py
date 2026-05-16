@@ -257,6 +257,85 @@ class Shell(Cmd):
                 f"Unknown subcommand '{subcommand}'. Use 'api_keys' without arguments to see usage."
             )
 
+    def do_pref(self, arg: str) -> None:
+        """Manage configuration preferences.
+
+        Usage:
+            pref list                  - List all preferences
+            pref set <key> <value>     - Set a preference
+            pref get <key>             - Get a preference value
+        """
+        args = arg.strip().split()
+        if not args:
+            info("Usage:")
+            info("\tpref list                  - List all preferences")
+            info("\tpref set <key> <value>     - Set a preference")
+            info("\tpref get <key>             - Get a preference value")
+            return
+
+        subcommand = args[0].lower()
+        blocked_keys = ["last_workspace", "api_keys_salt", "master_password_check"]
+
+        if subcommand == "list":
+            cursor = self.config.conn.cursor()
+            cursor.execute("SELECT key, value FROM preferences")
+            rows = cursor.fetchall()
+
+            table = Table(
+                show_header=True,
+                header_style="bold blue",
+                title="Preferences",
+                title_style="bold cyan",
+                show_lines=True,
+                expand=True,
+            )
+            table.add_column("Key", justify="left", style="cyan", no_wrap=True)
+            table.add_column("Value", justify="left", style="white")
+
+            for row in rows:
+                key = row[0]
+                val = row[1]
+                if key in blocked_keys:
+                    continue
+                table.add_row(key, val)
+
+            console = Console()
+            console.print(table)
+            return
+
+        elif subcommand == "get":
+            if len(args) < 2:
+                error("Usage: pref get <key>")
+                return
+            key = args[1]
+            if key in blocked_keys:
+                error("Access denied for this preference.")
+                return
+
+            val = self.config.get_preference(key)
+            if val is not None:
+                info(f"{key} = {val}")
+            else:
+                info(f"Preference '{key}' not found.")
+            return
+
+        elif subcommand == "set":
+            if len(args) < 3:
+                error("Usage: pref set <key> <value>")
+                return
+            key = args[1]
+            val = " ".join(args[2:])
+            if key in blocked_keys:
+                error("Cannot modify this preference.")
+                return
+
+            self.config.set_preference(key, val)
+            success(f"Preference '{key}' set to '{val}'.")
+            return
+
+        else:
+            error(f"Unknown subcommand '{subcommand}'.")
+
     def do_use(self, arg: str):
         """Select a module to use. You can use the full path or just the module name (e.g. 'use whois')."""
         module_name: str = arg.strip().lower()
