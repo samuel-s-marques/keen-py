@@ -139,7 +139,8 @@ class InputValidator:
         Returns:
             bool: True if value is valid, False otherwise.
         """
-        return value.lower() in ["true", "false", "1", "0", "yes", "no"]
+        value = value.strip().lower()
+        return value in ["true", "false", "1", "0", "yes", "no"]
 
     VALIDATORS = {
         "domain": is_valid_domain,
