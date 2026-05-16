@@ -11,7 +11,7 @@ class LeakModule(BaseModule):
         "name": "Leak_Check",
         "description": "Checks if credentials (username, email, phone) have been leaked using various databases.",
         "author": "Samuel Marques",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "options": {
             "TARGET": [
                 "",
