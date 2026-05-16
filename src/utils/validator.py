@@ -108,7 +108,7 @@ class InputValidator:
         Returns:
             bool: True if username is valid, False otherwise.
         """
-        return bool(str(username).strip())
+        return bool(username.strip())
 
     @staticmethod
     def is_valid_name(name: str) -> bool:
@@ -121,7 +121,7 @@ class InputValidator:
             bool: True if name is valid, False otherwise.
         """
         # TODO: Improve this validation with NER and other approaches
-        return bool(str(name).strip())
+        return bool(name.strip())
 
     VALIDATORS = {
         "domain": is_valid_domain,
