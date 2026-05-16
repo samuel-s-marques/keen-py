@@ -19,7 +19,7 @@ class EmailFinderModule(BaseModule):
             "LNAME": ["", True, "Last name of the target.", "name"],
             "DOMAIN": ["", True, "Domain name to generate emails for.", "domain"],
             "VERIFY": [
-                "",
+                "False",
                 False,
                 "Verify found emails using EmailVerification module.",
                 "bool",
@@ -59,7 +59,6 @@ class EmailFinderModule(BaseModule):
             emails_with_probability: dict[str, int] = await self.verify_emails(
                 email_variations
             )
-            print(emails_with_probability)
             await self.display_emails(emails_with_probability, with_probability=True)
             await self.save_results(list(emails_with_probability.keys()))
         else:
@@ -261,13 +260,16 @@ class EmailFinderModule(BaseModule):
         from src.modules.enumeration.email_verification_module import (
             EmailVerificationModule,
         )
+        import asyncio
 
         module: EmailVerificationModule = EmailVerificationModule()
         results: dict[str, int] = {}
 
-        for email in emails:
-            info(f"Verifying {email}...")
-            result = await module.execute(email, 10)
+        info(f"Verifying {len(emails)} emails in parallel...")
+        tasks = [module.execute(email, 10) for email in emails]
+        results_list = await asyncio.gather(*tasks)
+
+        for email, result in zip(emails, results_list):
             score: int = result.get("score", 0)
             results[email] = score
 
