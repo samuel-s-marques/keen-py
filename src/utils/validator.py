@@ -15,6 +15,12 @@ class InputValidator:
             bool: True if domain is valid, False otherwise.
         """
 
+        # Strip "http://", "https://", and "www." from domain
+        if "http" in domain:
+            domain = domain.split("//")[1]
+        if "www." in domain:
+            domain = domain.split("www.")[1]
+
         pattern = r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$"
         return re.match(pattern, domain.lower()) is not None
 
@@ -123,6 +129,18 @@ class InputValidator:
         # TODO: Improve this validation with NER and other approaches
         return bool(name.strip())
 
+    @staticmethod
+    def is_valid_boolean(value: str) -> bool:
+        """Validate boolean value.
+
+        Args:
+            value (str): Value to validate.
+
+        Returns:
+            bool: True if value is valid, False otherwise.
+        """
+        return value.lower() in ["true", "false", "1", "0", "yes", "no"]
+
     VALIDATORS = {
         "domain": is_valid_domain,
         "ip": is_valid_ip,
@@ -132,4 +150,5 @@ class InputValidator:
         "phone": is_valid_phone_number,
         "username": is_valid_username,
         "name": is_valid_name,
+        "bool": is_valid_boolean,
     }
