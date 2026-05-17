@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let configKeys = {};
     let currentNodes = [];
     let currentEdges = [];
+    const activeRuns = new Set(); // Tracks "moduleName:targetValue" strings to prevent duplicates
 
     const NODE_TO_VALIDATOR_MAP = {
         'email-addr': ['email'],
@@ -528,23 +529,66 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Run Module via WebSockets
     let activeSockets = [];
-    btnRunModule.addEventListener('click', () => {
-        const modName = moduleSelect.value;
-        if (!modName) return;
 
-        // Gather options
-        const options = {};
-        const formData = new FormData(moduleForm);
-        for (const [key, val] of formData.entries()) {
-            if (val.trim()) {
-                options[key] = val.trim();
+    function getRunKey(modName, options) {
+        // Try to find the primary target value from options for dedup
+        const mod = modulesData[modName];
+        let targetValue = '';
+        if (mod && mod.options) {
+            for (const [key, optMeta] of Object.entries(mod.options)) {
+                const validator = optMeta[3];
+                if (validator && options[key]) {
+                    targetValue = options[key];
+                    break;
+                }
             }
         }
+        // Fallback: if no validator-matched value, use first non-empty option value
+        if (!targetValue) {
+            for (const val of Object.values(options)) {
+                if (val) { targetValue = val; break; }
+            }
+        }
+        return `${modName}:${targetValue}`;
+    }
+
+    function getTargetLabel(options, modName) {
+        const mod = modulesData[modName];
+        if (mod && mod.options) {
+            for (const [key, optMeta] of Object.entries(mod.options)) {
+                const validator = optMeta[3];
+                if (validator && options[key]) {
+                    return options[key];
+                }
+            }
+        }
+        return null;
+    }
+
+    function executeModule(modName, options) {
+        const runKey = getRunKey(modName, options);
+        const targetLabel = getTargetLabel(options, modName);
+        const displayName = formatModuleName(modName, modulesData[modName] || {});
+
+        // Duplicate prevention
+        if (activeRuns.has(runKey)) {
+            const msg = targetLabel
+                ? `Already running on ${targetLabel}`
+                : 'Already running';
+            showSnackbar(displayName, msg, 'warning', 3000);
+            return;
+        }
+
+        activeRuns.add(runKey);
+        const snackbarId = 'run-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+        const runMsg = targetLabel ? `Running on ${targetLabel}...` : 'Running...';
+        showSnackbar(displayName, runMsg, 'info', 0, snackbarId);
 
         termPrint(`[${modName}] Connecting...`, 'sys-msg');
 
         const ws = new WebSocket(`${WS_BASE}/modules/${modName}/run`);
         activeSockets.push(ws);
+        let gotResult = false;
 
         ws.onopen = () => {
             ws.send(JSON.stringify({
@@ -559,9 +603,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.type === 'log') {
                     termPrint(`[${modName}] ${data.message}`);
                 } else if (data.type === 'status') {
+                    gotResult = true;
                     termPrint(`[${modName}] Completed: ${data.status}`, 'sys-msg');
+                    updateSnackbar(snackbarId, displayName, 'Completed successfully', 'success', 4000);
                 } else if (data.type === 'error') {
+                    gotResult = true;
                     termPrint(`[${modName}] Error: ${data.message}`, 'sys-msg');
+                    updateSnackbar(snackbarId, displayName, `Error: ${data.message}`, 'error', 5000);
                 }
             } catch (e) {
                 termPrint(`[${modName}] ${event.data}`);
@@ -570,13 +618,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ws.onclose = () => {
             activeSockets = activeSockets.filter(s => s !== ws);
+            activeRuns.delete(runKey);
             termPrint(`[${modName}] Connection closed.`, 'sys-msg');
+
+            if (!gotResult) {
+                updateSnackbar(snackbarId, displayName, 'Connection closed', 'warning', 4000);
+            }
 
             // Refresh workspace to show new nodes
             if (activeWorkspace) {
                 selectWorkspace(activeWorkspace);
             }
         };
+    }
+
+    btnRunModule.addEventListener('click', () => {
+        const modName = moduleSelect.value;
+        if (!modName) return;
+
+        // Gather options
+        const options = {};
+        const formData = new FormData(moduleForm);
+        for (const [key, val] of formData.entries()) {
+            if (val.trim()) {
+                options[key] = val.trim();
+            }
+        }
+
+        executeModule(modName, options);
     });
 
     // --- Functions ---
@@ -706,42 +775,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        termPrint(`[${modName}] Connecting...`, 'sys-msg');
-
-        const ws = new WebSocket(`${WS_BASE}/modules/${modName}/run`);
-        activeSockets.push(ws);
-
-        ws.onopen = () => {
-            ws.send(JSON.stringify({
-                workspace_name: activeWorkspace || "",
-                options: options
-            }));
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'log') {
-                    termPrint(`[${modName}] ${data.message}`);
-                } else if (data.type === 'status') {
-                    termPrint(`[${modName}] Completed: ${data.status}`, 'sys-msg');
-                } else if (data.type === 'error') {
-                    termPrint(`[${modName}] Error: ${data.message}`, 'sys-msg');
-                }
-            } catch (e) {
-                termPrint(`[${modName}] ${event.data}`);
-            }
-        };
-
-        ws.onclose = () => {
-            activeSockets = activeSockets.filter(s => s !== ws);
-            termPrint(`[${modName}] Connection closed.`, 'sys-msg');
-
-            // Refresh workspace to show new nodes
-            if (activeWorkspace) {
-                selectWorkspace(activeWorkspace);
-            }
-        };
+        executeModule(modName, options);
     }
 
     function buildModuleDropdown(compatibleValidators = [], prefillValue = null) {
@@ -1657,5 +1691,77 @@ document.addEventListener('DOMContentLoaded', () => {
         line.textContent = text;
         terminalBody.appendChild(line);
         terminalBody.scrollTop = terminalBody.scrollHeight;
+    }
+
+    // --- Snackbar System ---
+    const snackbarContainer = document.getElementById('snackbar-container');
+
+    const SNACKBAR_ICONS = {
+        info: '<div class="snackbar-spinner"></div>',
+        success: '<i class="fa-solid fa-check"></i>',
+        error: '<i class="fa-solid fa-xmark"></i>',
+        warning: '<i class="fa-solid fa-exclamation"></i>',
+    };
+
+    function showSnackbar(title, message, type = 'info', duration = 3000, id = null) {
+        const el = document.createElement('div');
+        el.className = `snackbar snackbar-${type}`;
+        if (id) el.dataset.snackbarId = id;
+
+        el.innerHTML = `
+            <div class="snackbar-icon">${SNACKBAR_ICONS[type] || SNACKBAR_ICONS.info}</div>
+            <div class="snackbar-body">
+                <div class="snackbar-title" title="${title}">${title}</div>
+                <div class="snackbar-message" title="${message}">${message}</div>
+            </div>
+            <button class="snackbar-close"><i class="fa-solid fa-xmark"></i></button>
+        `;
+
+        el.querySelector('.snackbar-close').addEventListener('click', () => removeSnackbar(el));
+
+        snackbarContainer.appendChild(el);
+
+        if (duration > 0) {
+            el._timeout = setTimeout(() => removeSnackbar(el), duration);
+        }
+
+        return el;
+    }
+
+    function updateSnackbar(id, title, message, type, duration = 4000) {
+        const el = snackbarContainer.querySelector(`[data-snackbar-id="${id}"]`);
+        if (!el) {
+            // Snackbar was manually closed, just show a new one
+            showSnackbar(title, message, type, duration);
+            return;
+        }
+
+        // Update classes
+        el.className = `snackbar snackbar-${type}`;
+
+        // Update icon
+        const iconEl = el.querySelector('.snackbar-icon');
+        if (iconEl) iconEl.innerHTML = SNACKBAR_ICONS[type] || SNACKBAR_ICONS.info;
+
+        // Update text
+        const titleEl = el.querySelector('.snackbar-title');
+        if (titleEl) { titleEl.textContent = title; titleEl.title = title; }
+        const msgEl = el.querySelector('.snackbar-message');
+        if (msgEl) { msgEl.textContent = message; msgEl.title = message; }
+
+        // Clear old timeout and set new auto-dismiss
+        if (el._timeout) clearTimeout(el._timeout);
+        if (duration > 0) {
+            el._timeout = setTimeout(() => removeSnackbar(el), duration);
+        }
+    }
+
+    function removeSnackbar(el) {
+        if (!el || !el.parentNode) return;
+        if (el._timeout) clearTimeout(el._timeout);
+        el.classList.add('removing');
+        el.addEventListener('animationend', () => {
+            if (el.parentNode) el.parentNode.removeChild(el);
+        }, { once: true });
     }
 });
