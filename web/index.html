@@ -237,43 +237,69 @@
     </div>
 
     <div class="modal-overlay" id="modal-settings">
-        <div class="modal">
+        <div class="modal modal-lg">
             <div class="modal-header">
-                <h3>Settings / API Keys</h3>
+                <h3>Settings</h3>
                 <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="modal-body" id="settings-locked">
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Enter master password
-                    to unlock API keys.</p>
-                <div class="form-group">
-                    <input type="password" id="input-master-password" placeholder="Master Password" autocomplete="off">
+            <div class="modal-body settings-layout">
+                <!-- Left Panel: Sidebar -->
+                <div class="settings-sidebar">
+                    <button class="settings-tab active" data-target="settings-api-keys">
+                        <i class="fa-solid fa-key"></i> API Keys
+                    </button>
+                    <button class="settings-tab" data-target="settings-preferences">
+                        <i class="fa-solid fa-sliders"></i> Preferences
+                    </button>
                 </div>
-                <button id="btn-unlock-settings" class="btn-primary full-width">Unlock</button>
-            </div>
-            <div class="modal-body hidden" id="settings-unlocked">
-                <div class="form-group">
-                    <label>Add/Update API Key</label>
-                    <div style="display:flex; gap: 8px;">
-                        <input type="text" id="input-api-service" placeholder="Service (e.g. SHODAN_API_KEY)"
-                            style="flex:1;" autocomplete="off">
-                        <input type="password" id="input-api-key" placeholder="Key" style="flex:2;" autocomplete="off">
-                    </div>
-                    <button id="btn-save-api-key" class="btn-primary full-width" style="margin-top: 12px;">Save
-                        Key</button>
-                </div>
-                <div id="api-keys-list"
-                    style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary); max-height: 200px; overflow-y: auto;">
-                    <!-- Keys loaded here -->
-                </div>
+                <!-- Right Panel: Content -->
+                <div class="settings-content">
+                    <div id="settings-api-keys" class="settings-section active">
+                        <h4>API Keys</h4>
+                        <p class="section-desc">Manage API keys for external services.</p>
 
-                <div class="form-group" style="margin-top: 16px;">
-                    <label>Data Extraction Mode</label>
-                    <select id="pref-extraction-mode" style="width: 100%;">
-                        <option value="merge">Merge Data (Same value -> One node)</option>
-                        <option value="isolate">Isolate Data (Separate nodes for same value)</option>
-                        <option value="isolate_with_service">Isolate Data with Service (Source:Value)</option>
-                    </select>
-                    <button id="btn-save-preferences" class="btn-primary full-width" style="margin-top: 12px;">Save Preferences</button>
+                        <!-- Lock screen (shown when not unlocked) -->
+                        <div id="api-keys-locked">
+                            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Enter master password to unlock API keys.</p>
+                            <div class="form-group">
+                                <input type="password" id="input-master-password" placeholder="Master Password" autocomplete="off">
+                            </div>
+                            <button id="btn-unlock-settings" class="btn-primary full-width">Unlock</button>
+                        </div>
+
+                        <!-- Unlocked content (hidden until authenticated) -->
+                        <div id="api-keys-unlocked" class="hidden">
+                            <div class="form-group">
+                                <label>Add/Update API Key</label>
+                                <div style="display:flex; gap: 8px;">
+                                    <input type="text" id="input-api-service" placeholder="Service (e.g. SHODAN_API_KEY)"
+                                        style="flex:1;" autocomplete="off">
+                                    <input type="password" id="input-api-key" placeholder="Key" style="flex:2;" autocomplete="off">
+                                </div>
+                                <button id="btn-save-api-key" class="btn-primary full-width" style="margin-top: 12px;">Save
+                                    Key</button>
+                            </div>
+                            <div id="api-keys-list"
+                                style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary); max-height: 200px; overflow-y: auto;">
+                                <!-- Keys loaded here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="settings-preferences" class="settings-section">
+                        <h4>Preferences</h4>
+                        <p class="section-desc">Configure application behavior.</p>
+
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label>Data Extraction Mode</label>
+                            <select id="pref-extraction-mode" style="width: 100%;">
+                                <option value="merge">Merge Data (Same value -> One node)</option>
+                                <option value="isolate">Isolate Data (Separate nodes for same value)</option>
+                                <option value="isolate_with_service">Isolate Data with Service (Source:Value)</option>
+                            </select>
+                            <button id="btn-save-preferences" class="btn-primary full-width" style="margin-top: 12px;">Save Preferences</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
