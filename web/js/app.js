@@ -138,6 +138,16 @@ document.addEventListener('DOMContentLoaded', () => {
         wsNameWarning.style.display = 'none';
     }));
 
+    // Close modal when clicking outside (on the overlay backdrop)
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.classList.remove('active');
+                wsNameWarning.style.display = 'none';
+            }
+        });
+    });
+
     inputWsName.addEventListener('input', () => {
         if (inputWsName.value.includes(' ')) {
             wsNameWarning.style.display = 'block';
