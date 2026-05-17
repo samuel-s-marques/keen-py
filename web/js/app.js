@@ -444,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const [key, value] of Object.entries(mod.options)) {
                 // value is usually [default, required, description, type]
                 const isRequired = value[1];
-                let defVal = value[0] || '';
+                let defVal = (value[0] !== undefined && value[0] !== null) ? value[0] : '';
 
                 // Auto-pull API keys if unlocked
                 if (isConfigUnlocked && configKeys[key.toUpperCase()]) {
@@ -459,13 +459,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 label.title = value[2] || '';
 
                 const isSecret = key.toUpperCase().includes('KEY') || key.toUpperCase().includes('PASSWORD') || key.toUpperCase().includes('SECRET');
-                const input = document.createElement('input');
-                input.type = isSecret ? 'password' : 'text';
-                input.name = key;
-                // Use 'new-password' and 'one-time-code' to prevent aggressive browser autofill
-                input.autocomplete = isSecret ? 'new-password' : 'one-time-code';
-                input.value = defVal;
-                input.placeholder = value[2] || '';
+                const type = value[3];
+
+                let input;
+                if (type === 'bool' || type === 'boolean') {
+                    input = document.createElement('select');
+                    input.name = key;
+
+                    const optTrue = document.createElement('option');
+                    optTrue.value = 'True';
+                    optTrue.textContent = 'True';
+
+                    const optFalse = document.createElement('option');
+                    optFalse.value = 'False';
+                    optFalse.textContent = 'False';
+
+                    input.appendChild(optTrue);
+                    input.appendChild(optFalse);
+
+                    // Set default value
+                    const lowerDefVal = String(defVal).toLowerCase();
+                    if (lowerDefVal === 'true') {
+                        input.value = 'True';
+                    } else {
+                        input.value = 'False';
+                    }
+                } else {
+                    input = document.createElement('input');
+                    input.type = isSecret ? 'password' : 'text';
+                    input.name = key;
+                    // Use 'new-password' and 'one-time-code' to prevent aggressive browser autofill
+                    input.autocomplete = isSecret ? 'new-password' : 'one-time-code';
+                    input.value = defVal;
+                    input.placeholder = value[2] || '';
+                }
 
                 group.appendChild(label);
                 group.appendChild(input);
@@ -632,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (mod.options) {
             for (const [key, value] of Object.entries(mod.options)) {
-                let defVal = value[0] || '';
+                let defVal = (value[0] !== undefined && value[0] !== null) ? value[0] : '';
 
                 // Auto-pull API keys if unlocked
                 if (isConfigUnlocked && configKeys[key.toUpperCase()]) {
@@ -650,7 +677,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                if (defVal) {
+                if (defVal !== undefined && defVal !== null && defVal !== '') {
                     options[key] = defVal.toString().trim();
                 }
             }
@@ -745,7 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
             moduleSelect.dispatchEvent(new Event('change'));
 
             setTimeout(() => {
-                const inputs = moduleForm.querySelectorAll('input');
+                const inputs = moduleForm.querySelectorAll('input, select');
                 for (const input of inputs) {
                     const optVal = modulesData[firstMatch].options[input.name];
                     if (optVal) {
@@ -954,7 +981,7 @@ document.addEventListener('DOMContentLoaded', () => {
             from: e.source_id,
             to: e.target_id,
             label: e.relationship.replace(/[_-]/g, ' '),
-            font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#8b92a5', size: 10, align: 'middle' },
+            font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#8b92a5', size: 10, align: 'middle', strokeWidth: 0 },
             color: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c2355' : '#8b92a588' },
             arrows: 'to'
         }));
