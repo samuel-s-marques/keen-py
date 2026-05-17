@@ -81,8 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSettings = document.getElementById('btn-settings');
     const btnUnlockSettings = document.getElementById('btn-unlock-settings');
     const inputMasterPassword = document.getElementById('input-master-password');
-    const settingsLocked = document.getElementById('settings-locked');
-    const settingsUnlocked = document.getElementById('settings-unlocked');
+    const apiKeysLocked = document.getElementById('api-keys-locked');
+    const apiKeysUnlocked = document.getElementById('api-keys-unlocked');
     const btnSaveApiKey = document.getElementById('btn-save-api-key');
     const apiKeysList = document.getElementById('api-keys-list');
     const prefExtractionMode = document.getElementById('pref-extraction-mode');
@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnSettings.addEventListener('click', () => {
         modalSettings.classList.add('active');
         if (isConfigUnlocked) fetchApiKeys();
+        fetchPreferences();
     });
 
     closeModals.forEach(btn => btn.addEventListener('click', () => {
@@ -136,6 +137,16 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('modal-edit-edge').classList.remove('active');
         wsNameWarning.style.display = 'none';
     }));
+
+    // Close modal when clicking outside (on the overlay backdrop)
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.classList.remove('active');
+                wsNameWarning.style.display = 'none';
+            }
+        });
+    });
 
     inputWsName.addEventListener('input', () => {
         if (inputWsName.value.includes(' ')) {
@@ -273,8 +284,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (res.ok) {
             isConfigUnlocked = true;
-            settingsLocked.classList.add('hidden');
-            settingsUnlocked.classList.remove('hidden');
+            apiKeysLocked.classList.add('hidden');
+            apiKeysUnlocked.classList.remove('hidden');
             inputMasterPassword.value = '';
             fetchApiKeys();
         } else {
@@ -417,6 +428,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 network.redraw();
                 network.fit();
             }
+        });
+    });
+
+    // Settings Tabs
+    document.querySelectorAll('.settings-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.settings-section').forEach(c => c.classList.remove('active'));
+
+            tab.classList.add('active');
+            const target = document.getElementById(tab.dataset.target);
+            if (target) target.classList.add('active');
         });
     });
 
