@@ -465,18 +465,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (type === 'bool' || type === 'boolean') {
                     input = document.createElement('select');
                     input.name = key;
-                    
+
                     const optTrue = document.createElement('option');
                     optTrue.value = 'True';
                     optTrue.textContent = 'True';
-                    
+
                     const optFalse = document.createElement('option');
                     optFalse.value = 'False';
                     optFalse.textContent = 'False';
-                    
+
                     input.appendChild(optTrue);
                     input.appendChild(optFalse);
-                    
+
                     // Set default value
                     const lowerDefVal = String(defVal).toLowerCase();
                     if (lowerDefVal === 'true') {
@@ -981,7 +981,7 @@ document.addEventListener('DOMContentLoaded', () => {
             from: e.source_id,
             to: e.target_id,
             label: e.relationship.replace(/[_-]/g, ' '),
-            font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#8b92a5', size: 10, align: 'middle' },
+            font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#8b92a5', size: 10, align: 'middle', strokeWidth: 0 },
             color: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c2355' : '#8b92a588' },
             arrows: 'to'
         }));
