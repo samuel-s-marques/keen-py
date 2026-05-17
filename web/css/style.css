@@ -367,7 +367,7 @@ body {
 
 select, input {
     width: 100%;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--bg-main);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 10px 12px;
@@ -376,6 +376,11 @@ select, input {
     font-size: 0.9rem;
     outline: none;
     transition: border-color 0.3s ease;
+}
+
+select option {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
 }
 
 select:focus, input:focus {
