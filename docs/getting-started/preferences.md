@@ -11,6 +11,7 @@ Unlike API keys, preferences are not encrypted and do not require unlocking the 
 This preference controls how data extracted from JSON responses (e.g., usernames, names, passwords extracted by the `PatternExtractor`) is handled when added to the graph.
 
 Available options:
+
 - **`merge`** (Default): Same values from different services merge into a single node. This is useful for finding connections across different leaks. (e.g., Value = `Username`)
 - **`isolate`**: Same values become separate nodes to avoid false merging. A short random hash is appended to the value. (e.g., Value = `Username#a1b2`)
 - **`isolate_with_service`**: Values are prefixed with the source service name to keep them separated by source. (e.g., Value = `BreachVIP:Service:Username`)
