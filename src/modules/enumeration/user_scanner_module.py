@@ -94,7 +94,8 @@ class UserScannerModule(BaseModule):
 
             table.add_row(site_name, category, url, extra)
 
-        console.print(table)
+        if not getattr(self, "is_web_context", False):
+            console.print(table)
 
     async def _save_results(self, target: str, results: list) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory

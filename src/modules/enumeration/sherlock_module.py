@@ -111,20 +111,23 @@ class SherlockModule(BaseModule):
         for platform, url in sorted(results.items()):
             table.add_row(platform, url)
 
-        console.print(
-            Panel(
-                table,
-                title=f"[bold green]Sherlock Profile Footprint: {target}[/bold green]",
-                border_style="green",
-                box=box.HEAVY,
+        if not getattr(self, "is_web_context", False):
+            console.print(
+                Panel(
+                    table,
+                    title=f"[bold green]Sherlock Profile Footprint: {target}[/bold green]",
+                    border_style="green",
+                    box=box.HEAVY,
+                )
             )
-        )
 
     async def _save_results(self, target: str, results: dict[str, str]) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory
 
         builder = ResultBuilder()
-        builder.add_node(NodeFactory.user_account(target, accounts_found_count=len(results)))
+        builder.add_node(
+            NodeFactory.user_account(target, accounts_found_count=len(results))
+        )
 
         for platform, profile_url in results.items():
             if not platform or not profile_url:
@@ -138,18 +141,25 @@ class SherlockModule(BaseModule):
 
             # Social profile account node
             profile_id_str = f"{platform_cleaned}:{target}"
-            builder.add_node(NodeFactory.user_account(
-                profile_id_str,
-                platform=platform_cleaned,
-                profile_url=profile_url_cleaned,
-            ))
+            builder.add_node(
+                NodeFactory.user_account(
+                    profile_id_str,
+                    platform=platform_cleaned,
+                    profile_url=profile_url_cleaned,
+                )
+            )
             # Override the stix2 fields for social-media specifics
             profile_node = builder._nodes[-1]
-            profile_node["metadata"]["stix2"]["display_name"] = f"{target} on {platform_cleaned}"
+            profile_node["metadata"]["stix2"]["display_name"] = (
+                f"{target} on {platform_cleaned}"
+            )
             profile_node["metadata"]["stix2"]["account_type"] = "social-media"
             profile_node["metadata"]["stix2"]["account_login"] = target
             profile_node["metadata"]["stix2"]["x_profile_url"] = profile_url_cleaned
-            profile_node["metadata"]["misp"] = {"type": "link", "value": profile_url_cleaned}
+            profile_node["metadata"]["misp"] = {
+                "type": "link",
+                "value": profile_url_cleaned,
+            }
 
             # Edges
             builder.add_edge(target, profile_id_str, "owns-account")

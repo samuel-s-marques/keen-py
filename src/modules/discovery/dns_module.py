@@ -162,7 +162,8 @@ class DnsModule(BaseModule):
                 table.add_row(record_type, "\n".join(data))
 
             console = Console()
-            console.print(table)
+            if not getattr(self, "is_web_context", False):
+                console.print(table)
             success(f"Discovered {len(results)} record types for {target}.")
 
             # ASN Intelligence
@@ -202,7 +203,8 @@ class DnsModule(BaseModule):
                             res["provider"],
                             res["country"],
                         )
-                    console.print(asn_table)
+                    if not getattr(self, "is_web_context", False):
+                        console.print(asn_table)
         else:
             info(f"No DNS records found for {target}.")
             asn_results = []
@@ -301,7 +303,8 @@ class DnsModule(BaseModule):
                 table.add_row(record_type, details)
 
             console = Console()
-            console.print(table)
+            if not getattr(self, "is_web_context", False):
+                console.print(table)
             success(f"DNSSEC is enabled for {target}.")
         else:
             info(f"DNSSEC is not enabled for {target}.")
@@ -388,11 +391,13 @@ class DnsModule(BaseModule):
                     builder.add_edge(target, item_cleaned, "has-cname-record")
 
                 elif record_type == "TXT":
-                    builder.add_node(NodeFactory.custom(
-                        "x-dns-txt",
-                        item_cleaned,
-                        misp_type="text",
-                    ))
+                    builder.add_node(
+                        NodeFactory.custom(
+                            "x-dns-txt",
+                            item_cleaned,
+                            misp_type="text",
+                        )
+                    )
                     builder.add_edge(target, item_cleaned, "has-txt-record")
 
         # Map ASN Intelligence
@@ -407,21 +412,23 @@ class DnsModule(BaseModule):
                 continue
 
             as_val = f"AS{asn_val}"
-            builder.add_node(NodeFactory.custom(
-                "autonomous-system",
-                as_val,
-                namespace=STIXNamespaces.IDENTITY,
-                stix2_extra={
-                    "number": int(asn_val) if asn_val.isdigit() else 0,
-                    "name": provider,
-                    "country": country,
-                    "prefix": prefix,
-                },
-                misp_type="asn",
-                provider=provider,
-                prefix=prefix,
-                country=country,
-            ))
+            builder.add_node(
+                NodeFactory.custom(
+                    "autonomous-system",
+                    as_val,
+                    namespace=STIXNamespaces.IDENTITY,
+                    stix2_extra={
+                        "number": int(asn_val) if asn_val.isdigit() else 0,
+                        "name": provider,
+                        "country": country,
+                        "prefix": prefix,
+                    },
+                    misp_type="asn",
+                    provider=provider,
+                    prefix=prefix,
+                    country=country,
+                )
+            )
             builder.add_edge(ip_val, as_val, "belongs-to-as")
 
         await self.post_run(builder.build())

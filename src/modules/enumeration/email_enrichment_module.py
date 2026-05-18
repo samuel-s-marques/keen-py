@@ -91,16 +91,17 @@ class EmailEnrichmentModule(BaseModule):
         provider = person.get("emailProvider", "Unknown")
 
         # Main Info Panel
-        console.print(
-            Panel(
-                f"[bold cyan]Target:[/bold cyan] [bold white]{email}[/bold white]\n"
-                f"[bold cyan]Name:[/bold cyan]   {full_name}\n"
-                f"[bold cyan]Location:[/bold cyan] {location}",
-                title="[bold green]Hunter.io Enrichment[/bold green]",
-                border_style="green",
-                box=box.ROUNDED,
+        if not getattr(self, "is_web_context", False):
+            console.print(
+                Panel(
+                    f"[bold cyan]Target:[/bold cyan] [bold white]{email}[/bold white]\n"
+                    f"[bold cyan]Name:[/bold cyan]   {full_name}\n"
+                    f"[bold cyan]Location:[/bold cyan] {location}",
+                    title="[bold green]Hunter.io Enrichment[/bold green]",
+                    border_style="green",
+                    box=box.ROUNDED,
+                )
             )
-        )
 
         # Personal Details Table
         details_table = Table(box=box.SIMPLE, show_header=False, expand=True)
@@ -116,13 +117,14 @@ class EmailEnrichmentModule(BaseModule):
         details_table.add_row("Provider", provider)
 
         if details_table.row_count > 0:
-            console.print(
-                Panel(
-                    details_table,
-                    title="[bold blue]Personal Details[/bold blue]",
-                    border_style="blue",
+            if not getattr(self, "is_web_context", False):
+                console.print(
+                    Panel(
+                        details_table,
+                        title="[bold blue]Personal Details[/bold blue]",
+                        border_style="blue",
+                    )
                 )
-            )
 
         # Employment Information
         employment = person.get("employment", {})
@@ -139,13 +141,14 @@ class EmailEnrichmentModule(BaseModule):
                 employment.get("role") or "N/A",
                 employment.get("seniority") or "N/A",
             )
-            console.print(
-                Panel(
-                    emp_table,
-                    title="[bold yellow]Employment[/bold yellow]",
-                    border_style="yellow",
+            if not getattr(self, "is_web_context", False):
+                console.print(
+                    Panel(
+                        emp_table,
+                        title="[bold yellow]Employment[/bold yellow]",
+                        border_style="yellow",
+                    )
                 )
-            )
 
         # Social Media Presence
         social_types = [
@@ -163,14 +166,15 @@ class EmailEnrichmentModule(BaseModule):
                 social_rows.append(f"[bold]{s_type.capitalize()}:[/bold] {handle}")
 
         if social_rows:
-            console.print(
-                Panel(
-                    "\n".join(social_rows),
-                    title="[bold magenta]Social Presence[/bold magenta]",
-                    border_style="magenta",
-                    box=box.ROUNDED,
+            if not getattr(self, "is_web_context", False):
+                console.print(
+                    Panel(
+                        "\n".join(social_rows),
+                        title="[bold magenta]Social Presence[/bold magenta]",
+                        border_style="magenta",
+                        box=box.ROUNDED,
+                    )
                 )
-            )
 
         success(f"Enrichment completed for {email}")
 

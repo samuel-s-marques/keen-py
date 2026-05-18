@@ -88,14 +88,15 @@ class WhoisModule(BaseModule):
         table.add_row("Contact Emails", emails)
         table.add_row("Domain Status", status)
 
-        console.print(
-            Panel(
-                table,
-                title=f"[bold cyan]WHOIS Information: {target}[/bold cyan]",
-                border_style="cyan",
-                box=box.HEAVY,
+        if not getattr(self, "is_web_context", False):
+            console.print(
+                Panel(
+                    table,
+                    title=f"[bold cyan]WHOIS Information: {target}[/bold cyan]",
+                    border_style="cyan",
+                    box=box.HEAVY,
+                )
             )
-        )
 
     async def _save_results(self, target: str, results: dict) -> None:
         from datetime import datetime
@@ -139,16 +140,18 @@ class WhoisModule(BaseModule):
 
         builder = ResultBuilder()
 
-        builder.add_node(NodeFactory.domain(
-            target,
-            creation_date=creation_date,
-            updated_date=updated_date,
-            expiration_date=expiration_date,
-            registrar=registrar,
-            registrant_org=org,
-            name_servers=name_servers,
-            emails=emails,
-        ))
+        builder.add_node(
+            NodeFactory.domain(
+                target,
+                creation_date=creation_date,
+                updated_date=updated_date,
+                expiration_date=expiration_date,
+                registrar=registrar,
+                registrant_org=org,
+                name_servers=name_servers,
+                emails=emails,
+            )
+        )
 
         # Registrar
         if registrar:
