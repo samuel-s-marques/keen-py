@@ -947,35 +947,7 @@ document.addEventListener('DOMContentLoaded', () => {
             countNodes.textContent = nodes.length || 0;
             countEdges.textContent = edges.length || 0;
 
-            nodesTbody.innerHTML = '';
-            if (nodes.length) {
-                nodes.forEach(n => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td><span class="badge">${n.type}</span></td>
-                        <td>${n.value}</td>
-                        <td style="color:var(--text-secondary);font-size:0.8rem">${n.timestamp}</td>
-                    `;
-                    nodesTbody.appendChild(tr);
-                });
-            } else {
-                nodesTbody.innerHTML = '<tr><td colspan="3">No nodes found.</td></tr>';
-            }
-
-            edgesTbody.innerHTML = '';
-            if (edges.length) {
-                edges.forEach(e => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${e.source_id}</td>
-                        <td>${e.target_id}</td>
-                        <td><span class="badge">${e.relationship}</span></td>
-                    `;
-                    edgesTbody.appendChild(tr);
-                });
-            } else {
-                edgesTbody.innerHTML = '<tr><td colspan="3">No edges found.</td></tr>';
-            }
+            renderTables();
 
             drawGraph(nodes, edges);
 
@@ -985,6 +957,70 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Failed to load workspace data', e);
         }
     }
+
+    function renderTables() {
+        const nodesSearchQuery = document.getElementById('search-nodes')?.value.toLowerCase() || '';
+        const edgesSearchQuery = document.getElementById('search-edges')?.value.toLowerCase() || '';
+
+        const filteredNodes = currentNodes.filter(n => 
+            n.type.toLowerCase().includes(nodesSearchQuery) || 
+            n.value.toLowerCase().includes(nodesSearchQuery) ||
+            (n.timestamp && n.timestamp.toLowerCase().includes(nodesSearchQuery))
+        );
+
+        nodesTbody.innerHTML = '';
+        if (filteredNodes.length) {
+            filteredNodes.forEach(n => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><span class="badge">${n.type}</span></td>
+                    <td>${n.value}</td>
+                    <td style="color:var(--text-secondary);font-size:0.8rem">${n.timestamp}</td>
+                `;
+                tr.onclick = () => {
+                    handleNodeSelection(n);
+                    if (network) {
+                        network.setSelection({ nodes: [n.id || n.value], edges: [] });
+                        network.focus(n.id || n.value, { animation: true });
+                    }
+                };
+                nodesTbody.appendChild(tr);
+            });
+        } else {
+            nodesTbody.innerHTML = '<tr><td colspan="3">No nodes found.</td></tr>';
+        }
+
+        const filteredEdges = currentEdges.filter(e => 
+            String(e.source_id).toLowerCase().includes(edgesSearchQuery) || 
+            String(e.target_id).toLowerCase().includes(edgesSearchQuery) ||
+            String(e.relationship).toLowerCase().includes(edgesSearchQuery)
+        );
+
+        edgesTbody.innerHTML = '';
+        if (filteredEdges.length) {
+            filteredEdges.forEach(e => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${e.source_id}</td>
+                    <td>${e.target_id}</td>
+                    <td><span class="badge">${e.relationship}</span></td>
+                `;
+                tr.onclick = () => {
+                    populateNodeInfo(e, true);
+                    if (network) {
+                        network.setSelection({ nodes: [], edges: [e.id] });
+                    }
+                };
+                edgesTbody.appendChild(tr);
+            });
+        } else {
+            edgesTbody.innerHTML = '<tr><td colspan="3">No edges found.</td></tr>';
+        }
+    }
+
+    // Bind search inputs
+    document.getElementById('search-nodes')?.addEventListener('input', renderTables);
+    document.getElementById('search-edges')?.addEventListener('input', renderTables);
 
     function drawGraph(nodes, edges) {
         let allHavePositions = nodes.length > 0;
