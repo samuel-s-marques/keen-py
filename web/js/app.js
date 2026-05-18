@@ -864,8 +864,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderWorkspaces() {
         const query = document.getElementById('search-workspaces')?.value.toLowerCase() || '';
-        const filteredWorkspaces = currentWorkspaces.filter(w => 
-            w.name.toLowerCase().includes(query) || 
+        const filteredWorkspaces = currentWorkspaces.filter(w =>
+            w.name.toLowerCase().includes(query) ||
             (w.description && w.description.toLowerCase().includes(query))
         );
 
@@ -975,8 +975,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const nodesSearchQuery = document.getElementById('search-nodes')?.value.toLowerCase() || '';
         const edgesSearchQuery = document.getElementById('search-edges')?.value.toLowerCase() || '';
 
-        const filteredNodes = currentNodes.filter(n => 
-            n.type.toLowerCase().includes(nodesSearchQuery) || 
+        const filteredNodes = currentNodes.filter(n =>
+            n.type.toLowerCase().includes(nodesSearchQuery) ||
             n.value.toLowerCase().includes(nodesSearchQuery) ||
             (n.timestamp && n.timestamp.toLowerCase().includes(nodesSearchQuery))
         );
@@ -1003,8 +1003,8 @@ document.addEventListener('DOMContentLoaded', () => {
             nodesTbody.innerHTML = '<tr><td colspan="3">No nodes found.</td></tr>';
         }
 
-        const filteredEdges = currentEdges.filter(e => 
-            String(e.source_id).toLowerCase().includes(edgesSearchQuery) || 
+        const filteredEdges = currentEdges.filter(e =>
+            String(e.source_id).toLowerCase().includes(edgesSearchQuery) ||
             String(e.target_id).toLowerCase().includes(edgesSearchQuery) ||
             String(e.relationship).toLowerCase().includes(edgesSearchQuery)
         );
@@ -1298,8 +1298,39 @@ document.addEventListener('DOMContentLoaded', () => {
             if (network) network.fit();
         };
 
-        if (btnDeleteSelected) btnDeleteSelected.onclick = () => {
-            network.deleteSelected();
+        if (btnDeleteSelected) btnDeleteSelected.onclick = async () => {
+            const selectedNodes = lastSelection ? lastSelection.nodes : [];
+            const selectedEdges = lastSelection ? lastSelection.edges : [];
+
+            if (selectedNodes.length === 0 && selectedEdges.length === 0) {
+                showSnackbar("Error", "No elements selected.", "error");
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete ${selectedNodes.length} node(s) and ${selectedEdges.length} edge(s)?`)) {
+                try {
+                    const nodePromises = selectedNodes.map(id =>
+                        fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${id}`, { method: 'DELETE' })
+                    );
+                    const edgePromises = selectedEdges.map(id =>
+                        fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${id}`, { method: 'DELETE' })
+                    );
+
+                    await Promise.all([...nodePromises, ...edgePromises]);
+
+                    // Clear selection
+                    if (lastSelection) lastSelection = { nodes: [], edges: [] };
+                    if (network) network.setSelection({ nodes: [], edges: [] });
+
+                    // Refresh workspace
+                    selectWorkspace(activeWorkspace);
+
+                    showSnackbar("Success", "Selected items deleted successfully.", "success");
+                } catch (e) {
+                    console.error("Failed to delete selected items", e);
+                    showSnackbar("Error", "Failed to delete some items.", "error");
+                }
+            }
         };
 
         if (btnForce) btnForce.onclick = () => {
@@ -1387,76 +1418,80 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        network.on('click', function (params) {
-            if (btnAddEdge && btnAddEdge.classList.contains('active')) {
-                // If user clicks without drawing an edge, abort edge mode
-                btnAddEdge.classList.remove('active');
-                networkCanvas.style.cursor = 'default';
-                network.disableEditMode();
-            }
+        function updateSelectionDisplay(selectedNodeIds, selectedEdgeIds) {
+            const totalSelected = selectedNodeIds.length + selectedEdgeIds.length;
+            const infoEmpty = document.getElementById('node-info-empty');
+            const infoContent = document.getElementById('node-info-content');
 
-            contextMenu.classList.add('hidden');
+            if (!infoEmpty || !infoContent) return;
 
-            const isShift = params.event && params.event.srcEvent && params.event.srcEvent.shiftKey;
-
-            let currentNodes = [];
-            let currentEdges = [];
-
-            if (isShift) {
-                const clickedNode = this.getNodeAt(params.pointer.DOM);
-                const clickedEdge = this.getEdgeAt(params.pointer.DOM);
-
-                currentNodes = [...lastSelection.nodes];
-                currentEdges = [...lastSelection.edges];
-
-                if (clickedNode) {
-                    const idx = currentNodes.indexOf(clickedNode);
-                    if (idx > -1) {
-                        currentNodes.splice(idx, 1);
-                    } else {
-                        currentNodes.push(clickedNode);
-                    }
+            if (totalSelected === 0) {
+                infoEmpty.style.display = 'flex';
+                infoContent.style.display = 'none';
+                moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
+                moduleDetails.classList.add('hidden');
+            } else if (selectedNodeIds.length === 1 && selectedEdgeIds.length === 0) {
+                const nodeId = selectedNodeIds[0];
+                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
+                if (selectedNode) {
+                    handleNodeSelection(selectedNode);
                 }
-                if (clickedEdge) {
-                    const idx = currentEdges.indexOf(clickedEdge);
-                    if (idx > -1) {
-                        currentEdges.splice(idx, 1);
-                    } else {
-                        currentEdges.push(clickedEdge);
-                    }
+            } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 1) {
+                const edgeId = selectedEdgeIds[0];
+                const selectedEdge = edges.find(e => e.id === edgeId);
+                if (selectedEdge) {
+                    populateNodeInfo(selectedEdge, true);
+                    moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
+                    moduleDetails.classList.add('hidden');
                 }
-
-                network.setSelection({ nodes: currentNodes, edges: currentEdges });
-                lastSelection = { nodes: currentNodes, edges: currentEdges };
             } else {
-                currentNodes = params.nodes;
-                currentEdges = params.edges;
-                lastSelection = { nodes: currentNodes, edges: currentEdges };
+                // Multi-select
+                infoEmpty.style.display = 'none';
+                infoContent.style.display = 'flex';
 
-                if (currentNodes.length > 0) {
-                    const nodeId = currentNodes[0];
-                    const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
-                    if (selectedNode) {
-                        handleNodeSelection(selectedNode);
-                    }
-                } else if (currentEdges.length > 0) {
-                    const edgeId = currentEdges[0];
-                    const selectedEdge = edges.find(e => e.id === edgeId);
-                    if (selectedEdge) {
-                        populateNodeInfo(selectedEdge, true);
-                        moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
-                        moduleDetails.classList.add('hidden');
-                    }
+                let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
+
+                if (selectedNodeIds.length > 0) {
+                    html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Nodes (${selectedNodeIds.length}):</strong></div>`;
+                    html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
+                    selectedNodeIds.forEach(id => {
+                        const node = nodes.find(n => n.id === id || n.value === id);
+                        const val = node ? node.value : id;
+                        html += `<span class="badge">${val}</span>`;
+                    });
+                    html += `</div>`;
                 }
+
+                if (selectedEdgeIds.length > 0) {
+                    html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
+                    html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
+                    selectedEdgeIds.forEach(id => {
+                        const edge = edges.find(e => e.id === id);
+                        const rel = edge ? edge.relationship : id;
+                        html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
+                    });
+                    html += `</div>`;
+                }
+
+                infoContent.innerHTML = html;
+
+                // Auto-switch to Info tab
+                const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
+                if (infoTab) infoTab.classList.add('active');
+                const infoPanel = document.getElementById('tab-node-info');
+                if (infoPanel) infoPanel.classList.add('active');
+
+                moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple nodes selected --</option>';
+                moduleDetails.classList.add('hidden');
             }
 
-            // Update labels for all nodes based on currentNodes selection
+            // Update labels for all nodes based on selectedNodeIds
             const allNodes = data.nodes.get();
             const updates = [];
             const isLight = document.documentElement.getAttribute('data-theme') === 'light';
 
             allNodes.forEach(node => {
-                const isSelected = currentNodes.includes(node.id);
+                const isSelected = selectedNodeIds.includes(node.id);
                 if (isSelected && node.fullLabel && node.label !== node.fullLabel) {
                     updates.push({
                         id: node.id,
@@ -1475,8 +1510,36 @@ document.addEventListener('DOMContentLoaded', () => {
             if (updates.length > 0) {
                 data.nodes.update(updates);
             }
+        }
+
+        // Always track the current selection from vis.js (handles both click and drag)
+        network.on('select', function (params) {
+            lastSelection = { nodes: params.nodes, edges: params.edges };
+            updateSelectionDisplay(params.nodes, params.edges);
+        });
+
+        network.on('click', function (params) {
+            if (btnAddEdge && btnAddEdge.classList.contains('active')) {
+                // If user clicks without drawing an edge, abort edge mode
+                btnAddEdge.classList.remove('active');
+                networkCanvas.style.cursor = 'default';
+                network.disableEditMode();
+            }
+
+            contextMenu.classList.add('hidden');
         });
     }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Delete') {
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+                return; // Don't delete nodes when typing
+            }
+            const btnDelete = document.getElementById('btn-delete-selected');
+            if (btnDelete) btnDelete.click();
+        }
+    });
 
     function showContextMenu(x, y, node, edgeId = null) {
         contextMenuItems.innerHTML = '';
