@@ -36,6 +36,17 @@ Mounted at `/dashboard`, the web interface provides a rich environment for secur
 
 ---
 
+## Settings & Preferences
+
+The dashboard features a centralized settings menu that allows you to configure the application and manage sensitive credentials. The settings interface is organized into a two-panel layout with a navigation sidebar:
+
+![API Keys Panel](../assets/images/api_key_settings.png)
+
+- **API Keys**: Manage third-party API keys for modules. To protect your credentials, this section is locked and requires you to enter your master password to view or modify keys.
+- **Preferences**: Adjust UI behavior, global settings, proxy settings, and display settings. This section is accessible without needing to unlock the credential manager.
+
+---
+
 ## REST API Endpoints
 
 FastAPI automatically generates comprehensive OpenAPI documentation. Navigating to `/docs` allows you to inspect request schemas, test endpoints live, and review responses.
