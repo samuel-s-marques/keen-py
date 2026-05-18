@@ -1511,6 +1511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 data.nodes.update(updates);
             }
         }
+        network.updateSelectionDisplay = updateSelectionDisplay;
 
         // Always track the current selection from vis.js (handles both click and drag)
         network.on('select', function (params) {
@@ -1538,6 +1539,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const btnDelete = document.getElementById('btn-delete-selected');
             if (btnDelete) btnDelete.click();
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+                return; // Don't intercept Ctrl+A in inputs
+            }
+            if (network && currentNodes.length > 0) {
+                e.preventDefault(); // Prevent selecting text on page
+                const allNodeIds = currentNodes.map(n => n.id || n.value);
+                network.setSelection({ nodes: allNodeIds, edges: [] });
+                lastSelection = { nodes: allNodeIds, edges: [] };
+                if (network.updateSelectionDisplay) {
+                    network.updateSelectionDisplay(allNodeIds, []);
+                }
+            }
         }
     });
 
