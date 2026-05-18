@@ -1418,60 +1418,80 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Always track the current selection from vis.js (handles both click and drag)
-        network.on('select', function (params) {
-            lastSelection = { nodes: params.nodes, edges: params.edges };
-        });
+        function updateSelectionDisplay(selectedNodeIds, selectedEdgeIds) {
+            const totalSelected = selectedNodeIds.length + selectedEdgeIds.length;
+            const infoEmpty = document.getElementById('node-info-empty');
+            const infoContent = document.getElementById('node-info-content');
 
-        network.on('click', function (params) {
-            if (btnAddEdge && btnAddEdge.classList.contains('active')) {
-                // If user clicks without drawing an edge, abort edge mode
-                btnAddEdge.classList.remove('active');
-                networkCanvas.style.cursor = 'default';
-                network.disableEditMode();
-            }
+            if (!infoEmpty || !infoContent) return;
 
-            contextMenu.classList.add('hidden');
-
-            const isShift = params.event && params.event.srcEvent && params.event.srcEvent.shiftKey;
-
-            let currentNodes = [];
-            let currentEdges = [];
-
-            if (isShift) {
-                // For shift+click, lastSelection was already updated by the 'select' event
-                // (vis.js with multiselect:true handles toggle on shift+click internally)
-                currentNodes = lastSelection.nodes;
-                currentEdges = lastSelection.edges;
-            } else {
-                currentNodes = params.nodes;
-                currentEdges = params.edges;
-                lastSelection = { nodes: currentNodes, edges: currentEdges };
-
-                if (currentNodes.length > 0) {
-                    const nodeId = currentNodes[0];
-                    const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
-                    if (selectedNode) {
-                        handleNodeSelection(selectedNode);
-                    }
-                } else if (currentEdges.length > 0) {
-                    const edgeId = currentEdges[0];
-                    const selectedEdge = edges.find(e => e.id === edgeId);
-                    if (selectedEdge) {
-                        populateNodeInfo(selectedEdge, true);
-                        moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
-                        moduleDetails.classList.add('hidden');
-                    }
+            if (totalSelected === 0) {
+                infoEmpty.style.display = 'flex';
+                infoContent.style.display = 'none';
+                moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
+                moduleDetails.classList.add('hidden');
+            } else if (selectedNodeIds.length === 1 && selectedEdgeIds.length === 0) {
+                const nodeId = selectedNodeIds[0];
+                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
+                if (selectedNode) {
+                    handleNodeSelection(selectedNode);
                 }
+            } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 1) {
+                const edgeId = selectedEdgeIds[0];
+                const selectedEdge = edges.find(e => e.id === edgeId);
+                if (selectedEdge) {
+                    populateNodeInfo(selectedEdge, true);
+                    moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
+                    moduleDetails.classList.add('hidden');
+                }
+            } else {
+                // Multi-select
+                infoEmpty.style.display = 'none';
+                infoContent.style.display = 'flex';
+
+                let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
+
+                if (selectedNodeIds.length > 0) {
+                    html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Nodes (${selectedNodeIds.length}):</strong></div>`;
+                    html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
+                    selectedNodeIds.forEach(id => {
+                        const node = nodes.find(n => n.id === id || n.value === id);
+                        const val = node ? node.value : id;
+                        html += `<span class="badge">${val}</span>`;
+                    });
+                    html += `</div>`;
+                }
+
+                if (selectedEdgeIds.length > 0) {
+                    html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
+                    html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
+                    selectedEdgeIds.forEach(id => {
+                        const edge = edges.find(e => e.id === id);
+                        const rel = edge ? edge.relationship : id;
+                        html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
+                    });
+                    html += `</div>`;
+                }
+
+                infoContent.innerHTML = html;
+
+                // Auto-switch to Info tab
+                const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
+                if (infoTab) infoTab.classList.add('active');
+                const infoPanel = document.getElementById('tab-node-info');
+                if (infoPanel) infoPanel.classList.add('active');
+
+                moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple nodes selected --</option>';
+                moduleDetails.classList.add('hidden');
             }
 
-            // Update labels for all nodes based on currentNodes selection
+            // Update labels for all nodes based on selectedNodeIds
             const allNodes = data.nodes.get();
             const updates = [];
             const isLight = document.documentElement.getAttribute('data-theme') === 'light';
 
             allNodes.forEach(node => {
-                const isSelected = currentNodes.includes(node.id);
+                const isSelected = selectedNodeIds.includes(node.id);
                 if (isSelected && node.fullLabel && node.label !== node.fullLabel) {
                     updates.push({
                         id: node.id,
@@ -1490,6 +1510,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (updates.length > 0) {
                 data.nodes.update(updates);
             }
+        }
+
+        // Always track the current selection from vis.js (handles both click and drag)
+        network.on('select', function (params) {
+            lastSelection = { nodes: params.nodes, edges: params.edges };
+            updateSelectionDisplay(params.nodes, params.edges);
+        });
+
+        network.on('click', function (params) {
+            if (btnAddEdge && btnAddEdge.classList.contains('active')) {
+                // If user clicks without drawing an edge, abort edge mode
+                btnAddEdge.classList.remove('active');
+                networkCanvas.style.cursor = 'default';
+                network.disableEditMode();
+            }
+
+            contextMenu.classList.add('hidden');
         });
     }
 
