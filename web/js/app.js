@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let modulesData = {};
     let activeSocket = null;
     let network = null;
+    let lastSelection = { nodes: [], edges: [] };
     let minimap = null;
     let isConfigUnlocked = false;
     let configKeys = {};
@@ -987,6 +988,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function drawGraph(nodes, edges) {
         let allHavePositions = nodes.length > 0;
+        lastSelection = { nodes: [], edges: [] };
 
         const visNodes = nodes.map(n => {
             let icon = '\uf111'; // fa-circle default
@@ -1057,7 +1059,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 barnesHut: { gravitationalConstant: -3000 },
                 stabilization: { iterations: 150 }
             },
-            interaction: { hover: true },
+            interaction: { hover: true, multiselect: true },
             manipulation: {
                 enabled: false,
                 deleteNode: function (data, callback) {
@@ -1132,35 +1134,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (minimapCanvas) {
             const minimapOptions = {
-                edges: { 
+                edges: {
                     smooth: false,
                     font: { size: 0 } // Hide edge labels on minimap
                 },
                 layout: { improvedLayout: false },
                 physics: { enabled: false },
-                interaction: { 
-                    dragNodes: false, 
-                    dragView: false, 
+                interaction: {
+                    dragNodes: false,
+                    dragView: false,
                     zoomView: false,
                     hover: false
                 }
             };
             minimap = new vis.Network(minimapCanvas, data, minimapOptions);
-            
+
             setTimeout(() => {
                 if (minimap) minimap.fit();
             }, 200);
-            
+
             minimap.on("afterDrawing", (ctx) => {
                 if (!network) return;
-                const topLeft = network.DOMtoCanvas({x: 0, y: 0});
-                const bottomRight = network.DOMtoCanvas({x: networkCanvas.clientWidth, y: networkCanvas.clientHeight});
-                
+                const topLeft = network.DOMtoCanvas({ x: 0, y: 0 });
+                const bottomRight = network.DOMtoCanvas({ x: networkCanvas.clientWidth, y: networkCanvas.clientHeight });
+
                 ctx.strokeStyle = "rgba(0, 240, 255, 0.8)";
                 ctx.lineWidth = 3;
                 ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
             });
-            
+
             network.on("afterDrawing", () => {
                 if (minimap) minimap.redraw();
             });
@@ -1173,19 +1175,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     const rect = minimapEl.getBoundingClientRect();
                     const x = e.clientX - rect.left;
                     const y = e.clientY - rect.top;
-                    
+
                     // Convert DOM coordinates on the minimap to graph coordinates
-                    const graphPos = minimap.DOMtoCanvas({x, y});
-                    
+                    const graphPos = minimap.DOMtoCanvas({ x, y });
+
                     // Move the main network to center on this position
                     network.moveTo({
                         position: graphPos,
                         animation: false // Instant move makes it feel fast
                     });
                 }
-                
+
                 minimapEl.addEventListener('click', handleMinimapAction);
-                
+
                 let isDraggingMinimap = false;
                 minimapEl.addEventListener('mousedown', (e) => {
                     isDraggingMinimap = true;
@@ -1345,65 +1347,84 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             contextMenu.classList.add('hidden');
-            if (params.nodes.length > 0) {
-                const nodeId = params.nodes[0];
-                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
-                if (selectedNode) {
-                    handleNodeSelection(selectedNode);
+
+            const isShift = params.event && params.event.srcEvent && params.event.srcEvent.shiftKey;
+
+            let currentNodes = [];
+            let currentEdges = [];
+
+            if (isShift) {
+                const clickedNode = this.getNodeAt(params.pointer.DOM);
+                const clickedEdge = this.getEdgeAt(params.pointer.DOM);
+
+                currentNodes = [...lastSelection.nodes];
+                currentEdges = [...lastSelection.edges];
+
+                if (clickedNode) {
+                    const idx = currentNodes.indexOf(clickedNode);
+                    if (idx > -1) {
+                        currentNodes.splice(idx, 1);
+                    } else {
+                        currentNodes.push(clickedNode);
+                    }
                 }
-            } else if (params.edges.length > 0) {
-                const edgeId = params.edges[0];
-                const selectedEdge = edges.find(e => e.id === edgeId);
-                if (selectedEdge) {
-                    populateNodeInfo(selectedEdge, true);
-                    moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
-                    moduleDetails.classList.add('hidden');
+                if (clickedEdge) {
+                    const idx = currentEdges.indexOf(clickedEdge);
+                    if (idx > -1) {
+                        currentEdges.splice(idx, 1);
+                    } else {
+                        currentEdges.push(clickedEdge);
+                    }
+                }
+
+                network.setSelection({ nodes: currentNodes, edges: currentEdges });
+                lastSelection = { nodes: currentNodes, edges: currentEdges };
+            } else {
+                currentNodes = params.nodes;
+                currentEdges = params.edges;
+                lastSelection = { nodes: currentNodes, edges: currentEdges };
+
+                if (currentNodes.length > 0) {
+                    const nodeId = currentNodes[0];
+                    const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
+                    if (selectedNode) {
+                        handleNodeSelection(selectedNode);
+                    }
+                } else if (currentEdges.length > 0) {
+                    const edgeId = currentEdges[0];
+                    const selectedEdge = edges.find(e => e.id === edgeId);
+                    if (selectedEdge) {
+                        populateNodeInfo(selectedEdge, true);
+                        moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
+                        moduleDetails.classList.add('hidden');
+                    }
                 }
             }
-        });
 
-        let currentlyExpandedNodeId = null;
+            // Update labels for all nodes based on currentNodes selection
+            const allNodes = data.nodes.get();
+            const updates = [];
+            const isLight = document.documentElement.getAttribute('data-theme') === 'light';
 
-        network.on('selectNode', function (params) {
-            if (currentlyExpandedNodeId !== null) {
-                const prevObj = data.nodes.get(currentlyExpandedNodeId);
-                if (prevObj && prevObj.shortLabel) {
-                    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-                    data.nodes.update({
-                        id: currentlyExpandedNodeId,
-                        label: prevObj.shortLabel,
-                        font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: 'transparent' }
-                    });
-                }
-            }
-
-            if (params.nodes.length > 0) {
-                const nodeId = params.nodes[0];
-                const nodeObj = data.nodes.get(nodeId);
-                if (nodeObj && nodeObj.fullLabel) {
-                    currentlyExpandedNodeId = nodeId;
-                    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-                    data.nodes.update({
-                        id: nodeId,
-                        label: nodeObj.fullLabel,
+            allNodes.forEach(node => {
+                const isSelected = currentNodes.includes(node.id);
+                if (isSelected && node.fullLabel && node.label !== node.fullLabel) {
+                    updates.push({
+                        id: node.id,
+                        label: node.fullLabel,
                         font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: isLight ? '#ffffff' : '#111318' }
                     });
-                }
-            }
-        });
-
-        network.on('deselectNode', function (params) {
-            if (currentlyExpandedNodeId !== null) {
-                const prevObj = data.nodes.get(currentlyExpandedNodeId);
-                if (prevObj && prevObj.shortLabel) {
-                    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-                    data.nodes.update({
-                        id: currentlyExpandedNodeId,
-                        label: prevObj.shortLabel,
+                } else if (!isSelected && node.shortLabel && node.label !== node.shortLabel) {
+                    updates.push({
+                        id: node.id,
+                        label: node.shortLabel,
                         font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: 'transparent' }
                     });
                 }
-                currentlyExpandedNodeId = null;
+            });
+
+            if (updates.length > 0) {
+                data.nodes.update(updates);
             }
         });
     }
