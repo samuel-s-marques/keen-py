@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let configKeys = {};
     let currentNodes = [];
     let currentEdges = [];
+    let currentWorkspaces = [];
     const activeRuns = new Set(); // Tracks "moduleName:targetValue" strings to prevent duplicates
 
     const NODE_TO_VALIDATOR_MAP = {
@@ -854,63 +855,75 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_BASE}/workspaces`);
             const data = await res.json();
-
-            workspaceList.innerHTML = '';
-            data.forEach(w => {
-                const item = document.createElement('div');
-                item.className = `workspace-item ${w.name === activeWorkspace ? 'active' : ''}`;
-                item.onclick = () => selectWorkspace(w.name);
-
-                item.innerHTML = `
-                    <div class="workspace-header-actions">
-                        <div class="workspace-name">${w.name}</div>
-                        <div class="workspace-actions">
-                            <button class="icon-btn btn-ws-edit" data-name="${w.name}" title="Rename Workspace"><i class="fa-solid fa-pen"></i></button>
-                            <button class="icon-btn btn-ws-delete" data-name="${w.name}" title="Delete Workspace" style="color: var(--error);"><i class="fa-solid fa-trash"></i></button>
-                        </div>
-                    </div>
-                    <div class="workspace-desc">${w.description || 'No description'}</div>
-                    <div class="workspace-stats">
-                        <span class="stat-badge"><i class="fa-solid fa-circle-nodes"></i> ${w.node_count || 0}</span>
-                        <span class="stat-badge"><i class="fa-solid fa-link"></i> ${w.edge_count || 0}</span>
-                    </div>
-                `;
-                workspaceList.appendChild(item);
-            });
-
-            // Bind workspace actions
-            document.querySelectorAll('.btn-ws-delete').forEach(btn => {
-                btn.onclick = async (e) => {
-                    e.stopPropagation();
-                    const wsName = btn.dataset.name;
-                    if (confirm(`Are you sure you want to delete workspace "${wsName}"? This cannot be undone.`)) {
-                        await fetch(`${API_BASE}/workspaces/${wsName}`, { method: 'DELETE' });
-                        if (activeWorkspace === wsName) {
-                            activeWorkspace = null;
-                            activeWorkspaceTitle.textContent = "No Workspace Selected";
-                            nodesTbody.innerHTML = '';
-                            edgesTbody.innerHTML = '';
-                            if (network) network.destroy();
-                        }
-                        fetchWorkspaces();
-                    }
-                };
-            });
-
-            document.querySelectorAll('.btn-ws-edit').forEach(btn => {
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-                    const wsName = btn.dataset.name;
-                    inputRenameWs.value = wsName;
-                    inputRenameWs.dataset.oldName = wsName;
-                    modalRenameWs.classList.add('active');
-                };
-            });
-
+            currentWorkspaces = data;
+            renderWorkspaces();
         } catch (e) {
             console.error('Failed to fetch workspaces', e);
         }
     }
+
+    function renderWorkspaces() {
+        const query = document.getElementById('search-workspaces')?.value.toLowerCase() || '';
+        const filteredWorkspaces = currentWorkspaces.filter(w => 
+            w.name.toLowerCase().includes(query) || 
+            (w.description && w.description.toLowerCase().includes(query))
+        );
+
+        workspaceList.innerHTML = '';
+        filteredWorkspaces.forEach(w => {
+            const item = document.createElement('div');
+            item.className = `workspace-item ${w.name === activeWorkspace ? 'active' : ''}`;
+            item.onclick = () => selectWorkspace(w.name);
+
+            item.innerHTML = `
+                <div class="workspace-header-actions">
+                    <div class="workspace-name">${w.name}</div>
+                    <div class="workspace-actions">
+                        <button class="icon-btn btn-ws-edit" data-name="${w.name}" title="Rename Workspace"><i class="fa-solid fa-pen"></i></button>
+                        <button class="icon-btn btn-ws-delete" data-name="${w.name}" title="Delete Workspace" style="color: var(--error);"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </div>
+                <div class="workspace-desc">${w.description || 'No description'}</div>
+                <div class="workspace-stats">
+                    <span class="stat-badge"><i class="fa-solid fa-circle-nodes"></i> ${w.node_count || 0}</span>
+                    <span class="stat-badge"><i class="fa-solid fa-link"></i> ${w.edge_count || 0}</span>
+                </div>
+            `;
+            workspaceList.appendChild(item);
+        });
+
+        // Bind workspace actions
+        document.querySelectorAll('.btn-ws-delete').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const wsName = btn.dataset.name;
+                if (confirm(`Are you sure you want to delete workspace "${wsName}"? This cannot be undone.`)) {
+                    await fetch(`${API_BASE}/workspaces/${wsName}`, { method: 'DELETE' });
+                    if (activeWorkspace === wsName) {
+                        activeWorkspace = null;
+                        activeWorkspaceTitle.textContent = "No Workspace Selected";
+                        nodesTbody.innerHTML = '';
+                        edgesTbody.innerHTML = '';
+                        if (network) network.destroy();
+                    }
+                    fetchWorkspaces();
+                }
+            };
+        });
+
+        document.querySelectorAll('.btn-ws-edit').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const wsName = btn.dataset.name;
+                inputRenameWs.value = wsName;
+                inputRenameWs.dataset.oldName = wsName;
+                modalRenameWs.classList.add('active');
+            };
+        });
+    }
+
+    // Bind search input
+    document.getElementById('search-workspaces')?.addEventListener('input', renderWorkspaces);
 
     async function fetchModules() {
         try {
@@ -947,35 +960,7 @@ document.addEventListener('DOMContentLoaded', () => {
             countNodes.textContent = nodes.length || 0;
             countEdges.textContent = edges.length || 0;
 
-            nodesTbody.innerHTML = '';
-            if (nodes.length) {
-                nodes.forEach(n => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td><span class="badge">${n.type}</span></td>
-                        <td>${n.value}</td>
-                        <td style="color:var(--text-secondary);font-size:0.8rem">${n.timestamp}</td>
-                    `;
-                    nodesTbody.appendChild(tr);
-                });
-            } else {
-                nodesTbody.innerHTML = '<tr><td colspan="3">No nodes found.</td></tr>';
-            }
-
-            edgesTbody.innerHTML = '';
-            if (edges.length) {
-                edges.forEach(e => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${e.source_id}</td>
-                        <td>${e.target_id}</td>
-                        <td><span class="badge">${e.relationship}</span></td>
-                    `;
-                    edgesTbody.appendChild(tr);
-                });
-            } else {
-                edgesTbody.innerHTML = '<tr><td colspan="3">No edges found.</td></tr>';
-            }
+            renderTables();
 
             drawGraph(nodes, edges);
 
@@ -985,6 +970,70 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Failed to load workspace data', e);
         }
     }
+
+    function renderTables() {
+        const nodesSearchQuery = document.getElementById('search-nodes')?.value.toLowerCase() || '';
+        const edgesSearchQuery = document.getElementById('search-edges')?.value.toLowerCase() || '';
+
+        const filteredNodes = currentNodes.filter(n => 
+            n.type.toLowerCase().includes(nodesSearchQuery) || 
+            n.value.toLowerCase().includes(nodesSearchQuery) ||
+            (n.timestamp && n.timestamp.toLowerCase().includes(nodesSearchQuery))
+        );
+
+        nodesTbody.innerHTML = '';
+        if (filteredNodes.length) {
+            filteredNodes.forEach(n => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><span class="badge">${n.type}</span></td>
+                    <td>${n.value}</td>
+                    <td style="color:var(--text-secondary);font-size:0.8rem">${n.timestamp}</td>
+                `;
+                tr.onclick = () => {
+                    handleNodeSelection(n);
+                    if (network) {
+                        network.setSelection({ nodes: [n.id || n.value], edges: [] });
+                        network.focus(n.id || n.value, { animation: true });
+                    }
+                };
+                nodesTbody.appendChild(tr);
+            });
+        } else {
+            nodesTbody.innerHTML = '<tr><td colspan="3">No nodes found.</td></tr>';
+        }
+
+        const filteredEdges = currentEdges.filter(e => 
+            String(e.source_id).toLowerCase().includes(edgesSearchQuery) || 
+            String(e.target_id).toLowerCase().includes(edgesSearchQuery) ||
+            String(e.relationship).toLowerCase().includes(edgesSearchQuery)
+        );
+
+        edgesTbody.innerHTML = '';
+        if (filteredEdges.length) {
+            filteredEdges.forEach(e => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${e.source_id}</td>
+                    <td>${e.target_id}</td>
+                    <td><span class="badge">${e.relationship}</span></td>
+                `;
+                tr.onclick = () => {
+                    populateNodeInfo(e, true);
+                    if (network) {
+                        network.setSelection({ nodes: [], edges: [e.id] });
+                    }
+                };
+                edgesTbody.appendChild(tr);
+            });
+        } else {
+            edgesTbody.innerHTML = '<tr><td colspan="3">No edges found.</td></tr>';
+        }
+    }
+
+    // Bind search inputs
+    document.getElementById('search-nodes')?.addEventListener('input', renderTables);
+    document.getElementById('search-edges')?.addEventListener('input', renderTables);
 
     function drawGraph(nodes, edges) {
         let allHavePositions = nodes.length > 0;

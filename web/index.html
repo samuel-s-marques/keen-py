@@ -50,6 +50,10 @@
                         <i class="fa-solid fa-plus"></i>
                     </button>
                 </div>
+                <div class="search-bar-container" style="margin: 12px 12px 0 12px;">
+                    <i class="fa-solid fa-search search-icon"></i>
+                    <input type="text" id="search-workspaces" placeholder="Search workspaces..." class="search-input">
+                </div>
                 <div class="workspace-list" id="workspace-list">
                     <!-- Loaded dynamically -->
                 </div>
@@ -85,19 +89,25 @@
                             <button id="btn-toggle-physics" class="graph-btn active"
                                 title="Toggle Physics (Freeze/Unfreeze)"><i class="fa-solid fa-magnet"></i></button>
                             <div class="toolbar-divider"></div>
-                            <button id="btn-fit-screen" class="graph-btn" title="Fit to Screen"><i class="fa-solid fa-expand"></i></button>
+                            <button id="btn-fit-screen" class="graph-btn" title="Fit to Screen"><i
+                                    class="fa-solid fa-expand"></i></button>
                             <div class="toolbar-divider"></div>
                             <button id="btn-delete-selected" class="graph-btn" style="color:var(--error);"
                                 title="Delete Selected Node(s)/Edge(s)"><i class="fa-solid fa-trash"></i></button>
                         </div>
                         <div id="network-canvas" class="graph-container"></div>
-                        <div id="graph-minimap" style="position: absolute; bottom: 16px; right: 16px; width: 200px; height: 150px; background: rgba(26, 28, 35, 0.9); border: 1px solid var(--border-color); border-radius: 6px; z-index: 10; overflow: hidden; cursor: pointer;">
+                        <div id="graph-minimap"
+                            style="position: absolute; bottom: 16px; right: 16px; width: 200px; height: 150px; background: rgba(26, 28, 35, 0.9); border: 1px solid var(--border-color); border-radius: 6px; z-index: 10; overflow: hidden; cursor: pointer;">
                             <div id="minimap-canvas" style="width: 100%; height: 100%;"></div>
                         </div>
                     </div>
                 </div>
 
                 <div class="tab-content" id="tab-nodes">
+                    <div class="search-bar-container">
+                        <i class="fa-solid fa-search search-icon"></i>
+                        <input type="text" id="search-nodes" placeholder="Search nodes..." class="search-input">
+                    </div>
                     <div class="table-container">
                         <table class="data-table">
                             <thead>
@@ -115,6 +125,10 @@
                 </div>
 
                 <div class="tab-content" id="tab-edges">
+                    <div class="search-bar-container">
+                        <i class="fa-solid fa-search search-icon"></i>
+                        <input type="text" id="search-edges" placeholder="Search edges..." class="search-input">
+                    </div>
                     <div class="table-container">
                         <table class="data-table">
                             <thead>
@@ -265,9 +279,11 @@
 
                         <!-- Lock screen (shown when not unlocked) -->
                         <div id="api-keys-locked">
-                            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Enter master password to unlock API keys.</p>
+                            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Enter
+                                master password to unlock API keys.</p>
                             <div class="form-group">
-                                <input type="password" id="input-master-password" placeholder="Master Password" autocomplete="off">
+                                <input type="password" id="input-master-password" placeholder="Master Password"
+                                    autocomplete="off">
                             </div>
                             <button id="btn-unlock-settings" class="btn-primary full-width">Unlock</button>
                         </div>
@@ -277,11 +293,13 @@
                             <div class="form-group">
                                 <label>Add/Update API Key</label>
                                 <div style="display:flex; gap: 8px;">
-                                    <input type="text" id="input-api-service" placeholder="Service (e.g. SHODAN_API_KEY)"
-                                        style="flex:1;" autocomplete="off">
-                                    <input type="password" id="input-api-key" placeholder="Key" style="flex:2;" autocomplete="off">
+                                    <input type="text" id="input-api-service"
+                                        placeholder="Service (e.g. SHODAN_API_KEY)" style="flex:1;" autocomplete="off">
+                                    <input type="password" id="input-api-key" placeholder="Key" style="flex:2;"
+                                        autocomplete="off">
                                 </div>
-                                <button id="btn-save-api-key" class="btn-primary full-width" style="margin-top: 12px;">Save
+                                <button id="btn-save-api-key" class="btn-primary full-width"
+                                    style="margin-top: 12px;">Save
                                     Key</button>
                             </div>
                             <div id="api-keys-list"
@@ -302,7 +320,8 @@
                                 <option value="isolate">Isolate Data (Separate nodes for same value)</option>
                                 <option value="isolate_with_service">Isolate Data with Service (Source:Value)</option>
                             </select>
-                            <button id="btn-save-preferences" class="btn-primary full-width" style="margin-top: 12px;">Save Preferences</button>
+                            <button id="btn-save-preferences" class="btn-primary full-width"
+                                style="margin-top: 12px;">Save Preferences</button>
                         </div>
                     </div>
                 </div>
