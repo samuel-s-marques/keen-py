@@ -17,6 +17,8 @@ from loguru import logger
 
 from src.core.managers import ConfigManager, WorkspaceManager
 from src.core.loader import load_modules
+from rich.console import Console
+from rich.table import Table
 
 app = FastAPI(title="Keen API Web Server")
 
@@ -113,6 +115,24 @@ class QueueStdoutRedirector(io.TextIOBase):
 
     def flush(self) -> None:
         pass
+
+
+@contextlib.contextmanager
+def disable_tables():
+    original_print = Console.print
+
+    def web_print(self, *objects, **kwargs):
+        # Filter out Table objects
+        filtered_objects = [obj for obj in objects if not isinstance(obj, Table)]
+        if filtered_objects:
+            return original_print(self, *filtered_objects, **kwargs)
+        return None
+
+    Console.print = web_print
+    try:
+        yield
+    finally:
+        Console.print = original_print
 
 
 def get_config():
@@ -671,10 +691,11 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
             # Redirect stdout to our queue so rich/print go to WS
             with contextlib.redirect_stdout(stdout_redirector):
                 with contextlib.redirect_stderr(stdout_redirector):
-                    try:
-                        await module_instance.run()
-                    except Exception as e:
-                        logger.error(f"Execution failed: {e}")
+                    with disable_tables():
+                        try:
+                            await module_instance.run()
+                        except Exception as e:
+                            logger.error(f"Execution failed: {e}")
 
         module_task = asyncio.create_task(run_module_task())
 
