@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let modulesData = {};
     let activeSocket = null;
     let network = null;
+    let minimap = null;
     let isConfigUnlocked = false;
     let configKeys = {};
     let currentNodes = [];
@@ -1123,6 +1124,84 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         network = new vis.Network(networkCanvas, data, options);
 
+        // Mini-map implementation
+        const minimapCanvas = document.getElementById('minimap-canvas');
+        if (minimap) {
+            minimap.destroy();
+            minimap = null;
+        }
+        if (minimapCanvas) {
+            const minimapOptions = {
+                edges: { 
+                    smooth: false,
+                    font: { size: 0 } // Hide edge labels on minimap
+                },
+                layout: { improvedLayout: false },
+                physics: { enabled: false },
+                interaction: { 
+                    dragNodes: false, 
+                    dragView: false, 
+                    zoomView: false,
+                    hover: false
+                }
+            };
+            minimap = new vis.Network(minimapCanvas, data, minimapOptions);
+            
+            setTimeout(() => {
+                if (minimap) minimap.fit();
+            }, 200);
+            
+            minimap.on("afterDrawing", (ctx) => {
+                if (!network) return;
+                const topLeft = network.DOMtoCanvas({x: 0, y: 0});
+                const bottomRight = network.DOMtoCanvas({x: networkCanvas.clientWidth, y: networkCanvas.clientHeight});
+                
+                ctx.strokeStyle = "rgba(0, 240, 255, 0.8)";
+                ctx.lineWidth = 3;
+                ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+            });
+            
+            network.on("afterDrawing", () => {
+                if (minimap) minimap.redraw();
+            });
+
+            // Interactivity for minimap
+            const minimapEl = document.getElementById('graph-minimap');
+            if (minimapEl) {
+                function handleMinimapAction(e) {
+                    if (!minimap || !network) return;
+                    const rect = minimapEl.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    // Convert DOM coordinates on the minimap to graph coordinates
+                    const graphPos = minimap.DOMtoCanvas({x, y});
+                    
+                    // Move the main network to center on this position
+                    network.moveTo({
+                        position: graphPos,
+                        animation: false // Instant move makes it feel fast
+                    });
+                }
+                
+                minimapEl.addEventListener('click', handleMinimapAction);
+                
+                let isDraggingMinimap = false;
+                minimapEl.addEventListener('mousedown', (e) => {
+                    isDraggingMinimap = true;
+                    handleMinimapAction(e);
+                });
+                window.addEventListener('mousemove', (e) => {
+                    if (isDraggingMinimap) {
+                        handleMinimapAction(e);
+                    }
+                });
+                window.addEventListener('mouseup', () => {
+                    isDraggingMinimap = false;
+                });
+            }
+        }
+
         function savePositions() {
             if (!activeWorkspace || !network) return;
             const positions = network.getPositions();
@@ -1156,12 +1235,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnPhysics = document.getElementById('btn-toggle-physics');
         const btnAddEdge = document.getElementById('btn-add-edge');
         const btnDeleteSelected = document.getElementById('btn-delete-selected');
+        const btnFitScreen = document.getElementById('btn-fit-screen');
 
         function clearLayoutButtons() {
             btnForce.classList.remove('active');
             btnHierarchical.classList.remove('active');
             btnCircle.classList.remove('active');
         }
+
+        if (btnFitScreen) btnFitScreen.onclick = () => {
+            if (network) network.fit();
+        };
 
         if (btnDeleteSelected) btnDeleteSelected.onclick = () => {
             network.deleteSelected();

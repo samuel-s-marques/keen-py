@@ -85,10 +85,15 @@
                             <button id="btn-toggle-physics" class="graph-btn active"
                                 title="Toggle Physics (Freeze/Unfreeze)"><i class="fa-solid fa-magnet"></i></button>
                             <div class="toolbar-divider"></div>
+                            <button id="btn-fit-screen" class="graph-btn" title="Fit to Screen"><i class="fa-solid fa-expand"></i></button>
+                            <div class="toolbar-divider"></div>
                             <button id="btn-delete-selected" class="graph-btn" style="color:var(--error);"
                                 title="Delete Selected Node(s)/Edge(s)"><i class="fa-solid fa-trash"></i></button>
                         </div>
                         <div id="network-canvas" class="graph-container"></div>
+                        <div id="graph-minimap" style="position: absolute; bottom: 16px; right: 16px; width: 200px; height: 150px; background: rgba(26, 28, 35, 0.9); border: 1px solid var(--border-color); border-radius: 6px; z-index: 10; overflow: hidden; cursor: pointer;">
+                            <div id="minimap-canvas" style="width: 100%; height: 100%;"></div>
+                        </div>
                     </div>
                 </div>
 
