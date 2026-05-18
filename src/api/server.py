@@ -117,24 +117,6 @@ class QueueStdoutRedirector(io.TextIOBase):
         pass
 
 
-@contextlib.contextmanager
-def disable_tables():
-    original_print = Console.print
-
-    def web_print(self, *objects, **kwargs):
-        # Filter out Table objects
-        filtered_objects = [obj for obj in objects if not isinstance(obj, Table)]
-        if filtered_objects:
-            return original_print(self, *filtered_objects, **kwargs)
-        return None
-
-    Console.print = web_print
-    try:
-        yield
-    finally:
-        Console.print = original_print
-
-
 def get_config():
     config = ConfigManager("~/.keen/config.db")
     try:
@@ -653,6 +635,7 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
 
         module_instance = target_module_class()
         module_instance.shell = APIShellContext(workspace=workspace)
+        module_instance.is_web_context = True
 
         # Attempt to load API keys
         if config.is_unlocked():
@@ -691,11 +674,10 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
             # Redirect stdout to our queue so rich/print go to WS
             with contextlib.redirect_stdout(stdout_redirector):
                 with contextlib.redirect_stderr(stdout_redirector):
-                    with disable_tables():
-                        try:
-                            await module_instance.run()
-                        except Exception as e:
-                            logger.error(f"Execution failed: {e}")
+                    try:
+                        await module_instance.run()
+                    except Exception as e:
+                        logger.error(f"Execution failed: {e}")
 
         module_task = asyncio.create_task(run_module_task())
 
