@@ -67,15 +67,16 @@ class HudsonRockModule(BaseModule):
             return
 
         # Main Warning Panel
-        console.print(
-            Panel(
-                f"[bold red]WARNING: Information Stealer Infection Detected![/bold red]\n\n"
-                f"[white]{message}[/white]",
-                title=f"[bold red]Hudson Rock: {email}[/bold red]",
-                border_style="red",
-                box=box.HEAVY,
+        if not getattr(self, "is_web_context", False):
+            console.print(
+                Panel(
+                    f"[bold red]WARNING: Information Stealer Infection Detected![/bold red]\n\n"
+                    f"[white]{message}[/white]",
+                    title=f"[bold red]Hudson Rock: {email}[/bold red]",
+                    border_style="red",
+                    box=box.HEAVY,
+                )
             )
-        )
 
         # Summary Table
         summary_table = Table(box=box.SIMPLE, show_header=False, expand=True)
@@ -91,13 +92,14 @@ class HudsonRockModule(BaseModule):
             "Total User Services Affected", str(data.get("total_user_services", 0))
         )
 
-        console.print(
-            Panel(
-                summary_table,
-                title="[bold blue]Overall Summary[/bold blue]",
-                border_style="blue",
+        if not getattr(self, "is_web_context", False):
+            console.print(
+                Panel(
+                    summary_table,
+                    title="[bold blue]Overall Summary[/bold blue]",
+                    border_style="blue",
+                )
             )
-        )
 
         # Detail Stealers
         for index, stealer in enumerate(stealers, start=1):
@@ -130,13 +132,14 @@ class HudsonRockModule(BaseModule):
             stealer_table.add_row("Top Passwords (Masked)", top_passwords)
             stealer_table.add_row("Top Logins", top_logins)
 
-            console.print(
-                Panel(
-                    stealer_table,
-                    title=f"[bold yellow]Infection #{index}[/bold yellow]",
-                    border_style="yellow",
+            if not getattr(self, "is_web_context", False):
+                console.print(
+                    Panel(
+                        stealer_table,
+                        title=f"[bold yellow]Infection #{index}[/bold yellow]",
+                        border_style="yellow",
+                    )
                 )
-            )
 
     async def _save_results(self, target: str, results: dict) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces
@@ -144,13 +147,15 @@ class HudsonRockModule(BaseModule):
         stealers = results.get("stealers", [])
 
         builder = ResultBuilder()
-        builder.add_node(NodeFactory.email(
-            target,
-            message=results.get("message"),
-            total_corporate_services=results.get("total_corporate_services", 0),
-            total_user_services=results.get("total_user_services", 0),
-            infections_count=len(stealers),
-        ))
+        builder.add_node(
+            NodeFactory.email(
+                target,
+                message=results.get("message"),
+                total_corporate_services=results.get("total_corporate_services", 0),
+                total_user_services=results.get("total_user_services", 0),
+                infections_count=len(stealers),
+            )
+        )
 
         for index, stealer in enumerate(stealers, start=1):
             comp_name = stealer.get("computer_name", "Unknown")
@@ -163,39 +168,62 @@ class HudsonRockModule(BaseModule):
 
             device_val = f"infected-device:{comp_name}:{date_comp}"
 
-            builder.add_node(NodeFactory.custom(
-                "x-infected-device",
-                device_val,
-                namespace=STIXNamespaces.DEVICE,
-                stix2_extra={
-                    "computer_name": comp_name,
-                    "date_compromised": date_comp,
-                    "operating_system": os_name,
-                    "malware_path": mal_path,
-                    "ip_address": ip_val if ip_val != "Unknown" else None,
-                },
-                misp_type="stealer-infection",
-                computer_name=comp_name,
-                date_compromised=date_comp,
-                operating_system=os_name,
-                malware_path=mal_path,
-            ))
+            builder.add_node(
+                NodeFactory.custom(
+                    "x-infected-device",
+                    device_val,
+                    namespace=STIXNamespaces.DEVICE,
+                    stix2_extra={
+                        "computer_name": comp_name,
+                        "date_compromised": date_comp,
+                        "operating_system": os_name,
+                        "malware_path": mal_path,
+                        "ip_address": ip_val if ip_val != "Unknown" else None,
+                    },
+                    misp_type="stealer-infection",
+                    computer_name=comp_name,
+                    date_compromised=date_comp,
+                    operating_system=os_name,
+                    malware_path=mal_path,
+                )
+            )
             # Override MISP with structured attributes
             device_node = builder._nodes[-1]
             device_node["metadata"]["misp"] = {
                 "type": "stealer-infection",
                 "attributes": [
-                    {"type": "text", "value": comp_name, "object_relation": "computer-name"},
-                    {"type": "text", "value": date_comp, "object_relation": "date-compromised"},
-                    {"type": "text", "value": os_name, "object_relation": "operating-system"},
-                    {"type": "filename", "value": mal_path, "object_relation": "malware-path"},
+                    {
+                        "type": "text",
+                        "value": comp_name,
+                        "object_relation": "computer-name",
+                    },
+                    {
+                        "type": "text",
+                        "value": date_comp,
+                        "object_relation": "date-compromised",
+                    },
+                    {
+                        "type": "text",
+                        "value": os_name,
+                        "object_relation": "operating-system",
+                    },
+                    {
+                        "type": "filename",
+                        "value": mal_path,
+                        "object_relation": "malware-path",
+                    },
                 ],
             }
 
-            builder.add_edge(target, device_val, "compromised-device", metadata={
-                "top_passwords": passwords,
-                "top_logins": logins,
-            })
+            builder.add_edge(
+                target,
+                device_val,
+                "compromised-device",
+                metadata={
+                    "top_passwords": passwords,
+                    "top_logins": logins,
+                },
+            )
 
             # IP node if present
             if ip_val and ip_val != "Unknown":

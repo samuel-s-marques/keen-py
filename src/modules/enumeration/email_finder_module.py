@@ -149,14 +149,15 @@ class EmailFinderModule(BaseModule):
         if position:
             content += f"[bold cyan]Position:[/bold cyan] {position}\n"
 
-        console.print(
-            Panel(
-                content.strip(),
-                title="[bold green]Hunter.io Results[/bold green]",
-                border_style="green",
-                box=box.ROUNDED,
+        if not getattr(self, "is_web_context", False):
+            console.print(
+                Panel(
+                    content.strip(),
+                    title="[bold green]Hunter.io Results[/bold green]",
+                    border_style="green",
+                    box=box.ROUNDED,
+                )
             )
-        )
 
     async def save_hunter_results(self, data: dict) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory
@@ -246,7 +247,8 @@ class EmailFinderModule(BaseModule):
             for email in emails:
                 table.add_row(email)
 
-        console.print(table)
+        if not getattr(self, "is_web_context", False):
+            console.print(table)
 
     async def verify_emails(self, emails: list[str]) -> dict[str, int]:
         """Verifies email addresses using EmailVerification module.

@@ -162,7 +162,8 @@ class WafModule(BaseModule):
                     table.add_row(provider, method, evidence)
 
                 console = Console()
-                console.print(table)
+                if not getattr(self, "is_web_context", False):
+                    console.print(table)
                 success(f"Detected CDN/WAF infrastructure for {target}.")
 
                 # Save results to workspace

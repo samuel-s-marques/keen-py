@@ -191,7 +191,7 @@ class EmailVerificationModule(BaseModule):
             records.sort(key=lambda x: x[0])
         except Exception:
             pass
-            
+
         self._mx_cache[domain] = records
         return records
 
@@ -383,7 +383,8 @@ class EmailVerificationModule(BaseModule):
         table.add_row("MX Records", mx_str)
 
         console = Console()
-        console.print(table)
+        if not getattr(self, "is_web_context", False):
+            console.print(table)
 
         if score >= 70:
             success(f"{email} looks highly legitimate.")

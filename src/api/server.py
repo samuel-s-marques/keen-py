@@ -17,6 +17,8 @@ from loguru import logger
 
 from src.core.managers import ConfigManager, WorkspaceManager
 from src.core.loader import load_modules
+from rich.console import Console
+from rich.table import Table
 
 app = FastAPI(title="Keen API Web Server")
 
@@ -633,6 +635,7 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
 
         module_instance = target_module_class()
         module_instance.shell = APIShellContext(workspace=workspace)
+        module_instance.is_web_context = True
 
         # Attempt to load API keys
         if config.is_unlocked():

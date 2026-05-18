@@ -31,6 +31,7 @@ class BaseModule:
         self.options = {}
         self.logger = logger.bind(module=self.metadata["name"])
         self.shell = None
+        self.is_web_context = False
 
     def set_option(self, key: str, value) -> bool:
         # Search for the key in a case-insensitive way

@@ -116,7 +116,8 @@ class HistoricalDnsModule(BaseModule):
                     seen.add(key)
 
             console = Console()
-            console.print(table)
+            if not getattr(self, "is_web_context", False):
+                console.print(table)
             success(f"Discovered {len(historical_ips)} unique historical IP addresses.")
         else:
             warn("No historical IP records found.")

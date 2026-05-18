@@ -163,7 +163,8 @@ class PhoneVerificationModule(BaseModule):
             )
 
         console = Console()
-        console.print(table)
+        if not getattr(self, "is_web_context", False):
+            console.print(table)
 
         if local.get("valid"):
             success(f"Phone number {phone} appears to be valid.")
@@ -205,7 +206,11 @@ class PhoneVerificationModule(BaseModule):
         ]
         if local.get("country_code"):
             misp_attributes.append(
-                {"type": "text", "value": str(local["country_code"]), "object_relation": "country-code"}
+                {
+                    "type": "text",
+                    "value": str(local["country_code"]),
+                    "object_relation": "country-code",
+                }
             )
         if region:
             misp_attributes.append(
@@ -220,7 +225,11 @@ class PhoneVerificationModule(BaseModule):
                 {"type": "text", "value": line_type, "object_relation": "line-type"}
             )
         misp_attributes.append(
-            {"type": "boolean", "value": "true" if local.get("valid") else "false", "object_relation": "valid"}
+            {
+                "type": "boolean",
+                "value": "true" if local.get("valid") else "false",
+                "object_relation": "valid",
+            }
         )
 
         phone_node["metadata"]["misp"] = {
