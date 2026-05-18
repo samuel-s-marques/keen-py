@@ -864,8 +864,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderWorkspaces() {
         const query = document.getElementById('search-workspaces')?.value.toLowerCase() || '';
-        const filteredWorkspaces = currentWorkspaces.filter(w => 
-            w.name.toLowerCase().includes(query) || 
+        const filteredWorkspaces = currentWorkspaces.filter(w =>
+            w.name.toLowerCase().includes(query) ||
             (w.description && w.description.toLowerCase().includes(query))
         );
 
@@ -975,8 +975,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const nodesSearchQuery = document.getElementById('search-nodes')?.value.toLowerCase() || '';
         const edgesSearchQuery = document.getElementById('search-edges')?.value.toLowerCase() || '';
 
-        const filteredNodes = currentNodes.filter(n => 
-            n.type.toLowerCase().includes(nodesSearchQuery) || 
+        const filteredNodes = currentNodes.filter(n =>
+            n.type.toLowerCase().includes(nodesSearchQuery) ||
             n.value.toLowerCase().includes(nodesSearchQuery) ||
             (n.timestamp && n.timestamp.toLowerCase().includes(nodesSearchQuery))
         );
@@ -1003,8 +1003,8 @@ document.addEventListener('DOMContentLoaded', () => {
             nodesTbody.innerHTML = '<tr><td colspan="3">No nodes found.</td></tr>';
         }
 
-        const filteredEdges = currentEdges.filter(e => 
-            String(e.source_id).toLowerCase().includes(edgesSearchQuery) || 
+        const filteredEdges = currentEdges.filter(e =>
+            String(e.source_id).toLowerCase().includes(edgesSearchQuery) ||
             String(e.target_id).toLowerCase().includes(edgesSearchQuery) ||
             String(e.relationship).toLowerCase().includes(edgesSearchQuery)
         );
@@ -1298,8 +1298,39 @@ document.addEventListener('DOMContentLoaded', () => {
             if (network) network.fit();
         };
 
-        if (btnDeleteSelected) btnDeleteSelected.onclick = () => {
-            network.deleteSelected();
+        if (btnDeleteSelected) btnDeleteSelected.onclick = async () => {
+            const selectedNodes = lastSelection ? lastSelection.nodes : [];
+            const selectedEdges = lastSelection ? lastSelection.edges : [];
+
+            if (selectedNodes.length === 0 && selectedEdges.length === 0) {
+                showSnackbar("Error", "No elements selected.", "error");
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete ${selectedNodes.length} node(s) and ${selectedEdges.length} edge(s)?`)) {
+                try {
+                    const nodePromises = selectedNodes.map(id =>
+                        fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${id}`, { method: 'DELETE' })
+                    );
+                    const edgePromises = selectedEdges.map(id =>
+                        fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${id}`, { method: 'DELETE' })
+                    );
+
+                    await Promise.all([...nodePromises, ...edgePromises]);
+
+                    // Clear selection
+                    if (lastSelection) lastSelection = { nodes: [], edges: [] };
+                    if (network) network.setSelection({ nodes: [], edges: [] });
+
+                    // Refresh workspace
+                    selectWorkspace(activeWorkspace);
+
+                    showSnackbar("Success", "Selected items deleted successfully.", "success");
+                } catch (e) {
+                    console.error("Failed to delete selected items", e);
+                    showSnackbar("Error", "Failed to delete some items.", "error");
+                }
+            }
         };
 
         if (btnForce) btnForce.onclick = () => {
@@ -1387,6 +1418,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        // Always track the current selection from vis.js (handles both click and drag)
+        network.on('select', function (params) {
+            lastSelection = { nodes: params.nodes, edges: params.edges };
+        });
+
         network.on('click', function (params) {
             if (btnAddEdge && btnAddEdge.classList.contains('active')) {
                 // If user clicks without drawing an edge, abort edge mode
@@ -1403,31 +1439,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let currentEdges = [];
 
             if (isShift) {
-                const clickedNode = this.getNodeAt(params.pointer.DOM);
-                const clickedEdge = this.getEdgeAt(params.pointer.DOM);
-
-                currentNodes = [...lastSelection.nodes];
-                currentEdges = [...lastSelection.edges];
-
-                if (clickedNode) {
-                    const idx = currentNodes.indexOf(clickedNode);
-                    if (idx > -1) {
-                        currentNodes.splice(idx, 1);
-                    } else {
-                        currentNodes.push(clickedNode);
-                    }
-                }
-                if (clickedEdge) {
-                    const idx = currentEdges.indexOf(clickedEdge);
-                    if (idx > -1) {
-                        currentEdges.splice(idx, 1);
-                    } else {
-                        currentEdges.push(clickedEdge);
-                    }
-                }
-
-                network.setSelection({ nodes: currentNodes, edges: currentEdges });
-                lastSelection = { nodes: currentNodes, edges: currentEdges };
+                // For shift+click, lastSelection was already updated by the 'select' event
+                // (vis.js with multiselect:true handles toggle on shift+click internally)
+                currentNodes = lastSelection.nodes;
+                currentEdges = lastSelection.edges;
             } else {
                 currentNodes = params.nodes;
                 currentEdges = params.edges;
@@ -1477,6 +1492,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Delete') {
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+                return; // Don't delete nodes when typing
+            }
+            const btnDelete = document.getElementById('btn-delete-selected');
+            if (btnDelete) btnDelete.click();
+        }
+    });
 
     function showContextMenu(x, y, node, edgeId = null) {
         contextMenuItems.innerHTML = '';
