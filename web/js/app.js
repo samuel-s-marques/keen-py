@@ -1,18 +1,28 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Theme setup
     const btnThemeToggle = document.getElementById('btn-theme-toggle');
+    const themeIcon = btnThemeToggle ? btnThemeToggle.querySelector('i') : null;
     const savedTheme = localStorage.getItem('keen-theme') || 'dark';
     if (savedTheme === 'light') {
         document.documentElement.setAttribute('data-theme', 'light');
+        if (themeIcon) {
+            themeIcon.className = 'fa-solid fa-moon';
+        }
     }
     btnThemeToggle.addEventListener('click', () => {
         const currentTheme = document.documentElement.getAttribute('data-theme');
         if (currentTheme === 'light') {
             document.documentElement.removeAttribute('data-theme');
             localStorage.setItem('keen-theme', 'dark');
+            if (themeIcon) {
+                themeIcon.className = 'fa-solid fa-sun';
+            }
         } else {
             document.documentElement.setAttribute('data-theme', 'light');
             localStorage.setItem('keen-theme', 'light');
+            if (themeIcon) {
+                themeIcon.className = 'fa-solid fa-moon';
+            }
         }
         if (activeWorkspace) selectWorkspace(activeWorkspace); // Redraw graph to apply theme
     });
@@ -1997,4 +2007,31 @@ document.addEventListener('DOMContentLoaded', () => {
             if (el.parentNode) el.parentNode.removeChild(el);
         }, { once: true });
     }
+
+    // Server status monitoring
+    const statusIndicator = document.querySelector('.status-indicator');
+    const statusText = document.querySelector('.server-status span');
+
+    async function checkServerStatus() {
+        try {
+            const res = await fetch(`${API_BASE}/health`, { method: 'GET' });
+            if (res.ok) {
+                if (statusIndicator && !statusIndicator.classList.contains('online')) {
+                    statusIndicator.className = 'status-indicator online';
+                    if (statusText) statusText.textContent = 'Server Online';
+                }
+            } else {
+                throw new Error('Server returned non-ok status');
+            }
+        } catch (e) {
+            if (statusIndicator && !statusIndicator.classList.contains('offline')) {
+                statusIndicator.className = 'status-indicator offline';
+                if (statusText) statusText.textContent = 'Server Offline';
+            }
+        }
+    }
+
+    // Check on startup and then periodically every 10s
+    checkServerStatus();
+    setInterval(checkServerStatus, 10000);
 });
