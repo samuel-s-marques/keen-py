@@ -18,7 +18,7 @@ python keen.py --web --host 127.0.0.1 --port 8000 --debug
 
 Once running, the web server provides three primary interfaces:
 
-- **Interactive UI Dashboard**: [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard)
+- **Interactive UI Dashboard**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 - **Interactive REST API Docs (Swagger UI)**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) (or via `/api`)
 - **OpenAPI Schema**: [http://127.0.0.1:8000/openapi.json](http://127.0.0.1:8000/openapi.json)
 
@@ -26,7 +26,7 @@ Once running, the web server provides three primary interfaces:
 
 ## The Interactive UI Dashboard
 
-Mounted at `/dashboard`, the web interface provides a rich environment for security investigators:
+Mounted at `/`, the web interface provides a rich environment for security investigators:
 
 - **Graph Visualization**: Visually explore intelligence nodes and relationship edges. Drag, drop, and rearrange nodes to uncover connections. Node positions are automatically saved across sessions.
 - **Case Management**: Switch between active workspaces, create new cases, or export complete intelligence graphs in standard formats.

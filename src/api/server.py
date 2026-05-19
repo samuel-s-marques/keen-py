@@ -17,8 +17,6 @@ from loguru import logger
 
 from src.core.managers import ConfigManager, WorkspaceManager
 from src.core.loader import load_modules
-from rich.console import Console
-from rich.table import Table
 
 app = FastAPI(title="Keen API Web Server")
 
@@ -31,7 +29,6 @@ app.add_middleware(
 )
 
 os.makedirs("web", exist_ok=True)
-app.mount("/dashboard", StaticFiles(directory="web", html=True), name="web")
 
 
 class WorkspaceCreate(BaseModel):
@@ -125,14 +122,14 @@ def get_config():
         config.close()
 
 
-@app.get("/")
-def root():
-    return {"message": "Keen API is running. Access /dashboard for the UI."}
-
-
 @app.get("/api")
 def api():
     return RedirectResponse(url="/docs")
+
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok"}
 
 
 @app.get("/api/workspaces")
@@ -724,6 +721,9 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
             await websocket.close()
         except Exception:
             pass
+
+
+app.mount("/", StaticFiles(directory="web", html=True), name="web")
 
 
 def start_server(host: str = "127.0.0.1", port: int = 8000, debug: bool = False):
