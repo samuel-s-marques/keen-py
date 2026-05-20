@@ -25,7 +25,6 @@ def check_dependencies():
         "loguru": "loguru",
         "rich": "rich",
         "phonenumbers": "phonenumbers",
-        "pyfiglet": "pyfiglet",
         "whois": "python_whois",
         "user_scanner": "user-scanner",
     }
