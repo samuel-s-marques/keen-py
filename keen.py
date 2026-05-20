@@ -3,8 +3,17 @@ import subprocess
 import sys
 
 
+from pathlib import Path
+import os
+
+
 def check_dependencies():
     """Check and install missing Python dependencies."""
+    marker_dir = Path.home() / ".keen"
+    marker_file = marker_dir / ".dependencies_verified"
+    if marker_file.exists():
+        return
+
     required_packages = {
         "bs4": "beautifulsoup4",
         "cmd2": "cmd2",
@@ -36,6 +45,12 @@ def check_dependencies():
                 [sys.executable, "-m", "pip", "install", "--user"] + missing_packages
             )
             print("Dependencies installed successfully.")
+            # Touch verification marker
+            try:
+                os.makedirs(marker_dir, exist_ok=True)
+                marker_file.touch()
+            except Exception:
+                pass
         except Exception as e:
             print(f"[X] Error installing dependencies: {e}")
             print(
@@ -43,6 +58,12 @@ def check_dependencies():
                 + " ".join(missing_packages)
             )
             sys.exit(1)
+    else:
+        try:
+            os.makedirs(marker_dir, exist_ok=True)
+            marker_file.touch()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
