@@ -95,6 +95,9 @@ class InputValidator:
             bool: True if phone number is valid, False otherwise.
         """
 
+        # Remove all non-numeric characters except +
+        number = re.sub(r"[^0-9+]", "", number)
+
         if not number.startswith("+"):
             number = "+" + number
 

@@ -26,6 +26,7 @@ def check_dependencies():
         "phonenumbers": "phonenumbers",
         "whois": "python_whois",
         "user_scanner": "user-scanner",
+        "ddgs": "ddgs",
     }
 
     # Compute a hash representing the current required dependencies
@@ -111,7 +112,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Keen - Information Gathering Tool")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     parser.add_argument(
-        "--check-deps", action="store_true", help="Force verification and re-installation of dependencies"
+        "--check-deps",
+        action="store_true",
+        help="Force verification and re-installation of dependencies",
     )
     parser.add_argument(
         "--web", action="store_true", help="Start the Keen API web server"
