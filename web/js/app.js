@@ -617,11 +617,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     termPrint(`[${modName}] ${data.message}`);
                 } else if (data.type === 'status') {
                     gotResult = true;
-                    termPrint(`[${modName}] Completed: ${data.status}`, 'sys-msg');
+                    termPrint(`[${modName}] Completed: ${data.status}`, 'success');
                     updateSnackbar(snackbarId, displayName, 'Completed successfully', 'success', 4000);
                 } else if (data.type === 'error') {
                     gotResult = true;
-                    termPrint(`[${modName}] Error: ${data.message}`, 'sys-msg');
+                    termPrint(`[${modName}] Error: ${data.message}`, 'error');
                     updateSnackbar(snackbarId, displayName, `Error: ${data.message}`, 'error', 5000);
                 }
             } catch (e) {
@@ -1929,8 +1929,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function termPrint(text, extraClass = '') {
+        let finalClass = extraClass;
+
+        // Auto-detect class based on text content if no explicit success/warning/error class is provided
+        if (finalClass !== 'success' && finalClass !== 'warning' && finalClass !== 'error') {
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes(' | success | ') || lowerText.includes('completed:') || lowerText.includes('success:')) {
+                finalClass = 'success';
+            } else if (lowerText.includes(' | warning | ') || lowerText.includes(' | warn | ') || lowerText.includes('warning:')) {
+                finalClass = 'warning';
+            } else if (lowerText.includes(' | error | ') || lowerText.includes(' | critical | ') || lowerText.includes('error:')) {
+                finalClass = 'error';
+            }
+        }
+
         const line = document.createElement('div');
-        line.className = `log-line ${extraClass}`;
+        line.className = `log-line ${finalClass}`;
         line.textContent = text;
         terminalBody.appendChild(line);
         terminalBody.scrollTop = terminalBody.scrollHeight;
