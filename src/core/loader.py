@@ -1,5 +1,6 @@
 import ast
 import os
+from loguru import logger
 
 
 class LazyModuleProxy:
@@ -21,6 +22,14 @@ class LazyModuleProxy:
 
             mod = importlib.import_module(self._module_path)
             self._real_class = getattr(mod, self._class_name)
+
+            # Inject category into the loaded class's metadata
+            if hasattr(self._real_class, "metadata") and isinstance(
+                self._real_class.metadata, dict
+            ):
+                self._real_class.metadata["category"] = self.metadata.get(
+                    "category", ""
+                )
         return self._real_class
 
     def __call__(self, *args, **kwargs):
@@ -77,7 +86,10 @@ def load_modules(root_dir: str = "src/modules") -> dict:
                                 ):
                                     try:
                                         metadata = ast.literal_eval(body_node.value)
-                                    except Exception:
+                                    except Exception as e_eval:
+                                        logger.debug(
+                                            f"Failed to literal_eval metadata in {file}: {e_eval}"
+                                        )
                                         pass
                                     break
 
@@ -100,8 +112,11 @@ def load_modules(root_dir: str = "src/modules") -> dict:
                                         found_modules[category_name] = proxy
                                     found_modules[friendly_name] = proxy
                                 found_modules[module_path] = proxy
-                except Exception:
+                except Exception as e_ast:
                     # Fallback to standard eager import if AST parsing fails
+                    logger.debug(
+                        f"AST parsing failed for {file}: {e_ast}. Falling back to eager import."
+                    )
                     try:
                         import importlib
                         from src.core.base_module import BaseModule
@@ -129,7 +144,9 @@ def load_modules(root_dir: str = "src/modules") -> dict:
                                         found_modules[category_name] = obj
                                     found_modules[friendly_name] = obj
                                 found_modules[module_path] = obj
-                    except Exception:
-                        pass
+                    except Exception as e_eager:
+                        logger.error(
+                            f"Failed to load module {file} (Eager fallback failed): {e_eager}"
+                        )
 
     return found_modules
