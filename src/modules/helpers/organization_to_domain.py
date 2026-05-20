@@ -167,9 +167,7 @@ class OrgToDomain(BaseModule):
 
         return domain, score, matches
 
-    async def _query_ddgs(self, name: str) -> set[str]:
-        # Exclude massive aggregators from the search results to find the actual homepage
-        query = f'"{name}" -site:linkedin.com -site:wikipedia.org -site:crunchbase.com'
+    def _sync_query_ddgs(self, query: str) -> set[str]:
         domains: set[str] = set()
 
         try:
@@ -187,6 +185,11 @@ class OrgToDomain(BaseModule):
             error(f"Failed to query DDGS: {e}")
 
         return domains
+
+    async def _query_ddgs(self, name: str) -> set[str]:
+        # Exclude massive aggregators from the search results to find the actual homepage
+        query = f'"{name}" -site:linkedin.com -site:wikipedia.org -site:crunchbase.com'
+        return await asyncio.to_thread(self._sync_query_ddgs, query)
 
     async def _check_ssl_certificate(self, domain: str, clean_name: str) -> bool:
         """Check if the SSL/TLS certificate contains the company name."""
