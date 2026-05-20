@@ -11,7 +11,7 @@ from src.core.base_module import BaseModule
 class DomainEnrichmentModule(BaseModule):
     metadata = {
         "name": "Domain_Enrichment",
-        "description": "Enriches a domain with additional information.",
+        "description": "Enriches a domain with company information from Hunter.io.",
         "author": "Samuel Marques",
         "version": "1.0.0",
         "options": {
