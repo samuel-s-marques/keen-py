@@ -3,8 +3,16 @@ import subprocess
 import sys
 
 
+from pathlib import Path
+import os
+
+
 def check_dependencies():
     """Check and install missing Python dependencies."""
+    import hashlib
+    import json
+    import importlib.util
+
     required_packages = {
         "bs4": "beautifulsoup4",
         "cmd2": "cmd2",
@@ -16,17 +24,51 @@ def check_dependencies():
         "loguru": "loguru",
         "rich": "rich",
         "phonenumbers": "phonenumbers",
-        "pyfiglet": "pyfiglet",
         "whois": "python_whois",
         "user_scanner": "user-scanner",
     }
 
+    # Compute a hash representing the current required dependencies
+    dep_data = json.dumps(sorted(required_packages.items())).encode("utf-8")
+    current_hash = hashlib.sha256(dep_data).hexdigest()
+
+    marker_dir = Path.home() / ".keen"
+    marker_file = marker_dir / ".dependencies_verified"
+
+    force_check = "--check-deps" in sys.argv
+    if force_check:
+        print("[*] Verifying all dependencies...")
+
+    # Check if we can skip the dependency check
+    if not force_check and marker_file.exists():
+        try:
+            stored_hash = marker_file.read_text().strip()
+            if stored_hash == current_hash:
+                # Fast verification using find_spec to ensure no package has been uninstalled
+                all_present = True
+                for import_name in required_packages:
+                    try:
+                        if importlib.util.find_spec(import_name) is None:
+                            all_present = False
+                            break
+                    except Exception:
+                        all_present = False
+                        break
+                if all_present:
+                    return
+        except Exception:
+            pass
+
     missing_packages = []
     for import_name, install_name in required_packages.items():
         try:
-            __import__(import_name)
-        except ImportError:
-            missing_packages.append(install_name)
+            if importlib.util.find_spec(import_name) is None:
+                missing_packages.append(install_name)
+        except Exception:
+            try:
+                __import__(import_name)
+            except ImportError:
+                missing_packages.append(install_name)
 
     if missing_packages:
         print(f"[!] Missing dependencies: {', '.join(missing_packages)}")
@@ -36,6 +78,12 @@ def check_dependencies():
                 [sys.executable, "-m", "pip", "install", "--user"] + missing_packages
             )
             print("Dependencies installed successfully.")
+            # Save the current dependency hash to the marker file
+            try:
+                os.makedirs(marker_dir, exist_ok=True)
+                marker_file.write_text(current_hash)
+            except Exception:
+                pass
         except Exception as e:
             print(f"[X] Error installing dependencies: {e}")
             print(
@@ -43,6 +91,15 @@ def check_dependencies():
                 + " ".join(missing_packages)
             )
             sys.exit(1)
+    else:
+        if force_check:
+            print("[+] All dependencies are present and verified.")
+        # All packages are already present, we can just save/update the current hash
+        try:
+            os.makedirs(marker_dir, exist_ok=True)
+            marker_file.write_text(current_hash)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
@@ -54,6 +111,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Keen - Information Gathering Tool")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     parser.add_argument(
+        "--check-deps", action="store_true", help="Force verification and re-installation of dependencies"
+    )
+    parser.add_argument(
         "--web", action="store_true", help="Start the Keen API web server"
     )
     parser.add_argument(
@@ -63,6 +123,9 @@ if __name__ == "__main__":
         "--port", type=int, default=8000, help="Port for the web server"
     )
     args = parser.parse_args()
+
+    # Clear sys.argv to prevent cmd2 from parsing application launch arguments as shell commands
+    sys.argv = [sys.argv[0]]
 
     setup_logger(debug_mode=args.debug)
 
