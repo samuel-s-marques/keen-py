@@ -1,6 +1,6 @@
+from src.utils.print_utils import warn, info, error
 import re
 import asyncio
-from loguru import logger
 from src.core.loader import load_modules
 from src.utils.validator import InputValidator
 
@@ -135,7 +135,7 @@ class MagicEngine:
         detected = initial_type or self.detect_type(initial_value)
         if not detected:
             msg = f"Could not automatically detect type for value: {initial_value}"
-            logger.warning(msg)
+            warn(msg)
             print(f"[magic] {msg}")
             return
 
@@ -150,7 +150,7 @@ class MagicEngine:
             # Skip common usernames
             if node_type == "user-account" and value.lower() in self.COMMON_USERNAMES:
                 msg = f"Generic username '{value}' skipped to prevent massive false-positives."
-                logger.info(msg)
+                info(msg)
                 print(f"[magic] {msg}")
                 continue
 
@@ -159,6 +159,7 @@ class MagicEngine:
             if not target_modules:
                 continue
 
+            tasks = []
             for mod_name in target_modules:
                 # Find matching module class in self.modules
                 mod_class = self.modules.get(mod_name)
@@ -178,14 +179,13 @@ class MagicEngine:
                     mod_name.lower() in excluded_modules
                     or friendly_name.lower() in excluded_modules
                 ):
-                    logger.info(f"Module '{mod_name}' is excluded. Skipping.")
+                    info(f"Module '{mod_name}' is excluded. Skipping.")
                     continue
 
                 # Deduplication check
                 pair = (value, friendly_name)
                 if pair in self.executed_pairs:
                     continue
-                self.executed_pairs.add(pair)
 
                 # Interactive confirmation (only for CLI shell context)
                 is_web = getattr(self.shell, "is_web_context", False)
@@ -200,28 +200,34 @@ class MagicEngine:
                         print()
                         return
 
-                msg = f"Magic chaining depth {depth}: running '{friendly_name}' on '{value}'"
-                logger.info(msg)
-                print(f"[magic] {msg}")
+                self.executed_pairs.add(pair)
+                tasks.append((friendly_name, self._run_module(mod_class, value, depth)))
 
-                new_nodes = []
+            if tasks:
+                # Run concurrently using asyncio.gather
+                friendly_names = [t[0] for t in tasks]
+                coroutines = [t[1] for t in tasks]
+                results = await asyncio.gather(*coroutines, return_exceptions=True)
 
-                # Execute module and intercept nodes
-                try:
-                    await self._run_module(mod_class, value, new_nodes)
-                except Exception as e:
-                    logger.error(f"Error executing module '{friendly_name}': {e}")
-                    continue
+                for name, result in zip(friendly_names, results):
+                    if isinstance(result, BaseException):
+                        error(f"Error executing module '{name}': {result}")
+                        print(f"[magic] Error executing module '{name}': {result}")
+                    elif result:
+                        # Queue newly discovered nodes for next iteration
+                        for node in result:
+                            node_val = node.get("value")
+                            node_t = node.get("type")
+                            if node_val and node_t:
+                                queue.append((node_val, node_t, depth + 1))
 
-                # Queue newly discovered nodes for next iteration
-                for node in new_nodes:
-                    node_val = node.get("value")
-                    node_t = node.get("type")
-                    if node_val and node_t:
-                        queue.append((node_val, node_t, depth + 1))
+    async def _run_module(self, mod_class, target_value: str, depth: int) -> list:
+        """Instantiates and executes a module class, intercepting and returning its post_run results."""
+        friendly_name = getattr(mod_class, "metadata", {}).get("name", "")
+        msg = f"Magic chaining depth {depth}: running '{friendly_name}' on '{target_value}'"
+        info(msg)
+        print(f"[magic] {msg}")
 
-    async def _run_module(self, mod_class, target_value: str, new_nodes: list):
-        """Instantiates and executes a module class, intercepting its post_run results."""
         module_instance = mod_class()
         module_instance.shell = self.shell
         module_instance.is_web_context = getattr(self.shell, "is_web_context", False)
@@ -245,16 +251,17 @@ class MagicEngine:
 
         # Validate options
         if not module_instance.pre_run():
-            logger.warning(
+            warn(
                 f"Pre-run validation failed for module '{getattr(mod_class, 'metadata', {}).get('name')}' on target '{target_value}'"
             )
-            return
+            return []
 
         original_post_run = module_instance.post_run
+        discovered_nodes = []
 
         async def magic_post_run(results: dict):
             # Capture results for chaining
-            new_nodes.extend(results.get("nodes", []))
+            discovered_nodes.extend(results.get("nodes", []))
             # Save results to the active workspace
             await original_post_run(results)
 
@@ -262,3 +269,4 @@ class MagicEngine:
 
         # Execute
         await module_instance.run()
+        return discovered_nodes
