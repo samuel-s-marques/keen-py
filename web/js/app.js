@@ -2057,13 +2057,16 @@ document.addEventListener('DOMContentLoaded', () => {
         el.className = `snackbar snackbar-${type}`;
         if (id) el.dataset.snackbarId = id;
 
+        // Hide close button if duration is 0 (persistent/running state)
+        const closeBtnStyle = duration === 0 ? 'style="display: none;"' : '';
+
         el.innerHTML = `
             <div class="snackbar-icon">${SNACKBAR_ICONS[type] || SNACKBAR_ICONS.info}</div>
             <div class="snackbar-body">
                 <div class="snackbar-title" title="${title}">${title}</div>
                 <div class="snackbar-message" title="${message}">${message}</div>
             </div>
-            <button class="snackbar-close"><i class="fa-solid fa-xmark"></i></button>
+            <button class="snackbar-close" ${closeBtnStyle}><i class="fa-solid fa-xmark"></i></button>
         `;
 
         el.querySelector('.snackbar-close').addEventListener('click', () => removeSnackbar(el));
@@ -2097,6 +2100,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (titleEl) { titleEl.textContent = title; titleEl.title = title; }
         const msgEl = el.querySelector('.snackbar-message');
         if (msgEl) { msgEl.textContent = message; msgEl.title = message; }
+
+        // Update close button visibility: show if duration > 0, hide if 0
+        const closeEl = el.querySelector('.snackbar-close');
+        if (closeEl) {
+            if (duration === 0) {
+                closeEl.style.display = 'none';
+            } else {
+                closeEl.style.display = 'block';
+            }
+        }
 
         // Clear old timeout and set new auto-dismiss
         if (el._timeout) clearTimeout(el._timeout);
