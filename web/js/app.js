@@ -30,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // State
     let activeWorkspace = null;
     let modulesData = {};
-    let activeSocket = null;
     let network = null;
     let nodesDataSet = null;
     let edgesDataSet = null;
