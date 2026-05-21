@@ -376,6 +376,8 @@ class Shell(Cmd):
         try:
             asyncio.run(engine.run_chain(target, force=True))
             success("Magic Chaining completed!")
+        except KeyboardInterrupt:
+            error("\nExecution interrupted by user.")
         except Exception as e:
             error(f"Failed during Magic Chaining: {e}")
 
@@ -448,7 +450,10 @@ class Shell(Cmd):
         if self.current_module:
             self.current_module.shell = self
             info("Executing...\n")
-            asyncio.run(self.current_module.run())
+            try:
+                asyncio.run(self.current_module.run())
+            except KeyboardInterrupt:
+                error("\nExecution interrupted by user.")
         else:
             error("No module selected.")
 
