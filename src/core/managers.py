@@ -75,6 +75,22 @@ class ConfigManager(DatabaseEngine):
             INSERT OR IGNORE INTO preferences (key, value) 
             VALUES ('extraction_mode', 'merge')
         """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('magic_enabled', 'false')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('magic_max_depth', '2')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('magic_interactive', 'false')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('magic_exclude_modules', '')
+        """)
 
         # Handle migration for existing databases missing the description column
         try:
