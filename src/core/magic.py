@@ -1,4 +1,5 @@
 from src.utils.print_utils import warn, info, error
+from src.utils.utils import clean_node_value
 import re
 import asyncio
 from src.core.loader import load_modules
@@ -77,7 +78,7 @@ class MagicEngine:
     @staticmethod
     def detect_type(value: str) -> str | None:
         """Automatically detect node type based on patterns."""
-        value = value.strip()
+        value = clean_node_value(value).strip()
         if not value:
             return None
 
@@ -222,7 +223,10 @@ class MagicEngine:
                             node_val = node.get("value")
                             node_t = node.get("type")
                             if node_val and node_t:
-                                queue.append((node_val, node_t, depth + 1))
+                                # Clean prefixed values so downstream
+                                # modules receive plain targets
+                                cleaned_val = clean_node_value(node_val)
+                                queue.append((cleaned_val, node_t, depth + 1))
 
     async def _run_module(self, mod_class, target_value: str, depth: int) -> list:
         """Instantiates and executes a module class, intercepting and returning its post_run results."""
