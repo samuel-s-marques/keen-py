@@ -750,9 +750,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${metadataHtml}
                     `;
                 } else {
+                    const displayValue = item.label || item.value;
+                    const platformBadge = item.platform ? `<span class="badge" style="margin-left: 6px; background: rgba(171, 71, 188, 0.15); color: #ab47bc; border-color: rgba(171, 71, 188, 0.3);">${item.platform}</span>` : '';
                     infoContent.innerHTML = `
-                        <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${item.value}</div>
-                        <div style="margin-bottom: 16px;"><span class="badge">${item.type}</span>${item.timestamp ? `<span class="badge" style="margin-left: 6px;">${item.timestamp}</span>` : ''}</div>
+                        <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${displayValue}</div>
+                        <div style="margin-bottom: 16px;"><span class="badge">${item.type}</span>${platformBadge}${item.timestamp ? `<span class="badge" style="margin-left: 6px;">${item.timestamp}</span>` : ''}</div>
                         ${metadataHtml}
                     `;
                 }
@@ -774,9 +776,12 @@ document.addEventListener('DOMContentLoaded', () => {
         populateNodeInfo(node);
 
         // Build compatible module dropdown
+        // Use clean_value for module execution, platform for filtering
         try {
             const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
-            buildModuleDropdown(validators, node.value);
+            const prefillValue = node.clean_value || node.value;
+            const platform = node.platform || null;
+            buildModuleDropdown(validators, prefillValue, platform);
         } catch (err) {
             console.error('Error building module dropdown:', err);
         }
@@ -805,7 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? validator
                         : validator.split(',').map(v => v.trim());
                     if (vals.some(v => validators.includes(v))) {
-                        defVal = node.value;
+                        defVal = node.clean_value || node.value;
                     }
                 }
 
@@ -818,11 +823,11 @@ document.addEventListener('DOMContentLoaded', () => {
         executeModule(modName, options);
     }
 
-    function buildModuleDropdown(compatibleValidators = [], prefillValue = null) {
+    function buildModuleDropdown(compatibleValidators = [], prefillValue = null, platform = null) {
         moduleSelect.innerHTML = '<option value="" disabled selected>-- Choose a module --</option>';
 
         const compatGroup = document.createElement('optgroup');
-        compatGroup.label = 'Compatible Modules';
+        compatGroup.label = platform ? `${platform.charAt(0).toUpperCase() + platform.slice(1)} Modules` : 'Compatible Modules';
 
         const allGroup = document.createElement('optgroup');
         allGroup.label = 'All Modules';
@@ -848,11 +853,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            // Platform-specific filtering: prioritize modules matching the platform prefix
+            if (isMatch && platform) {
+                const lowerKey = key.toLowerCase();
+                const lowerName = (mod.name || '').toLowerCase();
+                const lowerDesc = (mod.description || '').toLowerCase();
+                const lowerPlatform = platform.toLowerCase();
+                const platformMatch = lowerKey.includes(lowerPlatform) || lowerName.includes(lowerPlatform) || lowerDesc.includes(lowerPlatform);
+                // If platform-specific modules exist, mark non-matching ones as general
+                if (!platformMatch) {
+                    isMatch = 'general';  // Still compatible but not platform-specific
+                }
+            }
+
             const opt = document.createElement('option');
             opt.value = key;
             opt.textContent = formatModuleName(key, mod);
 
-            if (isMatch) {
+            if (isMatch === true) {
+                // Direct platform match or non-platform compatible
+                if (!firstMatch) firstMatch = key;
+                compatGroup.appendChild(opt.cloneNode(true));
+            } else if (isMatch === 'general') {
+                // Compatible but not platform-specific — still add to compat group
                 if (!firstMatch) firstMatch = key;
                 compatGroup.appendChild(opt.cloneNode(true));
             }
@@ -1024,7 +1047,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><span class="badge">${n.type}</span></td>
-                    <td>${n.value}</td>
+                    <td>${n.label || n.value}${n.platform ? ' <span class="badge" style="font-size:0.7rem; background:rgba(171,71,188,0.15); color:#ab47bc; border-color:rgba(171,71,188,0.3);">' + n.platform + '</span>' : ''}</td>
                     <td style="color:var(--text-secondary);font-size:0.8rem">${n.timestamp}</td>
                 `;
                 tr.onclick = () => {
@@ -1091,7 +1114,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (n.type.includes('breach')) { icon = '\uf071'; color = '#ff5252'; }
             else if (n.type.includes('service')) { icon = '\uf233'; color = '#ffa726'; }
 
-            const fullText = n.value;
+            const fullText = n.label || n.value;
             const shortText = fullText.length > 20 ? fullText.substring(0, 18) + '...' : fullText;
 
             const visNode = {
@@ -1547,7 +1570,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
                     selectedNodeIds.forEach(id => {
                         const node = nodes.find(n => n.id === id || n.value === id);
-                        const val = node ? node.value : id;
+                        const val = node ? (node.label || node.value) : id;
                         html += `<span class="badge">${val}</span>`;
                     });
                     html += `</div>`;
@@ -1761,7 +1784,7 @@ document.addEventListener('DOMContentLoaded', () => {
         magicItem.onclick = (e) => {
             e.stopPropagation();
             contextMenu.classList.add('hidden');
-            runMagicChainingImmediately(node.value);
+            runMagicChainingImmediately(node.clean_value || node.value);
         };
         contextMenuItems.appendChild(magicItem);
 
