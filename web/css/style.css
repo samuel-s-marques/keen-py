@@ -1035,6 +1035,24 @@ input:focus {
     background: rgba(255, 255, 255, 0.08);
 }
 
+.snackbar-cancel {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.95rem;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s ease, background 0.2s ease;
+    display: none;
+}
+
+.snackbar-cancel:hover {
+    color: var(--error);
+    background: rgba(255, 23, 68, 0.15);
+}
+
 /* Snackbar Type Variants */
 .snackbar.snackbar-info {
     border-color: rgba(0, 114, 255, 0.3);

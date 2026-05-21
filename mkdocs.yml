@@ -14,6 +14,7 @@ nav:
                   - Preferences: getting-started/preferences.md
                   - Workspace Management: getting-started/workspace_management.md
                   - API Keys Management: getting-started/api_keys_management.md
+                  - Magic Engine: getting-started/magic_engine.md
                   - Web Server: getting-started/web.md
         - Modules:
                   - Selecting and Using a Module: modules/index.md
@@ -52,6 +53,16 @@ markdown_extensions:
         - admonition
         - pymdownx.details
         - pymdownx.superfences
+        - pymdownx.arithmatex:
+                  generic: true
 
 exclude_docs: |
         requirements-docs.txt
+
+extra_javascript:
+        - https://unpkg.com/katex@0/dist/katex.min.js
+        - https://unpkg.com/katex@0/dist/contrib/auto-render.min.js
+        - _js/katex.js
+
+extra_css:
+        - https://unpkg.com/katex@0/dist/katex.min.css

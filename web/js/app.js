@@ -30,14 +30,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // State
     let activeWorkspace = null;
     let modulesData = {};
-    let activeSocket = null;
     let network = null;
+    let nodesDataSet = null;
+    let edgesDataSet = null;
+    let currentWorkspace = null;
     let lastSelection = { nodes: [], edges: [] };
     let minimap = null;
     let isConfigUnlocked = false;
     let configKeys = {};
     let currentNodes = [];
     let currentEdges = [];
+    let activeSockets = [];
+    const activeSocketsMap = new Map();
     let currentWorkspaces = [];
     const activeRuns = new Set(); // Tracks "moduleName:targetValue" strings to prevent duplicates
 
@@ -100,6 +104,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSaveApiKey = document.getElementById('btn-save-api-key');
     const apiKeysList = document.getElementById('api-keys-list');
     const prefExtractionMode = document.getElementById('pref-extraction-mode');
+    const prefMagicEnabled = document.getElementById('pref-magic-enabled');
+    const prefMagicMaxDepth = document.getElementById('pref-magic-max-depth');
+    const prefMagicInteractive = document.getElementById('pref-magic-interactive');
+    const prefMagicExcludeModules = document.getElementById('pref-magic-exclude-modules');
     const btnSavePreferences = document.getElementById('btn-save-preferences');
 
     const closeModals = document.querySelectorAll('.close-modal');
@@ -323,11 +331,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     btnSavePreferences.addEventListener('click', async () => {
-        const value = prefExtractionMode.value;
+        const extraction_mode = prefExtractionMode.value;
+        const payload = {
+            extraction_mode: extraction_mode,
+            magic_enabled: String(prefMagicEnabled.checked),
+            magic_max_depth: String(prefMagicMaxDepth.value),
+            magic_interactive: String(prefMagicInteractive.checked),
+            magic_exclude_modules: prefMagicExcludeModules.value.trim()
+        };
         await fetch(`${API_BASE}/config/preferences`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: 'extraction_mode', value })
+            body: JSON.stringify(payload)
         });
         alert('Preferences saved!');
     });
@@ -374,6 +389,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const prefs = await res.json();
             if (prefs.extraction_mode) {
                 prefExtractionMode.value = prefs.extraction_mode;
+            }
+            if (prefMagicEnabled) {
+                prefMagicEnabled.checked = prefs.magic_enabled === 'true';
+            }
+            if (prefMagicMaxDepth) {
+                prefMagicMaxDepth.value = prefs.magic_max_depth || '2';
+            }
+            if (prefMagicInteractive) {
+                prefMagicInteractive.checked = prefs.magic_interactive === 'true';
+            }
+            if (prefMagicExcludeModules) {
+                prefMagicExcludeModules.value = prefs.magic_exclude_modules || '';
             }
         }
     }
@@ -540,9 +567,6 @@ document.addEventListener('DOMContentLoaded', () => {
         moduleDetails.classList.remove('hidden');
     });
 
-    // Run Module via WebSockets
-    let activeSockets = [];
-
     function getRunKey(modName, options) {
         // Try to find the primary target value from options for dedup
         const mod = modulesData[modName];
@@ -601,6 +625,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ws = new WebSocket(`${WS_BASE}/modules/${modName}/run`);
         activeSockets.push(ws);
+        activeSocketsMap.set(snackbarId, ws);
         let gotResult = false;
 
         ws.onopen = () => {
@@ -631,6 +656,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ws.onclose = () => {
             activeSockets = activeSockets.filter(s => s !== ws);
+            activeSocketsMap.delete(snackbarId);
             activeRuns.delete(runKey);
             termPrint(`[${modName}] Connection closed.`, 'sys-msg');
 
@@ -723,9 +749,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${metadataHtml}
                     `;
                 } else {
+                    const displayValue = item.label || item.value;
+                    const platformBadge = item.platform ? `<span class="badge" style="margin-left: 6px; background: rgba(171, 71, 188, 0.15); color: #ab47bc; border-color: rgba(171, 71, 188, 0.3);">${item.platform}</span>` : '';
                     infoContent.innerHTML = `
-                        <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${item.value}</div>
-                        <div style="margin-bottom: 16px;"><span class="badge">${item.type}</span>${item.timestamp ? `<span class="badge" style="margin-left: 6px;">${item.timestamp}</span>` : ''}</div>
+                        <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${displayValue}</div>
+                        <div style="margin-bottom: 16px;"><span class="badge">${item.type}</span>${platformBadge}${item.timestamp ? `<span class="badge" style="margin-left: 6px;">${item.timestamp}</span>` : ''}</div>
                         ${metadataHtml}
                     `;
                 }
@@ -747,9 +775,12 @@ document.addEventListener('DOMContentLoaded', () => {
         populateNodeInfo(node);
 
         // Build compatible module dropdown
+        // Use clean_value for module execution, platform for filtering
         try {
             const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
-            buildModuleDropdown(validators, node.value);
+            const prefillValue = node.clean_value || node.value;
+            const platform = node.platform || null;
+            buildModuleDropdown(validators, prefillValue, platform);
         } catch (err) {
             console.error('Error building module dropdown:', err);
         }
@@ -778,7 +809,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? validator
                         : validator.split(',').map(v => v.trim());
                     if (vals.some(v => validators.includes(v))) {
-                        defVal = node.value;
+                        defVal = node.clean_value || node.value;
                     }
                 }
 
@@ -791,11 +822,11 @@ document.addEventListener('DOMContentLoaded', () => {
         executeModule(modName, options);
     }
 
-    function buildModuleDropdown(compatibleValidators = [], prefillValue = null) {
+    function buildModuleDropdown(compatibleValidators = [], prefillValue = null, platform = null) {
         moduleSelect.innerHTML = '<option value="" disabled selected>-- Choose a module --</option>';
 
         const compatGroup = document.createElement('optgroup');
-        compatGroup.label = 'Compatible Modules';
+        compatGroup.label = platform ? `${platform.charAt(0).toUpperCase() + platform.slice(1)} Modules` : 'Compatible Modules';
 
         const allGroup = document.createElement('optgroup');
         allGroup.label = 'All Modules';
@@ -821,11 +852,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            // Platform-specific filtering: prioritize modules matching the platform prefix
+            if (isMatch && platform) {
+                const lowerKey = key.toLowerCase();
+                const lowerName = (mod.name || '').toLowerCase();
+                const lowerDesc = (mod.description || '').toLowerCase();
+                const lowerPlatform = platform.toLowerCase();
+                const platformMatch = lowerKey.includes(lowerPlatform) || lowerName.includes(lowerPlatform) || lowerDesc.includes(lowerPlatform);
+                // If platform-specific modules exist, mark non-matching ones as general
+                if (!platformMatch) {
+                    isMatch = 'general';  // Still compatible but not platform-specific
+                }
+            }
+
             const opt = document.createElement('option');
             opt.value = key;
             opt.textContent = formatModuleName(key, mod);
 
-            if (isMatch) {
+            if (isMatch === true) {
+                // Direct platform match or non-platform compatible
+                if (!firstMatch) firstMatch = key;
+                compatGroup.appendChild(opt.cloneNode(true));
+            } else if (isMatch === 'general') {
+                // Compatible but not platform-specific — still add to compat group
                 if (!firstMatch) firstMatch = key;
                 compatGroup.appendChild(opt.cloneNode(true));
             }
@@ -997,7 +1046,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><span class="badge">${n.type}</span></td>
-                    <td>${n.value}</td>
+                    <td>${n.label || n.value}${n.platform ? ' <span class="badge" style="font-size:0.7rem; background:rgba(171,71,188,0.15); color:#ab47bc; border-color:rgba(171,71,188,0.3);">' + n.platform + '</span>' : ''}</td>
                     <td style="color:var(--text-secondary);font-size:0.8rem">${n.timestamp}</td>
                 `;
                 tr.onclick = () => {
@@ -1064,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (n.type.includes('breach')) { icon = '\uf071'; color = '#ff5252'; }
             else if (n.type.includes('service')) { icon = '\uf233'; color = '#ffa726'; }
 
-            const fullText = n.value;
+            const fullText = n.label || n.value;
             const shortText = fullText.length > 20 ? fullText.substring(0, 18) + '...' : fullText;
 
             const visNode = {
@@ -1105,9 +1154,60 @@ document.addEventListener('DOMContentLoaded', () => {
             arrows: 'to'
         }));
 
+        const isWorkspaceSwitched = (activeWorkspace !== currentWorkspace);
+        currentWorkspace = activeWorkspace;
+
+        if (network && !isWorkspaceSwitched && nodesDataSet && edgesDataSet) {
+            // Keep track of which nodes are new to decide if we need to enable physics
+            const existingNodeIds = new Set(nodesDataSet.getIds());
+            const newNodesWithoutPos = visNodes.filter(n => !existingNodeIds.has(n.id) && (n.x === null || n.x === undefined || n.y === null || n.y === undefined));
+
+            // Synchronize nodes
+            const newNodeIds = new Set(visNodes.map(n => n.id));
+            const nodeIdsToRemove = nodesDataSet.getIds().filter(id => !newNodeIds.has(id));
+
+            if (nodeIdsToRemove.length > 0) {
+                nodesDataSet.remove(nodeIdsToRemove);
+            }
+
+            // For updates/adds: use nodesDataSet.update
+            if (visNodes.length > 0) {
+                nodesDataSet.update(visNodes);
+            }
+
+            // Synchronize edges
+            const newEdgeIds = new Set(visEdges.map(e => e.id));
+            const edgeIdsToRemove = edgesDataSet.getIds().filter(id => !newEdgeIds.has(id));
+
+            if (edgeIdsToRemove.length > 0) {
+                edgesDataSet.remove(edgeIdsToRemove);
+            }
+
+            if (visEdges.length > 0) {
+                edgesDataSet.update(visEdges);
+            }
+
+            // If there are new nodes without positions, enable physics so they float in smoothly
+            if (newNodesWithoutPos.length > 0) {
+                network.setOptions({ physics: { enabled: true } });
+                const btnPhy = document.getElementById('btn-toggle-physics');
+                if (btnPhy) btnPhy.classList.add('active');
+            }
+
+            if (minimap) {
+                setTimeout(() => {
+                    if (minimap) minimap.fit();
+                }, 200);
+            }
+            return;
+        }
+
+        nodesDataSet = new vis.DataSet(visNodes);
+        edgesDataSet = new vis.DataSet(visEdges);
+
         const data = {
-            nodes: new vis.DataSet(visNodes),
-            edges: new vis.DataSet(visEdges)
+            nodes: nodesDataSet,
+            edges: edgesDataSet
         };
 
         const options = {
@@ -1180,8 +1280,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+
+
         if (network) {
             network.destroy();
+            network = null;
         }
         network = new vis.Network(networkCanvas, data, options);
 
@@ -1466,7 +1569,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
                     selectedNodeIds.forEach(id => {
                         const node = nodes.find(n => n.id === id || n.value === id);
-                        const val = node ? node.value : id;
+                        const val = node ? (node.label || node.value) : id;
                         html += `<span class="badge">${val}</span>`;
                     });
                     html += `</div>`;
@@ -1671,6 +1774,18 @@ document.addEventListener('DOMContentLoaded', () => {
             empty.textContent = 'No compatible modules';
             contextMenuItems.appendChild(empty);
         }
+
+        const magicItem = document.createElement('div');
+        magicItem.className = 'context-menu-item';
+        magicItem.style.borderTop = '1px solid var(--border-color)';
+        magicItem.style.marginTop = '4px';
+        magicItem.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent-cyan);"></i> Magic Chaining`;
+        magicItem.onclick = (e) => {
+            e.stopPropagation();
+            contextMenu.classList.add('hidden');
+            runMagicChainingImmediately(node.clean_value || node.value);
+        };
+        contextMenuItems.appendChild(magicItem);
 
         const editItem = document.createElement('div');
         editItem.className = 'context-menu-item';
@@ -1965,16 +2080,38 @@ document.addEventListener('DOMContentLoaded', () => {
         el.className = `snackbar snackbar-${type}`;
         if (id) el.dataset.snackbarId = id;
 
+        // Hide close button if duration is 0 (persistent/running state)
+        const closeBtnStyle = duration === 0 ? 'style="display: none;"' : '';
+        const cancelBtnStyle = duration === 0 ? 'style="display: block;"' : 'style="display: none;"';
+
         el.innerHTML = `
             <div class="snackbar-icon">${SNACKBAR_ICONS[type] || SNACKBAR_ICONS.info}</div>
             <div class="snackbar-body">
-                <div class="snackbar-title" title="${title}">${title}</div>
-                <div class="snackbar-message" title="${message}">${message}</div>
+                <div class="snackbar-title"></div>
+                <div class="snackbar-message"></div>
             </div>
-            <button class="snackbar-close"><i class="fa-solid fa-xmark"></i></button>
+            <button class="snackbar-cancel" ${cancelBtnStyle}><i class="fa-solid fa-circle-stop"></i></button>
+            <button class="snackbar-close" ${closeBtnStyle}><i class="fa-solid fa-xmark"></i></button>
         `;
 
+        const titleEl = el.querySelector('.snackbar-title');
+        if (titleEl) { titleEl.textContent = title; titleEl.title = title; }
+        const msgEl = el.querySelector('.snackbar-message');
+        if (msgEl) { msgEl.textContent = message; msgEl.title = message; }
+
         el.querySelector('.snackbar-close').addEventListener('click', () => removeSnackbar(el));
+
+        const cancelBtn = el.querySelector('.snackbar-cancel');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                if (id && activeSocketsMap.has(id)) {
+                    const ws = activeSocketsMap.get(id);
+                    if (ws) ws.close();
+                } else {
+                    removeSnackbar(el);
+                }
+            });
+        }
 
         snackbarContainer.appendChild(el);
 
@@ -2005,6 +2142,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (titleEl) { titleEl.textContent = title; titleEl.title = title; }
         const msgEl = el.querySelector('.snackbar-message');
         if (msgEl) { msgEl.textContent = message; msgEl.title = message; }
+
+        // Update close button visibility: show if duration > 0, hide if 0
+        const closeEl = el.querySelector('.snackbar-close');
+        if (closeEl) {
+            if (duration === 0) {
+                closeEl.style.display = 'none';
+            } else {
+                closeEl.style.display = 'block';
+            }
+        }
+
+        const cancelEl = el.querySelector('.snackbar-cancel');
+        if (cancelEl) {
+            if (duration === 0) {
+                cancelEl.style.display = 'block';
+            } else {
+                cancelEl.style.display = 'none';
+            }
+        }
 
         // Clear old timeout and set new auto-dismiss
         if (el._timeout) clearTimeout(el._timeout);
@@ -2045,7 +2201,78 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function runMagicChainingImmediately(targetValue) {
+        const runKey = `magic:${targetValue}`;
+        const displayName = `✨ Magic Chaining`;
+
+        if (activeRuns.has(runKey)) {
+            showSnackbar(displayName, `Already running on ${targetValue}`, 'warning', 3000);
+            return;
+        }
+
+        activeRuns.add(runKey);
+        const snackbarId = 'magic-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+        showSnackbar(displayName, `Initializing on ${targetValue}...`, 'info', 0, snackbarId);
+
+        termPrint(`[magic] Connecting for target: ${targetValue}`, 'sys-msg');
+
+        const ws = new WebSocket(`${WS_BASE}/magic/run`);
+        activeSockets.push(ws);
+        activeSocketsMap.set(snackbarId, ws);
+        let gotResult = false;
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                target: targetValue,
+                workspace_name: activeWorkspace || ""
+            }));
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'log') {
+                    termPrint(`[magic] ${data.message}`);
+                } else if (data.type === 'status') {
+                    gotResult = true;
+                    termPrint(`[magic] Completed: ${data.status}`, 'success');
+                    updateSnackbar(snackbarId, displayName, 'Completed successfully', 'success', 4000);
+                } else if (data.type === 'error') {
+                    gotResult = true;
+                    termPrint(`[magic] Error: ${data.message}`, 'error');
+                    updateSnackbar(snackbarId, displayName, `Error: ${data.message}`, 'error', 5000);
+                }
+            } catch (e) {
+                termPrint(`[magic] ${event.data}`);
+            }
+        };
+
+        ws.onclose = () => {
+            activeSockets = activeSockets.filter(s => s !== ws);
+            activeSocketsMap.delete(snackbarId);
+            activeRuns.delete(runKey);
+            termPrint(`[magic] Connection closed.`, 'sys-msg');
+
+            if (!gotResult) {
+                updateSnackbar(snackbarId, displayName, 'Connection closed', 'warning', 4000);
+            }
+
+            // Refresh workspace to show new nodes and edges
+            if (activeWorkspace) {
+                selectWorkspace(activeWorkspace);
+            }
+        };
+    }
+
     // Check on startup and then periodically every 10s
     checkServerStatus();
     setInterval(checkServerStatus, 10000);
+
+    // Periodically refresh the active workspace graph to stream new nodes and edges in real time
+    // but only when there is an active module run or magic chaining in progress.
+    setInterval(() => {
+        if (activeWorkspace && activeSockets.length > 0) {
+            selectWorkspace(activeWorkspace);
+        }
+    }, 2000);
 });

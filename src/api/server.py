@@ -82,6 +82,14 @@ class EdgeUpdate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+class WebShellAdapter:
+    def __init__(self, workspace: WorkspaceManager | None, config: ConfigManager):
+        self.workspace = workspace
+        self.config = config
+        self.is_web_context = True
+        self._magic_running = False
+
+
 class APIShellContext:
     def __init__(self, workspace: WorkspaceManager | None = None):
         self.workspace = workspace
@@ -209,6 +217,17 @@ def get_workspace_nodes(name: str, config: ConfigManager = Depends(get_config)):
                     node["metadata"] = json.loads(node["metadata"])
                 except Exception:
                     pass
+
+            # Provide both the original value (for display/uniqueness)
+            # and a clean value (for module execution)
+            from src.utils.utils import parse_node_prefix
+
+            raw_value = node.get("value", "")
+            prefix, clean = parse_node_prefix(raw_value)
+            node["label"] = raw_value       # visual identifier (e.g. "github:username")
+            node["clean_value"] = clean      # execution target  (e.g. "username")
+            node["platform"] = prefix        # platform prefix   (e.g. "github") or None
+
         wm.close()
         return nodes
     except Exception as e:
@@ -311,6 +330,43 @@ def set_config_key(req: APIKeyCreate, config: ConfigManager = Depends(get_config
     if not config.is_unlocked():
         return JSONResponse(status_code=401, content={"error": "Config locked"})
     config.set_api_key(req.service.lower(), req.api_key)
+    return {"success": True}
+
+
+@app.get("/api/config/preferences")
+def get_preferences(config: ConfigManager = Depends(get_config)):
+    """Get all configuration preferences."""
+    cursor = config.conn.cursor()
+    cursor.execute("SELECT key, value FROM preferences")
+    rows = cursor.fetchall()
+    blocked_keys = ["last_workspace", "api_keys_salt", "master_password_check"]
+
+    prefs = {}
+    for row in rows:
+        key = row[0]
+        val = row[1]
+        if key in blocked_keys:
+            continue
+        prefs[key] = val
+    return prefs
+
+
+@app.post("/api/config/preferences")
+def update_preferences(
+    req: Dict[str, Any], config: ConfigManager = Depends(get_config)
+):
+    """Update multiple preferences."""
+    blocked_keys = ["last_workspace", "api_keys_salt", "master_password_check"]
+    if "key" in req and "value" in req and len(req) == 2:
+        key = req["key"]
+        val = req["value"]
+        if key not in blocked_keys:
+            config.set_preference(key, str(val))
+    else:
+        for key, val in req.items():
+            if key in blocked_keys:
+                continue
+            config.set_preference(key, str(val))
     return {"success": True}
 
 
@@ -687,13 +743,131 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
                 log_queue.task_done()
             except asyncio.TimeoutError:
                 continue
-            except WebSocketDisconnect:
+            except Exception:
                 # Client disconnected, cancel execution
                 module_task.cancel()
-                raise
+                break
 
-        await module_task
-        await websocket.send_json({"type": "status", "status": "completed"})
+        try:
+            await module_task
+            await websocket.send_json({"type": "status", "status": "completed"})
+        except asyncio.CancelledError:
+            pass
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
+    finally:
+        if handler_id is not None:
+            try:
+                logger.remove(handler_id)
+            except Exception:
+                pass
+        try:
+            config.close()
+        except Exception:
+            pass
+        if workspace:
+            try:
+                workspace.close()
+            except Exception:
+                pass
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+@app.websocket("/ws/magic/run")
+async def websocket_run_magic(websocket: WebSocket):
+    """Run magic chaining asynchronously via WebSocket."""
+    await websocket.accept()
+
+    config = ConfigManager("~/.keen/config.db")
+    handler_id = None
+    workspace = None
+
+    try:
+        data = await websocket.receive_json()
+        target = data.get("target", "").strip()
+        workspace_name = data.get("workspace_name", "")
+
+        if not target:
+            await websocket.send_json(
+                {"type": "error", "message": "Target is required"}
+            )
+            await websocket.close()
+            return
+
+        # Setup workspace context
+        if workspace_name:
+            w = config.get_workspace(workspace_name)
+            if w:
+                workspace = WorkspaceManager(w["path"], name=workspace_name)
+
+        if not workspace:
+            last_ws = config.get_preference("last_workspace")
+            if last_ws:
+                w = config.get_workspace(last_ws)
+                if w:
+                    workspace = WorkspaceManager(w["path"], name=last_ws)
+            if not workspace:
+                db_file = "cases/magic.keen"
+                os.makedirs("cases", exist_ok=True)
+                config.add_workspace(
+                    "magic", db_file, "Default magic chaining workspace"
+                )
+                workspace = WorkspaceManager(db_file, name="magic")
+
+        # Create shell adapter
+        shell_adapter = WebShellAdapter(workspace, config)
+
+        from src.core.magic import MagicEngine
+
+        engine = MagicEngine(shell_adapter, config=config)
+
+        # Setup Log Streaming
+        log_queue = asyncio.Queue()
+        queue_sink = QueueSink(log_queue)
+
+        handler_id = logger.add(
+            queue_sink.write,
+            format="{time:HH:mm:ss} | {level} | {message}",
+            level="DEBUG",
+        )
+
+        stdout_redirector = QueueStdoutRedirector(log_queue)
+
+        async def run_magic_task():
+            with contextlib.redirect_stdout(stdout_redirector):
+                with contextlib.redirect_stderr(stdout_redirector):
+                    try:
+                        await engine.run_chain(target, force=True)
+                    except Exception as e:
+                        logger.error(f"Magic execution failed: {e}")
+
+        magic_task = asyncio.create_task(run_magic_task())
+        # Stream logs down to WS concurrently
+        while not magic_task.done() or not log_queue.empty():
+            try:
+                log_msg = await asyncio.wait_for(log_queue.get(), timeout=0.1)
+                await websocket.send_json({"type": "log", "message": log_msg})
+                log_queue.task_done()
+            except asyncio.TimeoutError:
+                continue
+            except Exception:
+                magic_task.cancel()
+                break
+
+        try:
+            await magic_task
+            await websocket.send_json({"type": "status", "status": "completed"})
+        except asyncio.CancelledError:
+            pass
 
     except WebSocketDisconnect:
         pass

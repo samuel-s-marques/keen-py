@@ -32,6 +32,7 @@ class BaseModule:
         self.logger = logger.bind(module=self.metadata["name"])
         self.shell = None
         self.is_web_context = False
+        self.active_processes = set()
 
     def set_option(self, key: str, value) -> bool:
         # Search for the key in a case-insensitive way
@@ -40,6 +41,15 @@ class BaseModule:
                 # Strip quotes if the value is a string
                 if isinstance(value, str):
                     value = value.strip("\"'")
+
+                    # If this option has a validator (i.e. it's a target option),
+                    # strip any platform prefix (e.g. "github:username" -> "username")
+                    opt_meta = self.metadata["options"].get(opt_key)
+                    if opt_meta and opt_meta[3]:
+                        from src.utils.utils import clean_node_value
+
+                        value = clean_node_value(value)
+
                 self.options[opt_key] = value
                 return True
         return False
@@ -116,13 +126,20 @@ class BaseModule:
                 if isinstance(validator, (list, tuple)):
                     validators_list = list(validator)
                 else:
-                    validators_list = [v.strip() for v in str(validator).split(",") if v.strip()]
+                    validators_list = [
+                        v.strip() for v in str(validator).split(",") if v.strip()
+                    ]
 
                 if validators_list:
-                    known_validators = [v for v in validators_list if v in InputValidator.VALIDATORS]
+                    known_validators = [
+                        v for v in validators_list if v in InputValidator.VALIDATORS
+                    ]
 
                     if known_validators:
-                        passed_at_least_one = any(InputValidator.VALIDATORS[v](option_value) for v in known_validators)
+                        passed_at_least_one = any(
+                            InputValidator.VALIDATORS[v](option_value)
+                            for v in known_validators
+                        )
                         if not passed_at_least_one:
                             error(
                                 f"Invalid value for {key.upper()}. It should match at least one of: {', '.join(validators_list)}."
@@ -215,3 +232,92 @@ class BaseModule:
                     relationship=edge.get("relationship", "RELATED"),
                     metadata=edge.get("metadata", {}),
                 )
+
+        # Check if magic chaining is enabled and not already running
+        if self.shell and getattr(self.shell, "_magic_running", False) is not True:
+            config = getattr(self.shell, "config", None)
+            should_close_config = False
+            if not config:
+                from src.core.managers import ConfigManager
+
+                config = ConfigManager("~/.keen/config.db")
+                should_close_config = True
+
+            try:
+                if config.get_preference("magic_enabled") == "true":
+                    from src.core.magic import MagicEngine
+
+                    self.shell._magic_running = True
+                    try:
+                        engine = MagicEngine(self.shell, config=config)
+                        # Run on all nodes returned by this module
+                        for node in results.get("nodes", []):
+                            val = node.get("value")
+                            t = node.get("type")
+                            if val:
+                                await engine.run_chain(val, initial_type=t, force=False)
+                    finally:
+                        self.shell._magic_running = False
+            finally:
+                if should_close_config:
+                    config.close()
+
+    def register_process(self, process) -> None:
+        """Register a subprocess for cleanup on cancellation."""
+        if not hasattr(self, "active_processes"):
+            self.active_processes = set()
+        self.active_processes.add(process)
+
+    def unregister_process(self, process) -> None:
+        """Unregister a subprocess after it completes."""
+        if hasattr(self, "active_processes"):
+            self.active_processes.discard(process)
+
+    async def run_subprocess(
+        self, cmd: list[str], stdout=None, stderr=None
+    ) -> tuple[int, bytes, bytes]:
+        """Run an external subprocess asynchronously, ensuring it is terminated/killed on cancellation."""
+        import asyncio
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=stdout or asyncio.subprocess.PIPE,
+            stderr=stderr or asyncio.subprocess.PIPE,
+        )
+        self.register_process(process)
+
+        try:
+            stdout_data, stderr_data = await process.communicate()
+            return (
+                process.returncode if process.returncode is not None else -1,
+                stdout_data,
+                stderr_data,
+            )
+        except asyncio.CancelledError:
+            if process.returncode is None:
+                try:
+                    process.terminate()
+                    # Wait briefly to allow clean termination
+                    await asyncio.wait_for(process.wait(), timeout=1.0)
+                except Exception:
+                    try:
+                        process.kill()
+                    except Exception:
+                        pass
+            raise
+        finally:
+            self.unregister_process(process)
+
+    def cleanup(self) -> None:
+        """Terminate all active subprocesses registered by this module."""
+        if hasattr(self, "active_processes"):
+            for process in list(self.active_processes):
+                if process.returncode is None:
+                    try:
+                        process.terminate()
+                    except Exception:
+                        try:
+                            process.kill()
+                        except Exception:
+                            pass
+            self.active_processes.clear()
