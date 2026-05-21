@@ -41,6 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let configKeys = {};
     let currentNodes = [];
     let currentEdges = [];
+    let activeSockets = [];
+    const activeSocketsMap = new Map();
     let currentWorkspaces = [];
     const activeRuns = new Set(); // Tracks "moduleName:targetValue" strings to prevent duplicates
 
@@ -566,9 +568,6 @@ document.addEventListener('DOMContentLoaded', () => {
         moduleDetails.classList.remove('hidden');
     });
 
-    // Run Module via WebSockets
-    let activeSockets = [];
-
     function getRunKey(modName, options) {
         // Try to find the primary target value from options for dedup
         const mod = modulesData[modName];
@@ -627,6 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ws = new WebSocket(`${WS_BASE}/modules/${modName}/run`);
         activeSockets.push(ws);
+        activeSocketsMap.set(snackbarId, ws);
         let gotResult = false;
 
         ws.onopen = () => {
@@ -657,6 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ws.onclose = () => {
             activeSockets = activeSockets.filter(s => s !== ws);
+            activeSocketsMap.delete(snackbarId);
             activeRuns.delete(runKey);
             termPrint(`[${modName}] Connection closed.`, 'sys-msg');
 
@@ -2059,6 +2060,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Hide close button if duration is 0 (persistent/running state)
         const closeBtnStyle = duration === 0 ? 'style="display: none;"' : '';
+        const cancelBtnStyle = duration === 0 ? 'style="display: block;"' : 'style="display: none;"';
 
         el.innerHTML = `
             <div class="snackbar-icon">${SNACKBAR_ICONS[type] || SNACKBAR_ICONS.info}</div>
@@ -2066,10 +2068,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="snackbar-title" title="${title}">${title}</div>
                 <div class="snackbar-message" title="${message}">${message}</div>
             </div>
+            <button class="snackbar-cancel" ${cancelBtnStyle}><i class="fa-solid fa-circle-stop"></i></button>
             <button class="snackbar-close" ${closeBtnStyle}><i class="fa-solid fa-xmark"></i></button>
         `;
 
         el.querySelector('.snackbar-close').addEventListener('click', () => removeSnackbar(el));
+
+        const cancelBtn = el.querySelector('.snackbar-cancel');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                if (id && activeSocketsMap.has(id)) {
+                    const ws = activeSocketsMap.get(id);
+                    if (ws) ws.close();
+                } else {
+                    removeSnackbar(el);
+                }
+            });
+        }
 
         snackbarContainer.appendChild(el);
 
@@ -2108,6 +2123,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 closeEl.style.display = 'none';
             } else {
                 closeEl.style.display = 'block';
+            }
+        }
+
+        const cancelEl = el.querySelector('.snackbar-cancel');
+        if (cancelEl) {
+            if (duration === 0) {
+                cancelEl.style.display = 'block';
+            } else {
+                cancelEl.style.display = 'none';
             }
         }
 
@@ -2167,6 +2191,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ws = new WebSocket(`${WS_BASE}/magic/run`);
         activeSockets.push(ws);
+        activeSocketsMap.set(snackbarId, ws);
         let gotResult = false;
 
         ws.onopen = () => {
@@ -2197,6 +2222,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ws.onclose = () => {
             activeSockets = activeSockets.filter(s => s !== ws);
+            activeSocketsMap.delete(snackbarId);
             activeRuns.delete(runKey);
             termPrint(`[magic] Connection closed.`, 'sys-msg');
 
