@@ -267,6 +267,11 @@ class MagicEngine:
 
         module_instance.post_run = magic_post_run
 
-        # Execute
-        await module_instance.run()
+        try:
+            # Execute
+            await module_instance.run()
+        finally:
+            if hasattr(module_instance, "cleanup"):
+                module_instance.cleanup()
+                
         return discovered_nodes
