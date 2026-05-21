@@ -4,6 +4,8 @@ The Magic Engine, inspired by [CyberChef's Magic operation](https://github.com/g
 
 The engine needs a workspace to store the results. If no workspace is being used, then the nodes are created in the "magic" workspace, the default magic chaining workspace. **[This is why it's highly recommended to use workspaces.](workspace_management.md)**
 
+The engine may take some time to run, depending on the number of modules and the type of data being processed.
+
 ## Usage
 
 ### Using the CLI
