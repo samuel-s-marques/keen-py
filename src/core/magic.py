@@ -143,6 +143,9 @@ class MagicEngine:
 
         while queue:
             value, node_type, depth = queue.pop(0)
+            
+            # Yield to event loop to keep the FastAPI server responsive
+            await asyncio.sleep(0.01)
 
             if depth >= max_depth:
                 continue
