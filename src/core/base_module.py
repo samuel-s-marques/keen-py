@@ -54,7 +54,6 @@ class BaseModule:
                 return True
         return False
 
-
     def show_metadata(self) -> None:
         """Show information about the module."""
         table = Table(
@@ -237,25 +236,31 @@ class BaseModule:
         # Check if magic chaining is enabled and not already running
         if self.shell and getattr(self.shell, "_magic_running", False) is not True:
             config = getattr(self.shell, "config", None)
+            should_close_config = False
             if not config:
                 from src.core.managers import ConfigManager
 
                 config = ConfigManager("~/.keen/config.db")
+                should_close_config = True
 
-            if config.get_preference("magic_enabled") == "true":
-                from src.core.magic import MagicEngine
+            try:
+                if config.get_preference("magic_enabled") == "true":
+                    from src.core.magic import MagicEngine
 
-                self.shell._magic_running = True
-                try:
-                    engine = MagicEngine(self.shell, config=config)
-                    # Run on all nodes returned by this module
-                    for node in results.get("nodes", []):
-                        val = node.get("value")
-                        t = node.get("type")
-                        if val:
-                            await engine.run_chain(val, initial_type=t, force=False)
-                finally:
-                    self.shell._magic_running = False
+                    self.shell._magic_running = True
+                    try:
+                        engine = MagicEngine(self.shell, config=config)
+                        # Run on all nodes returned by this module
+                        for node in results.get("nodes", []):
+                            val = node.get("value")
+                            t = node.get("type")
+                            if val:
+                                await engine.run_chain(val, initial_type=t, force=False)
+                    finally:
+                        self.shell._magic_running = False
+            finally:
+                if should_close_config:
+                    config.close()
 
     def register_process(self, process) -> None:
         """Register a subprocess for cleanup on cancellation."""
