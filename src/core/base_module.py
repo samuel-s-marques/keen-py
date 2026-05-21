@@ -32,6 +32,7 @@ class BaseModule:
         self.logger = logger.bind(module=self.metadata["name"])
         self.shell = None
         self.is_web_context = False
+        self.active_processes = set()
 
     def set_option(self, key: str, value) -> bool:
         # Search for the key in a case-insensitive way
@@ -245,3 +246,63 @@ class BaseModule:
                             await engine.run_chain(val, initial_type=t, force=False)
                 finally:
                     self.shell._magic_running = False
+
+    def register_process(self, process) -> None:
+        """Register a subprocess for cleanup on cancellation."""
+        if not hasattr(self, "active_processes"):
+            self.active_processes = set()
+        self.active_processes.add(process)
+
+    def unregister_process(self, process) -> None:
+        """Unregister a subprocess after it completes."""
+        if hasattr(self, "active_processes"):
+            self.active_processes.discard(process)
+
+    async def run_subprocess(
+        self, cmd: list[str], stdout=None, stderr=None
+    ) -> tuple[int, bytes, bytes]:
+        """Run an external subprocess asynchronously, ensuring it is terminated/killed on cancellation."""
+        import asyncio
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=stdout or asyncio.subprocess.PIPE,
+            stderr=stderr or asyncio.subprocess.PIPE,
+        )
+        self.register_process(process)
+
+        try:
+            stdout_data, stderr_data = await process.communicate()
+            return (
+                process.returncode if process.returncode is not None else -1,
+                stdout_data,
+                stderr_data,
+            )
+        except asyncio.CancelledError:
+            if process.returncode is None:
+                try:
+                    process.terminate()
+                    # Wait briefly to allow clean termination
+                    await asyncio.wait_for(process.wait(), timeout=1.0)
+                except Exception:
+                    try:
+                        process.kill()
+                    except Exception:
+                        pass
+            raise
+        finally:
+            self.unregister_process(process)
+
+    def cleanup(self) -> None:
+        """Terminate all active subprocesses registered by this module."""
+        if hasattr(self, "active_processes"):
+            for process in list(self.active_processes):
+                if process.returncode is None:
+                    try:
+                        process.terminate()
+                    except Exception:
+                        try:
+                            process.kill()
+                        except Exception:
+                            pass
+            self.active_processes.clear()
