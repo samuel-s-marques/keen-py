@@ -734,14 +734,8 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
 
         module_task = asyncio.create_task(run_module_task())
 
-        listen_task = asyncio.create_task(websocket.receive())
-
         # Stream logs down to WS concurrently
         while not module_task.done() or not log_queue.empty():
-            if listen_task.done():
-                module_task.cancel()
-                break
-
             try:
                 # Wait for next log with timeout to occasionally check task completion
                 log_msg = await asyncio.wait_for(log_queue.get(), timeout=0.1)
@@ -754,11 +748,11 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
                 module_task.cancel()
                 break
 
-        if not listen_task.done():
-            listen_task.cancel()
-
-        await module_task
-        await websocket.send_json({"type": "status", "status": "completed"})
+        try:
+            await module_task
+            await websocket.send_json({"type": "status", "status": "completed"})
+        except asyncio.CancelledError:
+            pass
 
     except WebSocketDisconnect:
         pass
@@ -857,14 +851,8 @@ async def websocket_run_magic(websocket: WebSocket):
                         logger.error(f"Magic execution failed: {e}")
 
         magic_task = asyncio.create_task(run_magic_task())
-        listen_task = asyncio.create_task(websocket.receive())
-
         # Stream logs down to WS concurrently
         while not magic_task.done() or not log_queue.empty():
-            if listen_task.done():
-                magic_task.cancel()
-                break
-
             try:
                 log_msg = await asyncio.wait_for(log_queue.get(), timeout=0.1)
                 await websocket.send_json({"type": "log", "message": log_msg})
@@ -875,11 +863,11 @@ async def websocket_run_magic(websocket: WebSocket):
                 magic_task.cancel()
                 break
 
-        if not listen_task.done():
-            listen_task.cancel()
-
-        await magic_task
-        await websocket.send_json({"type": "status", "status": "completed"})
+        try:
+            await magic_task
+            await websocket.send_json({"type": "status", "status": "completed"})
+        except asyncio.CancelledError:
+            pass
 
     except WebSocketDisconnect:
         pass
