@@ -217,6 +217,17 @@ def get_workspace_nodes(name: str, config: ConfigManager = Depends(get_config)):
                     node["metadata"] = json.loads(node["metadata"])
                 except Exception:
                     pass
+
+            # Provide both the original value (for display/uniqueness)
+            # and a clean value (for module execution)
+            from src.utils.utils import clean_node_value, parse_node_prefix
+
+            raw_value = node.get("value", "")
+            prefix, clean = parse_node_prefix(raw_value)
+            node["label"] = raw_value       # visual identifier (e.g. "github:username")
+            node["clean_value"] = clean      # execution target  (e.g. "username")
+            node["platform"] = prefix        # platform prefix   (e.g. "github") or None
+
         wm.close()
         return nodes
     except Exception as e:
