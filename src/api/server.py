@@ -220,7 +220,7 @@ def get_workspace_nodes(name: str, config: ConfigManager = Depends(get_config)):
 
             # Provide both the original value (for display/uniqueness)
             # and a clean value (for module execution)
-            from src.utils.utils import clean_node_value, parse_node_prefix
+            from src.utils.utils import parse_node_prefix
 
             raw_value = node.get("value", "")
             prefix, clean = parse_node_prefix(raw_value)
