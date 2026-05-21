@@ -125,7 +125,10 @@ class MagicEngine:
             if not enabled:
                 return
 
-        max_depth = int(self.config.get_preference("magic_max_depth") or "2")
+        try:
+            max_depth = int(self.config.get_preference("magic_max_depth") or "2")
+        except ValueError:
+            max_depth = 2
         interactive = self.config.get_preference("magic_interactive") == "true"
         exclude_str = self.config.get_preference("magic_exclude_modules") or ""
         excluded_modules = [
@@ -144,7 +147,7 @@ class MagicEngine:
 
         while queue:
             value, node_type, depth = queue.pop(0)
-            
+
             # Yield to event loop to keep the FastAPI server responsive
             await asyncio.sleep(0.01)
 
@@ -280,5 +283,5 @@ class MagicEngine:
         finally:
             if hasattr(module_instance, "cleanup"):
                 module_instance.cleanup()
-                
+
         return discovered_nodes
