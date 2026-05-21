@@ -32,6 +32,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let modulesData = {};
     let activeSocket = null;
     let network = null;
+    let nodesDataSet = null;
+    let edgesDataSet = null;
+    let currentWorkspace = null;
     let lastSelection = { nodes: [], edges: [] };
     let minimap = null;
     let isConfigUnlocked = false;
@@ -1128,9 +1131,60 @@ document.addEventListener('DOMContentLoaded', () => {
             arrows: 'to'
         }));
 
+        const isWorkspaceSwitched = (activeWorkspace !== currentWorkspace);
+        currentWorkspace = activeWorkspace;
+
+        if (network && !isWorkspaceSwitched && nodesDataSet && edgesDataSet) {
+            // Keep track of which nodes are new to decide if we need to enable physics
+            const existingNodeIds = new Set(nodesDataSet.getIds());
+            const newNodesWithoutPos = visNodes.filter(n => !existingNodeIds.has(n.id) && (n.x === null || n.x === undefined || n.y === null || n.y === undefined));
+            
+            // Synchronize nodes
+            const newNodeIds = new Set(visNodes.map(n => n.id));
+            const nodeIdsToRemove = nodesDataSet.getIds().filter(id => !newNodeIds.has(id));
+            
+            if (nodeIdsToRemove.length > 0) {
+                nodesDataSet.remove(nodeIdsToRemove);
+            }
+            
+            // For updates/adds: use nodesDataSet.update
+            if (visNodes.length > 0) {
+                nodesDataSet.update(visNodes);
+            }
+            
+            // Synchronize edges
+            const newEdgeIds = new Set(visEdges.map(e => e.id));
+            const edgeIdsToRemove = edgesDataSet.getIds().filter(id => !newEdgeIds.has(id));
+            
+            if (edgeIdsToRemove.length > 0) {
+                edgesDataSet.remove(edgeIdsToRemove);
+            }
+            
+            if (visEdges.length > 0) {
+                edgesDataSet.update(visEdges);
+            }
+            
+            // If there are new nodes without positions, enable physics so they float in smoothly
+            if (newNodesWithoutPos.length > 0) {
+                network.setOptions({ physics: { enabled: true } });
+                const btnPhy = document.getElementById('btn-toggle-physics');
+                if (btnPhy) btnPhy.classList.add('active');
+            }
+            
+            if (minimap) {
+                setTimeout(() => {
+                    if (minimap) minimap.fit();
+                }, 200);
+            }
+            return;
+        }
+
+        nodesDataSet = new vis.DataSet(visNodes);
+        edgesDataSet = new vis.DataSet(visEdges);
+
         const data = {
-            nodes: new vis.DataSet(visNodes),
-            edges: new vis.DataSet(visEdges)
+            nodes: nodesDataSet,
+            edges: edgesDataSet
         };
 
         const options = {
@@ -1203,8 +1257,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+
+
         if (network) {
             network.destroy();
+            network = null;
         }
         network = new vis.Network(networkCanvas, data, options);
 
@@ -2144,4 +2201,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check on startup and then periodically every 10s
     checkServerStatus();
     setInterval(checkServerStatus, 10000);
+
+    // Periodically refresh the active workspace graph to stream new nodes and edges in real time
+    setInterval(() => {
+        if (activeWorkspace) {
+            selectWorkspace(activeWorkspace);
+        }
+    }, 2000);
 });
