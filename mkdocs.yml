@@ -60,9 +60,9 @@ exclude_docs: |
         requirements-docs.txt
 
 extra_javascript:
-        - _js/katex.js
         - https://unpkg.com/katex@0/dist/katex.min.js
         - https://unpkg.com/katex@0/dist/contrib/auto-render.min.js
+        - _js/katex.js
 
 extra_css:
         - https://unpkg.com/katex@0/dist/katex.min.css
