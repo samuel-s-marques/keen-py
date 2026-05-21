@@ -41,9 +41,19 @@ class BaseModule:
                 # Strip quotes if the value is a string
                 if isinstance(value, str):
                     value = value.strip("\"'")
+
+                    # If this option has a validator (i.e. it's a target option),
+                    # strip any platform prefix (e.g. "github:username" -> "username")
+                    opt_meta = self.metadata["options"].get(opt_key)
+                    if opt_meta and opt_meta[3]:
+                        from src.utils.utils import clean_node_value
+
+                        value = clean_node_value(value)
+
                 self.options[opt_key] = value
                 return True
         return False
+
 
     def show_metadata(self) -> None:
         """Show information about the module."""
