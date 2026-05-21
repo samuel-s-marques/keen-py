@@ -336,6 +336,49 @@ class Shell(Cmd):
         else:
             error(f"Unknown subcommand '{subcommand}'.")
 
+    def do_magic(self, arg: str) -> None:
+        """Run automatic detection and module chaining on a target.
+
+        Usage:
+            magic <target>
+        """
+        target = arg.strip()
+        if not target:
+            error("Usage: magic <target>")
+            return
+
+        if not self.workspace:
+            info(
+                "No active workspace found. Creating/switching to default 'magic' workspace..."
+            )
+            db_file = "cases/magic.keen"
+            os.makedirs("cases", exist_ok=True)
+            self.config.add_workspace(
+                "magic", db_file, "Default magic chaining workspace"
+            )
+            try:
+                self.workspace = WorkspaceManager(db_file, name="magic")
+                self.config.set_preference("last_workspace", "magic")
+                self._update_prompt()
+            except Exception as e:
+                error(f"Failed to initialize 'magic' workspace: {e}")
+                return
+
+        if self.config.has_api_keys():
+            if not self.config.is_unlocked():
+                self.ensure_key_manager_unlocked()
+
+        from src.core.magic import MagicEngine
+
+        engine = MagicEngine(self)
+
+        info(f"Initializing Magic Chaining for: {target}")
+        try:
+            asyncio.run(engine.run_chain(target, force=True))
+            success("Magic Chaining completed!")
+        except Exception as e:
+            error(f"Failed during Magic Chaining: {e}")
+
     def do_use(self, arg: str):
         """Select a module to use. You can use the full path or just the module name (e.g. 'use whois')."""
         module_name: str = arg.strip().lower()
