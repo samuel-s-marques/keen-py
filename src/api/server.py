@@ -329,7 +329,7 @@ def get_preferences(config: ConfigManager = Depends(get_config)):
     cursor.execute("SELECT key, value FROM preferences")
     rows = cursor.fetchall()
     blocked_keys = ["last_workspace", "api_keys_salt", "master_password_check"]
-    
+
     prefs = {}
     for row in rows:
         key = row[0]
@@ -341,7 +341,9 @@ def get_preferences(config: ConfigManager = Depends(get_config)):
 
 
 @app.post("/api/config/preferences")
-def update_preferences(req: Dict[str, Any], config: ConfigManager = Depends(get_config)):
+def update_preferences(
+    req: Dict[str, Any], config: ConfigManager = Depends(get_config)
+):
     """Update multiple preferences."""
     blocked_keys = ["last_workspace", "api_keys_salt", "master_password_check"]
     if "key" in req and "value" in req and len(req) == 2:
@@ -355,7 +357,6 @@ def update_preferences(req: Dict[str, Any], config: ConfigManager = Depends(get_
                 continue
             config.set_preference(key, str(val))
     return {"success": True}
-
 
 
 @app.delete("/api/workspaces/{name}")
@@ -722,8 +723,14 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
 
         module_task = asyncio.create_task(run_module_task())
 
+        listen_task = asyncio.create_task(websocket.receive())
+
         # Stream logs down to WS concurrently
         while not module_task.done() or not log_queue.empty():
+            if listen_task.done():
+                module_task.cancel()
+                break
+
             try:
                 # Wait for next log with timeout to occasionally check task completion
                 log_msg = await asyncio.wait_for(log_queue.get(), timeout=0.1)
@@ -731,10 +738,13 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
                 log_queue.task_done()
             except asyncio.TimeoutError:
                 continue
-            except WebSocketDisconnect:
+            except Exception:
                 # Client disconnected, cancel execution
                 module_task.cancel()
-                raise
+                break
+
+        if not listen_task.done():
+            listen_task.cancel()
 
         await module_task
         await websocket.send_json({"type": "status", "status": "completed"})
@@ -782,7 +792,9 @@ async def websocket_run_magic(websocket: WebSocket):
         workspace_name = data.get("workspace_name", "")
 
         if not target:
-            await websocket.send_json({"type": "error", "message": "Target is required"})
+            await websocket.send_json(
+                {"type": "error", "message": "Target is required"}
+            )
             await websocket.close()
             return
 
@@ -791,7 +803,7 @@ async def websocket_run_magic(websocket: WebSocket):
             w = config.get_workspace(workspace_name)
             if w:
                 workspace = WorkspaceManager(w["path"], name=workspace_name)
-        
+
         if not workspace:
             last_ws = config.get_preference("last_workspace")
             if last_ws:
@@ -801,13 +813,16 @@ async def websocket_run_magic(websocket: WebSocket):
             if not workspace:
                 db_file = "cases/magic.keen"
                 os.makedirs("cases", exist_ok=True)
-                config.add_workspace("magic", db_file, "Default magic chaining workspace")
+                config.add_workspace(
+                    "magic", db_file, "Default magic chaining workspace"
+                )
                 workspace = WorkspaceManager(db_file, name="magic")
 
         # Create shell adapter
         shell_adapter = WebShellAdapter(workspace, config)
 
         from src.core.magic import MagicEngine
+
         engine = MagicEngine(shell_adapter, config=config)
 
         # Setup Log Streaming
@@ -831,18 +846,26 @@ async def websocket_run_magic(websocket: WebSocket):
                         logger.error(f"Magic execution failed: {e}")
 
         magic_task = asyncio.create_task(run_magic_task())
+        listen_task = asyncio.create_task(websocket.receive())
 
         # Stream logs down to WS concurrently
         while not magic_task.done() or not log_queue.empty():
+            if listen_task.done():
+                magic_task.cancel()
+                break
+
             try:
                 log_msg = await asyncio.wait_for(log_queue.get(), timeout=0.1)
                 await websocket.send_json({"type": "log", "message": log_msg})
                 log_queue.task_done()
             except asyncio.TimeoutError:
                 continue
-            except WebSocketDisconnect:
+            except Exception:
                 magic_task.cancel()
-                raise
+                break
+
+        if not listen_task.done():
+            listen_task.cancel()
 
         await magic_task
         await websocket.send_json({"type": "status", "status": "completed"})
@@ -873,7 +896,6 @@ async def websocket_run_magic(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
-
 
 
 app.mount("/", StaticFiles(directory="web", html=True), name="web")
