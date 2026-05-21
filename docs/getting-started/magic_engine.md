@@ -43,7 +43,7 @@ In the Web UI, you can trigger the Magic Engine directly on any existing node in
 The Magic Engine behavior can be fully customized either through the `config` CLI command or via the **Settings** panel in the Web UI.
 
 - `magic_enabled`: (Boolean) Enable or disable automatic recursive magic engine execution after standard module runs. Default is `false`.
-- `magic_max_depth`: (Integer) The maximum recursive depth the engine will chain through. For example, a depth of `2` means the engine will run modules on the initial target (depth 0), run modules on those discovered nodes (depth 1), and finally on those newly discovered nodes (depth 2), then stop. Default is `2`.
+- `magic_max_depth`: (Integer) The maximum recursive depth the engine will chain through. For example, a depth of `2` means the engine will run modules on the initial target (depth 0) and then on nodes discovered from that target (depth 1), stopping before depth `2`. Default is `2`.
 - `magic_interactive`: (Boolean) If enabled, the engine will prompt you for confirmation before executing each step in the chain when running in the terminal. Default is `false`.
 - `magic_exclude_modules`: (String) A comma-separated list of module snake_case names (e.g., `sherlock,email_verification`) to exclude from automatic magic chaining runs. Default is `""` (none).
 
