@@ -2088,12 +2088,17 @@ document.addEventListener('DOMContentLoaded', () => {
         el.innerHTML = `
             <div class="snackbar-icon">${SNACKBAR_ICONS[type] || SNACKBAR_ICONS.info}</div>
             <div class="snackbar-body">
-                <div class="snackbar-title" title="${title}">${title}</div>
-                <div class="snackbar-message" title="${message}">${message}</div>
+                <div class="snackbar-title"></div>
+                <div class="snackbar-message"></div>
             </div>
             <button class="snackbar-cancel" ${cancelBtnStyle}><i class="fa-solid fa-circle-stop"></i></button>
             <button class="snackbar-close" ${closeBtnStyle}><i class="fa-solid fa-xmark"></i></button>
         `;
+
+        const titleEl = el.querySelector('.snackbar-title');
+        if (titleEl) { titleEl.textContent = title; titleEl.title = title; }
+        const msgEl = el.querySelector('.snackbar-message');
+        if (msgEl) { msgEl.textContent = message; msgEl.title = message; }
 
         el.querySelector('.snackbar-close').addEventListener('click', () => removeSnackbar(el));
 
