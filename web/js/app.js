@@ -100,6 +100,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSaveApiKey = document.getElementById('btn-save-api-key');
     const apiKeysList = document.getElementById('api-keys-list');
     const prefExtractionMode = document.getElementById('pref-extraction-mode');
+    const prefMagicEnabled = document.getElementById('pref-magic-enabled');
+    const prefMagicMaxDepth = document.getElementById('pref-magic-max-depth');
+    const prefMagicInteractive = document.getElementById('pref-magic-interactive');
+    const prefMagicExcludeModules = document.getElementById('pref-magic-exclude-modules');
     const btnSavePreferences = document.getElementById('btn-save-preferences');
 
     const closeModals = document.querySelectorAll('.close-modal');
@@ -323,11 +327,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     btnSavePreferences.addEventListener('click', async () => {
-        const value = prefExtractionMode.value;
+        const extraction_mode = prefExtractionMode.value;
+        const payload = {
+            extraction_mode: extraction_mode,
+            magic_enabled: String(prefMagicEnabled.checked),
+            magic_max_depth: String(prefMagicMaxDepth.value),
+            magic_interactive: String(prefMagicInteractive.checked),
+            magic_exclude_modules: prefMagicExcludeModules.value.trim()
+        };
         await fetch(`${API_BASE}/config/preferences`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: 'extraction_mode', value })
+            body: JSON.stringify(payload)
         });
         alert('Preferences saved!');
     });
@@ -374,6 +385,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const prefs = await res.json();
             if (prefs.extraction_mode) {
                 prefExtractionMode.value = prefs.extraction_mode;
+            }
+            if (prefMagicEnabled) {
+                prefMagicEnabled.checked = prefs.magic_enabled === 'true';
+            }
+            if (prefMagicMaxDepth) {
+                prefMagicMaxDepth.value = prefs.magic_max_depth || '2';
+            }
+            if (prefMagicInteractive) {
+                prefMagicInteractive.checked = prefs.magic_interactive === 'true';
+            }
+            if (prefMagicExcludeModules) {
+                prefMagicExcludeModules.value = prefs.magic_exclude_modules || '';
             }
         }
     }
@@ -1672,6 +1695,18 @@ document.addEventListener('DOMContentLoaded', () => {
             contextMenuItems.appendChild(empty);
         }
 
+        const magicItem = document.createElement('div');
+        magicItem.className = 'context-menu-item';
+        magicItem.style.borderTop = '1px solid var(--border-color)';
+        magicItem.style.marginTop = '4px';
+        magicItem.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent-cyan);"></i> Magic Chaining`;
+        magicItem.onclick = (e) => {
+            e.stopPropagation();
+            contextMenu.classList.add('hidden');
+            runMagicChainingImmediately(node.value);
+        };
+        contextMenuItems.appendChild(magicItem);
+
         const editItem = document.createElement('div');
         editItem.className = 'context-menu-item';
         editItem.style.borderTop = '1px solid var(--border-color)';
@@ -2043,6 +2078,67 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (statusText) statusText.textContent = 'Server Offline';
             }
         }
+    }
+
+    function runMagicChainingImmediately(targetValue) {
+        const runKey = `magic:${targetValue}`;
+        const displayName = `✨ Magic Chaining`;
+
+        if (activeRuns.has(runKey)) {
+            showSnackbar(displayName, `Already running on ${targetValue}`, 'warning', 3000);
+            return;
+        }
+
+        activeRuns.add(runKey);
+        const snackbarId = 'magic-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+        showSnackbar(displayName, `Initializing on ${targetValue}...`, 'info', 0, snackbarId);
+
+        termPrint(`[magic] Connecting for target: ${targetValue}`, 'sys-msg');
+
+        const ws = new WebSocket(`${WS_BASE}/magic/run`);
+        activeSockets.push(ws);
+        let gotResult = false;
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                target: targetValue,
+                workspace_name: activeWorkspace || ""
+            }));
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'log') {
+                    termPrint(`[magic] ${data.message}`);
+                } else if (data.type === 'status') {
+                    gotResult = true;
+                    termPrint(`[magic] Completed: ${data.status}`, 'success');
+                    updateSnackbar(snackbarId, displayName, 'Completed successfully', 'success', 4000);
+                } else if (data.type === 'error') {
+                    gotResult = true;
+                    termPrint(`[magic] Error: ${data.message}`, 'error');
+                    updateSnackbar(snackbarId, displayName, `Error: ${data.message}`, 'error', 5000);
+                }
+            } catch (e) {
+                termPrint(`[magic] ${event.data}`);
+            }
+        };
+
+        ws.onclose = () => {
+            activeSockets = activeSockets.filter(s => s !== ws);
+            activeRuns.delete(runKey);
+            termPrint(`[magic] Connection closed.`, 'sys-msg');
+
+            if (!gotResult) {
+                updateSnackbar(snackbarId, displayName, 'Connection closed', 'warning', 4000);
+            }
+
+            // Refresh workspace to show new nodes and edges
+            if (activeWorkspace) {
+                selectWorkspace(activeWorkspace);
+            }
+        };
     }
 
     // Check on startup and then periodically every 10s
