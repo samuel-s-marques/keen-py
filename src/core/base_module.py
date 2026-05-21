@@ -116,13 +116,20 @@ class BaseModule:
                 if isinstance(validator, (list, tuple)):
                     validators_list = list(validator)
                 else:
-                    validators_list = [v.strip() for v in str(validator).split(",") if v.strip()]
+                    validators_list = [
+                        v.strip() for v in str(validator).split(",") if v.strip()
+                    ]
 
                 if validators_list:
-                    known_validators = [v for v in validators_list if v in InputValidator.VALIDATORS]
+                    known_validators = [
+                        v for v in validators_list if v in InputValidator.VALIDATORS
+                    ]
 
                     if known_validators:
-                        passed_at_least_one = any(InputValidator.VALIDATORS[v](option_value) for v in known_validators)
+                        passed_at_least_one = any(
+                            InputValidator.VALIDATORS[v](option_value)
+                            for v in known_validators
+                        )
                         if not passed_at_least_one:
                             error(
                                 f"Invalid value for {key.upper()}. It should match at least one of: {', '.join(validators_list)}."
@@ -215,3 +222,26 @@ class BaseModule:
                     relationship=edge.get("relationship", "RELATED"),
                     metadata=edge.get("metadata", {}),
                 )
+
+        # Check if magic chaining is enabled and not already running
+        if self.shell and getattr(self.shell, "_magic_running", False) is not True:
+            config = getattr(self.shell, "config", None)
+            if not config:
+                from src.core.managers import ConfigManager
+
+                config = ConfigManager("~/.keen/config.db")
+
+            if config.get_preference("magic_enabled") == "true":
+                from src.core.magic import MagicEngine
+
+                self.shell._magic_running = True
+                try:
+                    engine = MagicEngine(self.shell, config=config)
+                    # Run on all nodes returned by this module
+                    for node in results.get("nodes", []):
+                        val = node.get("value")
+                        t = node.get("type")
+                        if val:
+                            await engine.run_chain(val, initial_type=t, force=False)
+                finally:
+                    self.shell._magic_running = False
