@@ -2269,8 +2269,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(checkServerStatus, 10000);
 
     // Periodically refresh the active workspace graph to stream new nodes and edges in real time
+    // but only when there is an active module run or magic chaining in progress.
     setInterval(() => {
-        if (activeWorkspace) {
+        if (activeWorkspace && activeSockets.length > 0) {
             selectWorkspace(activeWorkspace);
         }
     }, 2000);
