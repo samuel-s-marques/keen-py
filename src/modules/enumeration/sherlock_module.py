@@ -1,5 +1,3 @@
-import asyncio
-
 from src.utils.print_utils import error, info
 from src.core.base_module import BaseModule
 
@@ -44,14 +42,9 @@ class SherlockModule(BaseModule):
         ]
 
         info(f"Lauching external Sherlock process for {target}...")
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await process.communicate()
+        returncode, stdout, stderr = await self.run_subprocess(cmd)
 
-        if process.returncode != 0:
+        if returncode != 0:
             error("Sherlock process failed to execute.")
             return
 
