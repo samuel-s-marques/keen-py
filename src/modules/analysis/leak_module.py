@@ -135,6 +135,8 @@ class LeakModule(BaseModule):
             for res in results:
                 if isinstance(res, list):
                     all_leaks.extend(res)
+                elif isinstance(res, Exception):
+                    error(f"Error checking provider: {str(res)}")
 
         await self._save_results(target, {"type": target_type, "leaks": all_leaks})
 
