@@ -32,11 +32,6 @@ class LeakModule(BaseModule):
         },
     }
 
-    def __init__(self) -> None:
-        super().__init__()
-
-        self.options = {k: v[0] for k, v in self.metadata["options"].items()}
-
     async def run(self) -> None:
         if not self.pre_run():
             return
@@ -59,73 +54,87 @@ class LeakModule(BaseModule):
                 target_type = "username"
 
         all_leaks = []
+        tasks = []
         match target_type:
             case "username":
-                lc = await self.loading(
-                    f"Checking {target} on LeakCheck...", self.check_leak_check, target
-                )
-                bv = await self.loading(
-                    f"Checking {target} on BreachVIP...", self.check_breachvip, target
-                )
-                dh = await self.loading(
-                    f"Checking {target} on DeHashed...", self.check_dehashed, target
-                )
-                bd = await self.loading(
-                    f"Checking {target} on BreachDirectory...",
-                    self.check_breach_directory,
-                    target,
-                )
-                all_leaks.extend(lc or [])
-                all_leaks.extend(bv or [])
-                all_leaks.extend(dh or [])
-                all_leaks.extend(bd or [])
+                tasks = [
+                    self.loading(
+                        f"Checking {target} on LeakCheck...",
+                        self.check_leak_check,
+                        target,
+                    ),
+                    self.loading(
+                        f"Checking {target} on BreachVIP...",
+                        self.check_breachvip,
+                        target,
+                    ),
+                    self.loading(
+                        f"Checking {target} on DeHashed...", self.check_dehashed, target
+                    ),
+                    self.loading(
+                        f"Checking {target} on BreachDirectory...",
+                        self.check_breach_directory,
+                        target,
+                    ),
+                ]
             case "email":
-                hb = await self.loading(
-                    f"Checking {target} on HIBP...", self.check_HIBP, target
-                )
-                lc = await self.loading(
-                    f"Checking {target} on LeakCheck...", self.check_leak_check, target
-                )
-                bv = await self.loading(
-                    f"Checking {target} on BreachVIP...", self.check_breachvip, target
-                )
-                dh = await self.loading(
-                    f"Checking {target} on DeHashed...", self.check_dehashed, target
-                )
-                bd = await self.loading(
-                    f"Checking {target} on BreachDirectory...",
-                    self.check_breach_directory,
-                    target,
-                )
-                pn = await self.loading(
-                    f"Checking {target} on ProxyNova...",
-                    self.check_proxynova,
-                    target,
-                )
-                all_leaks.extend(hb or [])
-                all_leaks.extend(lc or [])
-                all_leaks.extend(bv or [])
-                all_leaks.extend(dh or [])
-                all_leaks.extend(bd or [])
-                all_leaks.extend(pn or [])
+                tasks = [
+                    self.loading(
+                        f"Checking {target} on HIBP...", self.check_HIBP, target
+                    ),
+                    self.loading(
+                        f"Checking {target} on LeakCheck...",
+                        self.check_leak_check,
+                        target,
+                    ),
+                    self.loading(
+                        f"Checking {target} on BreachVIP...",
+                        self.check_breachvip,
+                        target,
+                    ),
+                    self.loading(
+                        f"Checking {target} on DeHashed...", self.check_dehashed, target
+                    ),
+                    self.loading(
+                        f"Checking {target} on BreachDirectory...",
+                        self.check_breach_directory,
+                        target,
+                    ),
+                    self.loading(
+                        f"Checking {target} on ProxyNova...",
+                        self.check_proxynova,
+                        target,
+                    ),
+                ]
             case "phone":
-                lc = await self.loading(
-                    f"Checking {target} on LeakCheck...", self.check_leak_check, target
-                )
-                bv = await self.loading(
-                    f"Checking {target} on BreachVIP...", self.check_breachvip, target
-                )
-                dh = await self.loading(
-                    f"Checking {target} on DeHashed...", self.check_dehashed, target
-                )
-                all_leaks.extend(lc or [])
-                all_leaks.extend(bv or [])
-                all_leaks.extend(dh or [])
+                tasks = [
+                    self.loading(
+                        f"Checking {target} on LeakCheck...",
+                        self.check_leak_check,
+                        target,
+                    ),
+                    self.loading(
+                        f"Checking {target} on BreachVIP...",
+                        self.check_breachvip,
+                        target,
+                    ),
+                    self.loading(
+                        f"Checking {target} on DeHashed...", self.check_dehashed, target
+                    ),
+                ]
             case _:
                 error(
                     "Invalid type. Please choose one of 'username', 'email', 'phone', or 'auto'."
                 )
                 return
+
+        if tasks:
+            import asyncio
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for res in results:
+                if isinstance(res, list):
+                    all_leaks.extend(res)
 
         await self._save_results(target, {"type": target_type, "leaks": all_leaks})
 
