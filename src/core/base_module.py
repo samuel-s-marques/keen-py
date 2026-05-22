@@ -28,7 +28,25 @@ class BaseModule:
     def __init__(self) -> None:
         from loguru import logger
 
-        self.options = {}
+        if not isinstance(self.metadata, dict):
+            self.metadata = {}
+
+        metadata_copy = dict(self.metadata)
+
+        if "name" not in metadata_copy or not isinstance(metadata_copy["name"], str):
+            metadata_copy["name"] = "Base"
+
+        if "options" not in metadata_copy or not isinstance(
+            metadata_copy["options"], dict
+        ):
+            metadata_copy["options"] = {}
+
+        self.metadata = metadata_copy
+        options_data = self.metadata["options"]
+        if not isinstance(options_data, dict):
+            options_data = {}
+
+        self.options = {k: v[0] for k, v in options_data.items()}
         self.logger = logger.bind(module=self.metadata["name"])
         self.shell = None
         self.is_web_context = False

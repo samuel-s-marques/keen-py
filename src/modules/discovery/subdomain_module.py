@@ -41,12 +41,6 @@ class SubdomainModule(BaseModule):
         },
     }
 
-    def __init__(self) -> None:
-        super().__init__()
-
-        # Initialize options with default values
-        self.options = {k: v[0] for k, v in self.metadata["options"].items()}
-
     async def run(self) -> None:
         if not self.pre_run():
             return
@@ -65,15 +59,14 @@ class SubdomainModule(BaseModule):
         try:
             if method == "all":
                 # Run DNS and Bruteforce in threads, Passive as async
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    dns_task = asyncio.to_thread(self._find_by_dns, target)
-                    brute_task = asyncio.to_thread(self._find_by_bruteforce, target)
-                    passive_task = self._find_by_passive(target)
+                dns_task = asyncio.to_thread(self._find_by_dns, target)
+                brute_task = asyncio.to_thread(self._find_by_bruteforce, target)
+                passive_task = self._find_by_passive(target)
 
-                    results = await asyncio.gather(dns_task, brute_task, passive_task)
-                    for result in results:
-                        if result:
-                            subdomains |= result
+                results = await asyncio.gather(dns_task, brute_task, passive_task)
+                for result in results:
+                    if result:
+                        subdomains |= result
             elif method == "dns":
                 subdomains = await self.loading(
                     f"Executing DNS subdomain discovery on {target}...",

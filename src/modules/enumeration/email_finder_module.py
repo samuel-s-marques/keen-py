@@ -28,11 +28,6 @@ class EmailFinderModule(BaseModule):
         },
     }
 
-    def __init__(self) -> None:
-        super().__init__()
-
-        self.options = {k: v[0] for k, v in self.metadata["options"].items()}
-
     async def run(self) -> None:
         if not self.pre_run():
             return
