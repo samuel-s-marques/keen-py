@@ -22,8 +22,6 @@ class DomainEnrichmentModule(BaseModule):
 
     def __init__(self) -> None:
         super().__init__()
-
-        self.options = {k: v[0] for k, v in self.metadata["options"].items()}
         self.results = {}
 
     async def run(self) -> None:
