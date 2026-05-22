@@ -22,11 +22,6 @@ class GitHubModule(BaseModule):
         },
     }
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.options = {k: v[0] for k, v in self.metadata["options"].items()}
-        self.client: httpx.AsyncClient
-
     async def run(self) -> None:
         if not self.pre_run():
             return
@@ -239,13 +234,18 @@ class GitHubModule(BaseModule):
         for org in orgs:
             org_login = org.get("login")
             if org_login:
-                builder.add_node(NodeFactory.organization(
-                    org_login,
-                    description=org.get("description"),
-                ))
+                builder.add_node(
+                    NodeFactory.organization(
+                        org_login,
+                        description=org.get("description"),
+                    )
+                )
                 # Override MISP to target-org
                 org_node = builder._nodes[-1]
-                org_node["metadata"]["misp"] = {"type": "target-org", "value": org_login}
+                org_node["metadata"]["misp"] = {
+                    "type": "target-org",
+                    "value": org_login,
+                }
                 builder.add_edge(account_val, org_login, "member-of-org")
 
         # Repositories
@@ -253,17 +253,19 @@ class GitHubModule(BaseModule):
             repo_name = repo.get("full_name")
             if repo_name:
                 repo_url = repo.get("html_url") or f"https://github.com/{repo_name}"
-                builder.add_node(NodeFactory.custom(
-                    "url",
-                    repo_url,
-                    node_type="repository",
-                    misp_type="link",
-                    misp_value=repo_url,
-                    description=repo.get("description"),
-                    stars=repo.get("stargazers_count"),
-                    forks=repo.get("forks_count"),
-                    language=repo.get("language"),
-                ))
+                builder.add_node(
+                    NodeFactory.custom(
+                        "url",
+                        repo_url,
+                        node_type="repository",
+                        misp_type="link",
+                        misp_value=repo_url,
+                        description=repo.get("description"),
+                        stars=repo.get("stargazers_count"),
+                        forks=repo.get("forks_count"),
+                        language=repo.get("language"),
+                    )
+                )
                 # Override value to be the repo name for graph display
                 repo_node = builder._nodes[-1]
                 repo_node["value"] = repo_name
