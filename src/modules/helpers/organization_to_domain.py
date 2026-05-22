@@ -29,10 +29,51 @@ class OrgToDomain(BaseModule):
         },
     }
 
-    def __init__(self) -> None:
-        super().__init__()
-
-        self.options = {k: v[0] for k, v in self.metadata["options"].items()}
+    # Generic filler words that don't uniquely identify a brand
+    stop_words = {
+        "and",
+        "of",
+        "in",
+        "for",
+        "the",
+        "a",
+        "an",
+        "with",
+        "at",
+        "by",
+        "on",
+        "solutions",
+        "technologies",
+        "technology",
+        "systems",
+        "group",
+        "services",
+        "partners",
+        "advanced",
+        "global",
+        "international",
+        "holding",
+        "holdings",
+        "management",
+        "consulting",
+        "digital",
+        "labs",
+        "software",
+        "industries",
+        "networks",
+        "associated",
+        "associates",
+        "worldwide",
+        "inc",
+        "llc",
+        "corp",
+        "ltd",
+        "gmbh",
+        "co",
+        "company",
+        "corporation",
+        "limited",
+    }
 
     async def run(self) -> None:
         if not self.pre_run():
@@ -274,55 +315,9 @@ class OrgToDomain(BaseModule):
         company_words = re.findall(r"\b\w+\b", company_name)
         target_words = set(re.findall(r"\b\w+\b", target))
 
-        # Generic filler words that don't uniquely identify a brand
-        stop_words = {
-            "and",
-            "of",
-            "in",
-            "for",
-            "the",
-            "a",
-            "an",
-            "with",
-            "at",
-            "by",
-            "on",
-            "solutions",
-            "technologies",
-            "technology",
-            "systems",
-            "group",
-            "services",
-            "partners",
-            "advanced",
-            "global",
-            "international",
-            "holding",
-            "holdings",
-            "management",
-            "consulting",
-            "digital",
-            "labs",
-            "software",
-            "industries",
-            "networks",
-            "associated",
-            "associates",
-            "worldwide",
-            "inc",
-            "llc",
-            "corp",
-            "ltd",
-            "gmbh",
-            "co",
-            "company",
-            "corporation",
-            "limited",
-        }
-
         # Filter down to significant words that are at least 3 chars long
         significant_company_words = [
-            w for w in company_words if w not in stop_words and len(w) >= 3
+            w for w in company_words if w not in self.stop_words and len(w) >= 3
         ]
 
         # If all words got filtered, fall back to the first word that's >= 3 characters
@@ -359,52 +354,10 @@ class OrgToDomain(BaseModule):
         target_norm = self._normalize_text(target)
 
         company_words = re.findall(r"\b\w+\b", name_norm)
-        stop_words = {
-            "and",
-            "of",
-            "in",
-            "for",
-            "the",
-            "a",
-            "an",
-            "with",
-            "at",
-            "by",
-            "on",
-            "solutions",
-            "technologies",
-            "technology",
-            "systems",
-            "group",
-            "services",
-            "partners",
-            "advanced",
-            "global",
-            "international",
-            "holding",
-            "holdings",
-            "management",
-            "consulting",
-            "digital",
-            "labs",
-            "software",
-            "industries",
-            "networks",
-            "associated",
-            "associates",
-            "worldwide",
-            "inc",
-            "llc",
-            "corp",
-            "ltd",
-            "gmbh",
-            "co",
-            "company",
-            "corporation",
-            "limited",
-        }
 
-        sig_words = [w for w in company_words if w not in stop_words and len(w) >= 3]
+        sig_words = [
+            w for w in company_words if w not in self.stop_words and len(w) >= 3
+        ]
         if not sig_words:
             sig_words = [w for w in company_words if len(w) >= 3]
 
