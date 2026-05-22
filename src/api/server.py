@@ -4,10 +4,10 @@ import json
 import asyncio
 import contextlib
 import uvicorn
-from typing import Optional, Dict, Any, Generator
+from typing import Optional, Dict, Any, Generator, List, Union
 import io
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -83,7 +83,9 @@ class EdgeUpdate(BaseModel):
 
 
 class WebShellAdapter:
-    def __init__(self, workspace: WorkspaceManager | None, config: ConfigManager):
+    def __init__(
+        self, workspace: Optional[WorkspaceManager], config: ConfigManager
+    ) -> None:
         self.workspace = workspace
         self.config = config
         self.is_web_context = True
@@ -91,15 +93,15 @@ class WebShellAdapter:
 
 
 class APIShellContext:
-    def __init__(self, workspace: WorkspaceManager | None = None):
+    def __init__(self, workspace: Optional[WorkspaceManager] = None) -> None:
         self.workspace = workspace
 
 
 class QueueSink:
-    def __init__(self, queue: asyncio.Queue):
+    def __init__(self, queue: asyncio.Queue) -> None:
         self.queue = queue
 
-    def write(self, message):
+    def write(self, message: Any) -> None:
         try:
             self.queue.put_nowait(str(message))
         except Exception:
@@ -107,7 +109,7 @@ class QueueSink:
 
 
 class QueueStdoutRedirector(io.TextIOBase):
-    def __init__(self, queue: asyncio.Queue):
+    def __init__(self, queue: asyncio.Queue) -> None:
         self.queue = queue
 
     def write(self, text: str) -> int:
@@ -122,7 +124,7 @@ class QueueStdoutRedirector(io.TextIOBase):
         pass
 
 
-def get_config():
+def get_config() -> Generator[ConfigManager, None, None]:
     config = ConfigManager("~/.keen/config.db")
     try:
         yield config
@@ -135,7 +137,9 @@ class WorkspaceNotFoundException(Exception):
 
 
 @app.exception_handler(WorkspaceNotFoundException)
-def workspace_not_found_handler(request, exc):
+def workspace_not_found_handler(
+    request: Request, exc: WorkspaceNotFoundException
+) -> JSONResponse:
     return JSONResponse(status_code=404, content={"error": "Workspace not found"})
 
 
@@ -153,17 +157,19 @@ def get_workspace_manager(
 
 
 @app.get("/api")
-def api():
+def api() -> RedirectResponse:
     return RedirectResponse(url="/docs")
 
 
 @app.get("/api/health")
-def health_check():
+def health_check() -> Dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/api/workspaces")
-def get_workspaces(config: ConfigManager = Depends(get_config)):
+def get_workspaces(
+    config: ConfigManager = Depends(get_config),
+) -> List[Dict[str, Any]]:
     """Get all workspaces.
 
     Returns:
@@ -185,8 +191,10 @@ def get_workspaces(config: ConfigManager = Depends(get_config)):
     return workspaces
 
 
-@app.post("/api/workspaces")
-def create_workspace(req: WorkspaceCreate, config: ConfigManager = Depends(get_config)):
+@app.post("/api/workspaces", response_model=None)
+def create_workspace(
+    req: WorkspaceCreate, config: ConfigManager = Depends(get_config)
+) -> Union[Dict[str, Any], JSONResponse]:
     """Create a new workspace.
 
     Args:
@@ -214,15 +222,17 @@ def create_workspace(req: WorkspaceCreate, config: ConfigManager = Depends(get_c
     return {"success": True, "name": name, "path": db_file}
 
 
-@app.get("/api/workspaces/{name}/nodes")
-def get_workspace_nodes(wm: WorkspaceManager = Depends(get_workspace_manager)):
+@app.get("/api/workspaces/{name}/nodes", response_model=None)
+def get_workspace_nodes(
+    wm: WorkspaceManager = Depends(get_workspace_manager),
+) -> Union[List[Dict[str, Any]], JSONResponse]:
     """Get all nodes in a workspace.
 
     Args:
-        name (str): Workspace name.
+        wm (WorkspaceManager): The active workspace manager dependency.
 
     Returns:
-        List[Dict[str, Any]]: List of nodes.
+        Union[List[Dict[str, Any]], JSONResponse]: List of nodes in the workspace or a 500 JSONResponse on exception.
     """
     try:
         cursor = wm.conn.cursor()
@@ -250,10 +260,10 @@ def get_workspace_nodes(wm: WorkspaceManager = Depends(get_workspace_manager)):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.post("/api/workspaces/{name}/nodes")
+@app.post("/api/workspaces/{name}/nodes", response_model=None)
 def create_workspace_node(
     req: NodeCreate, wm: WorkspaceManager = Depends(get_workspace_manager)
-):
+) -> Union[Dict[str, Any], JSONResponse]:
     """Create a new node in a workspace.
 
     Args:
@@ -270,8 +280,10 @@ def create_workspace_node(
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.get("/api/workspaces/{name}/edges")
-def get_workspace_edges(wm: WorkspaceManager = Depends(get_workspace_manager)):
+@app.get("/api/workspaces/{name}/edges", response_model=None)
+def get_workspace_edges(
+    wm: WorkspaceManager = Depends(get_workspace_manager),
+) -> Union[List[Dict[str, Any]], JSONResponse]:
     """Get all edges in a workspace.
 
     Args:
@@ -295,8 +307,10 @@ def get_workspace_edges(wm: WorkspaceManager = Depends(get_workspace_manager)):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.post("/api/config/unlock")
-def unlock_config(req: ConfigUnlock, config: ConfigManager = Depends(get_config)):
+@app.post("/api/config/unlock", response_model=None)
+def unlock_config(
+    req: ConfigUnlock, config: ConfigManager = Depends(get_config)
+) -> Union[Dict[str, Any], JSONResponse]:
     """Unlock the config.
 
     Args:
@@ -310,8 +324,10 @@ def unlock_config(req: ConfigUnlock, config: ConfigManager = Depends(get_config)
     return JSONResponse(status_code=401, content={"error": "Invalid password"})
 
 
-@app.get("/api/config/keys")
-def get_config_keys(config: ConfigManager = Depends(get_config)):
+@app.get("/api/config/keys", response_model=None)
+def get_config_keys(
+    config: ConfigManager = Depends(get_config),
+) -> Union[List[Dict[str, Any]], JSONResponse]:
     """Get all API keys.
 
     Returns:
@@ -322,8 +338,10 @@ def get_config_keys(config: ConfigManager = Depends(get_config)):
     return config.get_all_api_keys()
 
 
-@app.post("/api/config/keys")
-def set_config_key(req: APIKeyCreate, config: ConfigManager = Depends(get_config)):
+@app.post("/api/config/keys", response_model=None)
+def set_config_key(
+    req: APIKeyCreate, config: ConfigManager = Depends(get_config)
+) -> Union[Dict[str, Any], JSONResponse]:
     """Set an API key.
 
     Args:
@@ -339,7 +357,9 @@ def set_config_key(req: APIKeyCreate, config: ConfigManager = Depends(get_config
 
 
 @app.get("/api/config/preferences")
-def get_preferences(config: ConfigManager = Depends(get_config)):
+def get_preferences(
+    config: ConfigManager = Depends(get_config),
+) -> Dict[str, str]:
     """Get all configuration preferences."""
     cursor = config.conn.cursor()
     cursor.execute("SELECT key, value FROM preferences")
@@ -359,7 +379,7 @@ def get_preferences(config: ConfigManager = Depends(get_config)):
 @app.post("/api/config/preferences")
 def update_preferences(
     req: Dict[str, Any], config: ConfigManager = Depends(get_config)
-):
+) -> Dict[str, bool]:
     """Update multiple preferences."""
     blocked_keys = ["last_workspace", "api_keys_salt", "master_password_check"]
     if "key" in req and "value" in req and len(req) == 2:
@@ -376,7 +396,9 @@ def update_preferences(
 
 
 @app.delete("/api/workspaces/{name}")
-def delete_workspace(name: str, config: ConfigManager = Depends(get_config)):
+def delete_workspace(
+    name: str, config: ConfigManager = Depends(get_config)
+) -> Dict[str, bool]:
     """Delete a workspace.
 
     Args:
@@ -389,10 +411,10 @@ def delete_workspace(name: str, config: ConfigManager = Depends(get_config)):
     return {"success": True}
 
 
-@app.put("/api/workspaces/{name}")
+@app.put("/api/workspaces/{name}", response_model=None)
 def rename_workspace(
     name: str, req: WorkspaceRename, config: ConfigManager = Depends(get_config)
-):
+) -> Union[Dict[str, Any], JSONResponse]:
     """Rename a workspace.
 
     Args:
@@ -423,10 +445,10 @@ def rename_workspace(
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
-@app.post("/api/workspaces/{name}/edges")
+@app.post("/api/workspaces/{name}/edges", response_model=None)
 def create_workspace_edge(
     req: EdgeCreate, wm: WorkspaceManager = Depends(get_workspace_manager)
-):
+) -> Union[Dict[str, Any], JSONResponse]:
     """Create a new edge in a workspace.
 
     Args:
@@ -459,10 +481,10 @@ def create_workspace_edge(
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.delete("/api/workspaces/{name}/nodes/{node_id}")
+@app.delete("/api/workspaces/{name}/nodes/{node_id}", response_model=None)
 def delete_workspace_node(
     node_id: int, wm: WorkspaceManager = Depends(get_workspace_manager)
-):
+) -> Union[Dict[str, Any], JSONResponse]:
     """Delete a node from a workspace.
 
     Args:
@@ -479,10 +501,10 @@ def delete_workspace_node(
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.delete("/api/workspaces/{name}/edges/{edge_id}")
+@app.delete("/api/workspaces/{name}/edges/{edge_id}", response_model=None)
 def delete_workspace_edge(
     edge_id: int, wm: WorkspaceManager = Depends(get_workspace_manager)
-):
+) -> Union[Dict[str, Any], JSONResponse]:
     """Delete an edge from a workspace.
 
     Args:
@@ -499,12 +521,12 @@ def delete_workspace_edge(
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.put("/api/workspaces/{name}/nodes/{node_id}")
+@app.put("/api/workspaces/{name}/nodes/{node_id}", response_model=None)
 def update_workspace_node(
     node_id: int,
     req: NodeUpdate,
     wm: WorkspaceManager = Depends(get_workspace_manager),
-):
+) -> Union[Dict[str, Any], JSONResponse]:
     """Update a node in a workspace.
 
     Args:
@@ -531,12 +553,12 @@ def update_workspace_node(
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.put("/api/workspaces/{name}/edges/{edge_id}")
+@app.put("/api/workspaces/{name}/edges/{edge_id}", response_model=None)
 def update_workspace_edge(
     edge_id: int,
     req: EdgeUpdate,
     wm: WorkspaceManager = Depends(get_workspace_manager),
-):
+) -> Union[Dict[str, Any], JSONResponse]:
     """Update an edge in a workspace.
 
     Args:
@@ -563,10 +585,10 @@ def update_workspace_edge(
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.post("/api/workspaces/{name}/nodes/positions")
+@app.post("/api/workspaces/{name}/nodes/positions", response_model=None)
 def update_node_positions(
     req: NodePositionsUpdate, wm: WorkspaceManager = Depends(get_workspace_manager)
-):
+) -> Union[Dict[str, Any], JSONResponse]:
     """Update node positions in a workspace.
 
     Args:
@@ -597,7 +619,7 @@ def update_node_positions(
 
 
 @app.get("/api/modules")
-def get_modules():
+def get_modules() -> Dict[str, Any]:
     """Get all available modules.
 
     Returns:
@@ -614,7 +636,7 @@ def get_modules():
 
 
 @app.websocket("/ws/modules/{module_name:path}/run")
-async def websocket_run_module(websocket: WebSocket, module_name: str):
+async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
     """Run a module asynchronously via WebSocket.
 
     Args:
@@ -756,7 +778,7 @@ async def websocket_run_module(websocket: WebSocket, module_name: str):
 
 
 @app.websocket("/ws/magic/run")
-async def websocket_run_magic(websocket: WebSocket):
+async def websocket_run_magic(websocket: WebSocket) -> None:
     """Run magic chaining asynchronously via WebSocket."""
     await websocket.accept()
 
@@ -873,5 +895,7 @@ async def websocket_run_magic(websocket: WebSocket):
 app.mount("/", StaticFiles(directory="web", html=True), name="web")
 
 
-def start_server(host: str = "127.0.0.1", port: int = 8000, debug: bool = False):
+def start_server(
+    host: str = "127.0.0.1", port: int = 8000, debug: bool = False
+) -> None:
     uvicorn.run("src.api.server:app", host=host, port=port, reload=debug)
