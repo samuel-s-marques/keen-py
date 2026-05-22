@@ -4,7 +4,7 @@ import json
 import asyncio
 import contextlib
 import uvicorn
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Generator
 import io
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
@@ -130,6 +130,28 @@ def get_config():
         config.close()
 
 
+class WorkspaceNotFoundException(Exception):
+    pass
+
+
+@app.exception_handler(WorkspaceNotFoundException)
+def workspace_not_found_handler(request, exc):
+    return JSONResponse(status_code=404, content={"error": "Workspace not found"})
+
+
+def get_workspace_manager(
+    name: str, config: ConfigManager = Depends(get_config)
+) -> Generator[WorkspaceManager, None, None]:
+    w = config.get_workspace(name)
+    if not w:
+        raise WorkspaceNotFoundException()
+    wm = WorkspaceManager(w["path"], name=name)
+    try:
+        yield wm
+    finally:
+        wm.close()
+
+
 @app.get("/api")
 def api():
     return RedirectResponse(url="/docs")
@@ -193,7 +215,7 @@ def create_workspace(req: WorkspaceCreate, config: ConfigManager = Depends(get_c
 
 
 @app.get("/api/workspaces/{name}/nodes")
-def get_workspace_nodes(name: str, config: ConfigManager = Depends(get_config)):
+def get_workspace_nodes(wm: WorkspaceManager = Depends(get_workspace_manager)):
     """Get all nodes in a workspace.
 
     Args:
@@ -202,12 +224,7 @@ def get_workspace_nodes(name: str, config: ConfigManager = Depends(get_config)):
     Returns:
         List[Dict[str, Any]]: List of nodes.
     """
-    w = config.get_workspace(name)
-    if not w:
-        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
-
     try:
-        wm = WorkspaceManager(w["path"], name=name)
         cursor = wm.conn.cursor()
         cursor.execute("SELECT * FROM nodes")
         nodes = [dict(row) for row in cursor.fetchall()]
@@ -224,11 +241,10 @@ def get_workspace_nodes(name: str, config: ConfigManager = Depends(get_config)):
 
             raw_value = node.get("value", "")
             prefix, clean = parse_node_prefix(raw_value)
-            node["label"] = raw_value       # visual identifier (e.g. "github:username")
-            node["clean_value"] = clean      # execution target  (e.g. "username")
-            node["platform"] = prefix        # platform prefix   (e.g. "github") or None
+            node["label"] = raw_value  # visual identifier (e.g. "github:username")
+            node["clean_value"] = clean  # execution target  (e.g. "username")
+            node["platform"] = prefix  # platform prefix   (e.g. "github") or None
 
-        wm.close()
         return nodes
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -236,7 +252,7 @@ def get_workspace_nodes(name: str, config: ConfigManager = Depends(get_config)):
 
 @app.post("/api/workspaces/{name}/nodes")
 def create_workspace_node(
-    name: str, req: NodeCreate, config: ConfigManager = Depends(get_config)
+    req: NodeCreate, wm: WorkspaceManager = Depends(get_workspace_manager)
 ):
     """Create a new node in a workspace.
 
@@ -247,20 +263,15 @@ def create_workspace_node(
     Returns:
         Dict[str, Any]: Node.
     """
-    w = config.get_workspace(name)
-    if not w:
-        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
-        wm = WorkspaceManager(w["path"], name=name)
         node_id = wm.get_or_add_node(req.type, req.value, req.metadata)
-        wm.close()
         return {"success": True, "node_id": node_id}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/workspaces/{name}/edges")
-def get_workspace_edges(name: str, config: ConfigManager = Depends(get_config)):
+def get_workspace_edges(wm: WorkspaceManager = Depends(get_workspace_manager)):
     """Get all edges in a workspace.
 
     Args:
@@ -269,12 +280,7 @@ def get_workspace_edges(name: str, config: ConfigManager = Depends(get_config)):
     Returns:
         List[Dict[str, Any]]: List of edges.
     """
-    w = config.get_workspace(name)
-    if not w:
-        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
-
     try:
-        wm = WorkspaceManager(w["path"], name=name)
         cursor = wm.conn.cursor()
         cursor.execute("SELECT * FROM edge")
         edges = [dict(row) for row in cursor.fetchall()]
@@ -284,7 +290,6 @@ def get_workspace_edges(name: str, config: ConfigManager = Depends(get_config)):
                     edge["metadata"] = json.loads(edge["metadata"])
                 except Exception:
                     pass
-        wm.close()
         return edges
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -420,7 +425,7 @@ def rename_workspace(
 
 @app.post("/api/workspaces/{name}/edges")
 def create_workspace_edge(
-    name: str, req: EdgeCreate, config: ConfigManager = Depends(get_config)
+    req: EdgeCreate, wm: WorkspaceManager = Depends(get_workspace_manager)
 ):
     """Create a new edge in a workspace.
 
@@ -431,11 +436,7 @@ def create_workspace_edge(
     Returns:
         Dict[str, Any]: Success status.
     """
-    w = config.get_workspace(name)
-    if not w:
-        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
-        wm = WorkspaceManager(w["path"], name=name)
 
         def resolve_node_id(ref: str) -> int | None:
             if ref.isdigit():
@@ -453,7 +454,6 @@ def create_workspace_edge(
             )
 
         wm.add_edge(source_id, target_id, req.relationship, req.metadata)
-        wm.close()
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -461,7 +461,7 @@ def create_workspace_edge(
 
 @app.delete("/api/workspaces/{name}/nodes/{node_id}")
 def delete_workspace_node(
-    name: str, node_id: int, config: ConfigManager = Depends(get_config)
+    node_id: int, wm: WorkspaceManager = Depends(get_workspace_manager)
 ):
     """Delete a node from a workspace.
 
@@ -472,13 +472,8 @@ def delete_workspace_node(
     Returns:
         Dict[str, Any]: Success status.
     """
-    w = config.get_workspace(name)
-    if not w:
-        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
-        wm = WorkspaceManager(w["path"], name=name)
         wm.delete_node(node_id)
-        wm.close()
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -486,7 +481,7 @@ def delete_workspace_node(
 
 @app.delete("/api/workspaces/{name}/edges/{edge_id}")
 def delete_workspace_edge(
-    name: str, edge_id: int, config: ConfigManager = Depends(get_config)
+    edge_id: int, wm: WorkspaceManager = Depends(get_workspace_manager)
 ):
     """Delete an edge from a workspace.
 
@@ -497,13 +492,8 @@ def delete_workspace_edge(
     Returns:
         Dict[str, Any]: Success status.
     """
-    w = config.get_workspace(name)
-    if not w:
-        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
-        wm = WorkspaceManager(w["path"], name=name)
         wm.delete_edge(edge_id)
-        wm.close()
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -511,10 +501,9 @@ def delete_workspace_edge(
 
 @app.put("/api/workspaces/{name}/nodes/{node_id}")
 def update_workspace_node(
-    name: str,
     node_id: int,
     req: NodeUpdate,
-    config: ConfigManager = Depends(get_config),
+    wm: WorkspaceManager = Depends(get_workspace_manager),
 ):
     """Update a node in a workspace.
 
@@ -531,13 +520,8 @@ def update_workspace_node(
             status_code=400, content={"error": "No fields provided to update"}
         )
 
-    w = config.get_workspace(name)
-    if not w:
-        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
-        wm = WorkspaceManager(w["path"], name=name)
         updated = wm.update_node(node_id, req.type, req.value, req.metadata)
-        wm.close()
         if not updated:
             return JSONResponse(
                 status_code=404, content={"error": "Node not found or no changes made"}
@@ -549,10 +533,9 @@ def update_workspace_node(
 
 @app.put("/api/workspaces/{name}/edges/{edge_id}")
 def update_workspace_edge(
-    name: str,
     edge_id: int,
     req: EdgeUpdate,
-    config: ConfigManager = Depends(get_config),
+    wm: WorkspaceManager = Depends(get_workspace_manager),
 ):
     """Update an edge in a workspace.
 
@@ -569,13 +552,8 @@ def update_workspace_edge(
             status_code=400, content={"error": "No fields provided to update"}
         )
 
-    w = config.get_workspace(name)
-    if not w:
-        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
-        wm = WorkspaceManager(w["path"], name=name)
         updated = wm.update_edge(edge_id, req.relationship, req.metadata)
-        wm.close()
         if not updated:
             return JSONResponse(
                 status_code=404, content={"error": "Edge not found or no changes made"}
@@ -587,7 +565,7 @@ def update_workspace_edge(
 
 @app.post("/api/workspaces/{name}/nodes/positions")
 def update_node_positions(
-    name: str, req: NodePositionsUpdate, config: ConfigManager = Depends(get_config)
+    req: NodePositionsUpdate, wm: WorkspaceManager = Depends(get_workspace_manager)
 ):
     """Update node positions in a workspace.
 
@@ -598,11 +576,7 @@ def update_node_positions(
     Returns:
         Dict[str, Any]: Success status.
     """
-    w = config.get_workspace(name)
-    if not w:
-        return JSONResponse(status_code=404, content={"error": "Workspace not found"})
     try:
-        wm = WorkspaceManager(w["path"], name=name)
         cursor = wm.conn.cursor()
         for node_id_str, pos in req.positions.items():
             node_id = None
@@ -617,7 +591,6 @@ def update_node_positions(
                     (pos.get("x"), pos.get("y"), node_id),
                 )
         wm.conn.commit()
-        wm.close()
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
