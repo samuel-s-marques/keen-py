@@ -28,8 +28,18 @@ class BaseModule:
     def __init__(self) -> None:
         from loguru import logger
 
-        self.options = {}
-        self.logger = logger.bind(module=self.metadata["name"])
+        if not isinstance(self.metadata, dict):
+            self.metadata = {}
+
+        options_data = self.metadata.get("options", {})
+        if not isinstance(options_data, dict):
+            metadata_copy = dict(self.metadata)
+            metadata_copy["options"] = {}
+            self.metadata = metadata_copy
+            options_data = {}
+
+        self.options = {k: v[0] for k, v in options_data.items()}
+        self.logger = logger.bind(module=self.metadata.get("name", "Base"))
         self.shell = None
         self.is_web_context = False
         self.active_processes = set()
