@@ -32,6 +32,7 @@ quotes: list[str] = [
     "The sharp edge of intelligence.",
     "Anonymity is a debt.",
     "Existence is evidence.",
+    "Keeping your enemies closer.",
 ]
 
 PRE_RENDERED_BANNERS = {
