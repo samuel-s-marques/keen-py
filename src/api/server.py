@@ -7,7 +7,7 @@ import uvicorn
 from typing import Optional, Dict, Any, Generator, List, Union
 import io
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,6 +59,15 @@ class APIKeyCreate(BaseModel):
 
 class WorkspaceRename(BaseModel):
     new_name: str
+
+
+class ProxyCreate(BaseModel):
+    url: str
+
+
+class ProxyUpdate(BaseModel):
+    url: Optional[str] = None
+    is_enabled: Optional[bool] = None
 
 
 class NodePositionsUpdate(BaseModel):
@@ -393,6 +402,112 @@ def update_preferences(
                 continue
             config.set_preference(key, str(val))
     return {"success": True}
+
+
+@app.get("/api/proxies")
+def get_proxies(config: ConfigManager = Depends(get_config)) -> List[Dict[str, Any]]:
+    """Get all registered proxies."""
+    return config.get_all_proxies()
+
+
+@app.post("/api/proxies")
+def add_proxy(req: ProxyCreate, config: ConfigManager = Depends(get_config)) -> Dict[str, Any]:
+    """Register a new proxy."""
+    if not req.url.strip():
+        return {"success": False, "error": "URL is required"}
+    success = config.add_proxy(req.url.strip())
+    if success:
+        return {"success": True}
+    return {"success": False, "error": "Proxy already exists"}
+
+
+@app.delete("/api/proxies/{proxy_id}")
+def delete_proxy(proxy_id: int, config: ConfigManager = Depends(get_config)) -> Dict[str, bool]:
+    """Delete a registered proxy."""
+    success = config.delete_proxy(proxy_id)
+    return {"success": success}
+
+
+@app.post("/api/proxies/{proxy_id}/toggle")
+def toggle_proxy(proxy_id: int, req: Dict[str, bool], config: ConfigManager = Depends(get_config)) -> Dict[str, bool]:
+    """Toggle is_enabled for a proxy."""
+    enabled = req.get("is_enabled", True)
+    config.set_proxy_enabled(proxy_id, enabled)
+    return {"success": True}
+
+
+@app.post("/api/proxies/load")
+def load_proxies(req: Dict[str, Any], config: ConfigManager = Depends(get_config)) -> Dict[str, Any]:
+    """Bulk import proxies from text list or absolute filepath."""
+    content = req.get("content", "")
+    filepath = req.get("path", "")
+    urls = []
+
+    if filepath:
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    urls = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
+            except Exception as e:
+                return {"success": False, "error": f"Failed to read file: {e}"}
+        else:
+            return {"success": False, "error": "File path does not exist"}
+    elif content:
+        urls = [line.strip() for line in content.splitlines() if line.strip() and not line.strip().startswith("#")]
+    else:
+        return {"success": False, "error": "No proxies provided"}
+
+    added = 0
+    for url in urls:
+        if config.add_proxy(url):
+            added += 1
+    return {"success": True, "loaded": added, "total": len(urls)}
+
+
+@app.post("/api/proxies/test")
+async def test_proxies(
+    background_tasks: BackgroundTasks, config: ConfigManager = Depends(get_config)
+) -> Dict[str, str]:
+    """Trigger concurrent connectivity health checks in the background."""
+    from fastapi import BackgroundTasks
+    # Need to run connectivity checks asynchronously in a background task
+    async def perform_async_checks():
+        # Setup temporary config instance for background runner
+        from src.core.managers import ConfigManager
+        bg_config = ConfigManager("~/.keen/config.db")
+        proxies = bg_config.get_all_proxies()
+        if not proxies:
+            bg_config.close()
+            return
+
+        import httpx
+        import time
+        sem = asyncio.Semaphore(10)
+
+        async def check_one(p):
+            async with sem:
+                url = p["url"]
+                proxy_id = p["id"]
+                start_time = time.time()
+                try:
+                    async with httpx.AsyncClient(proxy=url, timeout=5.0) as client:
+                        resp = await client.get("https://httpbin.org/ip")
+                        if resp.status_code == 200:
+                            latency = time.time() - start_time
+                            bg_config.update_proxy_status(proxy_id, "online", latency)
+                        else:
+                            bg_config.update_proxy_status(proxy_id, "offline", -1)
+                except Exception:
+                    bg_config.update_proxy_status(proxy_id, "offline", -1)
+
+        tasks = [check_one(p) for p in proxies]
+        await asyncio.gather(*tasks)
+        bg_config.close()
+
+    # Schedule the coroutine in background tasks
+    # Since background_tasks accepts async def functions, let's run it directly
+    background_tasks.add_task(perform_async_checks)
+    return {"status": "testing"}
 
 
 @app.delete("/api/workspaces/{name}")
