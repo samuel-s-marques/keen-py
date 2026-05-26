@@ -1105,3 +1105,31 @@ input:focus {
         transform: rotate(360deg);
     }
 }
+
+/* Proxy System Premium custom styles */
+.proxy-drag-zone:hover {
+    border-color: var(--accent-cyan) !important;
+    background: rgba(0, 240, 255, 0.05) !important;
+}
+.status-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+}
+.status-badge.online {
+    background: rgba(0, 230, 118, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(0, 230, 118, 0.3);
+}
+.status-badge.offline {
+    background: rgba(255, 23, 68, 0.15);
+    color: var(--error);
+    border: 1px solid rgba(255, 23, 68, 0.3);
+}
+.status-badge.unknown {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
