@@ -2,6 +2,7 @@ from src.core.managers import WorkspaceManager
 from typing import Any
 from typing import Callable
 from typing import Literal
+import contextlib
 from rich.console import Console
 from rich.table import Table
 
@@ -339,3 +340,28 @@ class BaseModule:
                         except Exception:
                             pass
             self.active_processes.clear()
+
+    @contextlib.asynccontextmanager
+    async def get_http_client(self, **kwargs):
+        """Yields an httpx.AsyncClient configured with active proxy settings if enabled."""
+        import httpx
+        from src.core.managers import ConfigManager
+
+        config = None
+        should_close_config = False
+        if self.shell and getattr(self.shell, "config", None):
+            config = self.shell.config
+        else:
+            config = ConfigManager("~/.keen/config.db")
+            should_close_config = True
+
+        try:
+            proxy = config.get_next_proxy()
+            if proxy:
+                kwargs["proxy"] = proxy["url"]
+
+            async with httpx.AsyncClient(**kwargs) as client:
+                yield client
+        finally:
+            if should_close_config and config:
+                config.close()
