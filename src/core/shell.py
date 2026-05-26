@@ -336,6 +336,235 @@ class Shell(Cmd):
         else:
             error(f"Unknown subcommand '{subcommand}'.")
 
+    def complete_proxy(self, text, line, begidx, endidx):
+        """Tab-completion for the 'proxy' command."""
+        subcommands = ["list", "add", "delete", "load", "test", "set-mode"]
+        modes = ["random", "round-robin", "sticky", "off"]
+        args = line.split()
+        
+        # If user typed 'proxy ', suggest subcommands
+        if len(args) == 1 or (len(args) == 2 and not line.endswith(" ")):
+            return [sc for sc in subcommands if sc.startswith(text.lower())]
+        
+        # If user typed 'proxy set-mode ', suggest rotation modes
+        if len(args) >= 2 and args[1].lower() == "set-mode":
+            if len(args) == 2 or (len(args) == 3 and not line.endswith(" ")):
+                return [m for m in modes if m.startswith(text.lower())]
+
+        return []
+
+    def do_proxy(self, arg: str) -> None:
+        """Manage and route traffic through a unified Proxy System.
+
+        Usage:
+            proxy list                                - List all configured proxies with latency
+            proxy add <url>                           - Add a new proxy URL (e.g. http://ip:port or SOCKS)
+            proxy delete <id>                         - Delete a proxy by ID
+            proxy load <path>                         - Bulk import proxies from a text file
+            proxy test                                - Concurrently test connectivity of all proxies
+            proxy set-mode <random|round-robin|sticky|off> - Change rotation or deactivate proxy system
+        """
+        args = arg.strip().split()
+        if not args:
+            info("Usage:")
+            info("\tproxy list                                - List all configured proxies")
+            info("\tproxy add <url>                           - Add a new proxy URL")
+            info("\tproxy delete <id>                         - Delete a proxy by ID")
+            info("\tproxy load <path>                         - Bulk load proxies from file")
+            info("\tproxy test                                - Concurrently test proxy connectivity")
+            info("\tproxy set-mode <mode>                     - Set rotation mode (random|round-robin|sticky|off)")
+            return
+
+        def mask_url(url: str) -> str:
+            from urllib.parse import urlparse
+            try:
+                parsed = urlparse(url)
+                if parsed.password or parsed.username:
+                    netloc = ""
+                    if parsed.username:
+                        netloc += parsed.username
+                    if parsed.password:
+                        netloc += ":****"
+                    netloc += f"@{parsed.hostname}"
+                    if parsed.port:
+                        netloc += f":{parsed.port}"
+                    return parsed._replace(netloc=netloc).geturl()
+            except Exception:
+                pass
+            return url
+
+        subcommand = args[0].lower()
+
+        if subcommand == "list":
+            proxies = self.config.get_all_proxies()
+            if not proxies:
+                info("No proxies loaded. Add one using 'proxy add <url>' or bulk load with 'proxy load <path>'.")
+                return
+
+            table = Table(
+                show_header=True,
+                header_style="bold blue",
+                title="Configured Proxies",
+                title_style="bold cyan",
+                show_lines=True,
+                expand=True,
+            )
+            table.add_column("ID", justify="center", style="yellow", width=6)
+            table.add_column("Proxy URL", justify="left", style="white")
+            table.add_column("Status", justify="center", style="bold")
+            table.add_column("Latency", justify="right", style="cyan")
+            table.add_column("Enabled", justify="center", style="magenta")
+
+            for p in proxies:
+                status = p.get("status", "unknown")
+                latency_val = p.get("latency", -1)
+                
+                # Dynamic coloring for latency/status
+                if status == "online":
+                    status_str = stylize("Online", Style(color=Color.GREEN))
+                elif status == "offline":
+                    status_str = stylize("Offline", Style(color=Color.RED))
+                else:
+                    status_str = stylize("Unknown", Style(color=Color.LIGHT_GRAY))
+
+                if latency_val == -1 or status != "online":
+                    latency_str = "-"
+                else:
+                    latency_str = f"{int(latency_val * 1000)}ms"
+
+                enabled_str = "Yes" if p.get("is_enabled", 1) == 1 else "No"
+                table.add_row(
+                    str(p["id"]),
+                    mask_url(p["url"]),
+                    status_str,
+                    latency_str,
+                    enabled_str
+                )
+
+            console = Console()
+            console.print(table)
+            
+            # Print current proxy routing status
+            is_enabled = self.config.get_preference("proxy_enabled") == "true"
+            mode = self.config.get_preference("proxy_rotation_mode") or "round-robin"
+            if is_enabled:
+                info(f"Proxy Routing: ENABLED (Rotation Mode: {mode})")
+            else:
+                info("Proxy Routing: DISABLED")
+            return
+
+        elif subcommand == "add":
+            if len(args) < 2:
+                error("Usage: proxy add <url>")
+                return
+            url = args[1]
+            if self.config.add_proxy(url):
+                success(f"Proxy '{mask_url(url)}' added successfully.")
+            else:
+                error("Proxy already exists in the database.")
+            return
+
+        elif subcommand == "delete":
+            if len(args) < 2:
+                error("Usage: proxy delete <id>")
+                return
+            try:
+                proxy_id = int(args[1])
+            except ValueError:
+                error("Invalid proxy ID format.")
+                return
+            
+            if self.config.delete_proxy(proxy_id):
+                success(f"Proxy with ID {proxy_id} deleted successfully.")
+            else:
+                error(f"Proxy with ID {proxy_id} not found.")
+            return
+
+        elif subcommand == "load":
+            if len(args) < 2:
+                error("Usage: proxy load <path>")
+                return
+            path = args[1]
+            if not os.path.exists(path):
+                error(f"File not found: {path}")
+                return
+
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    urls = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
+                
+                added = 0
+                for url in urls:
+                    if self.config.add_proxy(url):
+                        added += 1
+                success(f"Loaded {added} new proxies from file successfully (skipped {len(urls) - added} duplicates).")
+            except Exception as e:
+                error(f"Failed to load proxies from file: {e}")
+            return
+
+        elif subcommand == "set-mode":
+            if len(args) < 2:
+                error("Usage: proxy set-mode <random | round-robin | sticky | off>")
+                return
+            mode = args[1].lower()
+            if mode == "off":
+                self.config.set_preference("proxy_enabled", "false")
+                success("Proxy system disabled globally.")
+            elif mode in ("random", "round-robin", "sticky"):
+                self.config.set_preference("proxy_enabled", "true")
+                self.config.set_preference("proxy_rotation_mode", mode)
+                success(f"Proxy system enabled. Rotation mode set to: {mode}")
+            else:
+                error("Invalid rotation mode. Choose from: random, round-robin, sticky, off.")
+            return
+
+        elif subcommand == "test":
+            proxies = self.config.get_all_proxies()
+            if not proxies:
+                info("No proxies loaded to test.")
+                return
+
+            info(f"Verifying {len(proxies)} proxies concurrently against https://httpbin.org/ip...")
+            
+            async def test_single_proxy(p, sem):
+                import httpx
+                import time
+                async with sem:
+                    url = p["url"]
+                    proxy_id = p["id"]
+                    start_time = time.time()
+                    try:
+                        async with httpx.AsyncClient(proxy=url, timeout=5.0) as client:
+                            resp = await client.get("https://httpbin.org/ip")
+                            if resp.status_code == 200:
+                                latency = time.time() - start_time
+                                self.config.update_proxy_status(proxy_id, "online", latency)
+                                return True
+                            else:
+                                self.config.update_proxy_status(proxy_id, "offline", -1)
+                                return False
+                    except Exception:
+                        self.config.update_proxy_status(proxy_id, "offline", -1)
+                        return False
+
+            async def run_all_tests():
+                # Concurrency limit of 10
+                sem = asyncio.Semaphore(10)
+                tasks = [test_single_proxy(p, sem) for p in proxies]
+                results = await asyncio.gather(*tasks)
+                online_count = sum(1 for r in results if r)
+                offline_count = len(results) - online_count
+                success(f"Test complete: {online_count} Online, {offline_count} Offline.")
+
+            try:
+                asyncio.run(run_all_tests())
+            except Exception as e:
+                error(f"Testing execution failed: {e}")
+            return
+
+        else:
+            error(f"Unknown subcommand '{subcommand}'.")
+
     def do_magic(self, arg: str) -> None:
         """Run automatic detection and module chaining on a target.
 
