@@ -69,6 +69,16 @@ class ConfigManager(DatabaseEngine):
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS proxies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT UNIQUE,
+                status TEXT DEFAULT 'unknown',
+                latency REAL DEFAULT -1,
+                is_enabled INTEGER DEFAULT 1,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
         # Preferences
         cursor.execute("""
@@ -91,6 +101,18 @@ class ConfigManager(DatabaseEngine):
             INSERT OR IGNORE INTO preferences (key, value) 
             VALUES ('magic_exclude_modules', '')
         """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('proxy_enabled', 'false')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('proxy_rotation_mode', 'round-robin')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('proxy_sticky_index', '0')
+        """)
 
         # Handle migration for existing databases missing the description column
         try:
@@ -102,7 +124,113 @@ class ConfigManager(DatabaseEngine):
             # Column already exists
             pass
 
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS proxies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT UNIQUE,
+                    status TEXT DEFAULT 'unknown',
+                    latency REAL DEFAULT -1,
+                    is_enabled INTEGER DEFAULT 1,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
         self.conn.commit()
+
+    def add_proxy(self, url: str) -> bool:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO proxies (url) VALUES (?)",
+                (url,),
+            )
+            self.conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def delete_proxy(self, proxy_id: int) -> bool:
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM proxies WHERE id = ?", (proxy_id,))
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def get_proxy(self, proxy_id: int) -> dict | None:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM proxies WHERE id = ?", (proxy_id,))
+        result = cursor.fetchone()
+        return dict(result) if result else None
+
+    def get_all_proxies(self) -> list[dict]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM proxies ORDER BY id ASC")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def update_proxy_status(self, proxy_id: int, status: str, latency: float) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE proxies SET status = ?, latency = ?, timestamp = CURRENT_TIMESTAMP WHERE id = ?",
+            (status, latency, proxy_id),
+        )
+        self.conn.commit()
+
+    def set_proxy_enabled(self, proxy_id: int, is_enabled: bool) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE proxies SET is_enabled = ? WHERE id = ?",
+            (1 if is_enabled else 0, proxy_id),
+        )
+        self.conn.commit()
+
+    def get_next_proxy(self) -> dict | None:
+        """Retrieves the next configured proxy according to the global preferences."""
+        enabled = self.get_preference("proxy_enabled")
+        if enabled != "true":
+            return None
+
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM proxies WHERE is_enabled = 1 AND status = 'online'")
+        proxies = [dict(row) for row in cursor.fetchall()]
+        
+        # If no online proxies, fallback to all enabled proxies
+        if not proxies:
+            cursor.execute("SELECT * FROM proxies WHERE is_enabled = 1")
+            proxies = [dict(row) for row in cursor.fetchall()]
+
+        if not proxies:
+            return None
+
+        mode = self.get_preference("proxy_rotation_mode") or "round-robin"
+        if mode == "random":
+            import random
+            return random.choice(proxies)
+        
+        elif mode == "sticky":
+            try:
+                sticky_index = int(self.get_preference("proxy_sticky_index") or 0)
+            except ValueError:
+                sticky_index = 0
+            if sticky_index >= len(proxies):
+                sticky_index = 0
+            return proxies[sticky_index]
+
+        else:  # round-robin
+            try:
+                current_idx = int(self.get_preference("proxy_sticky_index") or 0)
+            except ValueError:
+                current_idx = 0
+            
+            if current_idx >= len(proxies):
+                current_idx = 0
+                
+            selected = proxies[current_idx]
+            next_idx = (current_idx + 1) % len(proxies)
+            self.set_preference("proxy_sticky_index", str(next_idx))
+            return selected
 
     def _get_or_create_salt(self) -> bytes:
         salt_b64 = self.get_preference("api_keys_salt")
