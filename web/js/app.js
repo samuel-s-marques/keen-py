@@ -148,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalSettings.classList.add('active');
         if (isConfigUnlocked) fetchApiKeys();
         fetchPreferences();
+        fetchProxies();
     });
 
     closeModals.forEach(btn => btn.addEventListener('click', () => {
@@ -402,8 +403,251 @@ document.addEventListener('DOMContentLoaded', () => {
             if (prefMagicExcludeModules) {
                 prefMagicExcludeModules.value = prefs.magic_exclude_modules || '';
             }
+
+            // Load Proxy settings into the UI
+            const proxyEnabled = prefs.proxy_enabled === 'true';
+            const proxyMode = prefs.proxy_rotation_mode || 'round-robin';
+
+            const toggleProxyRouting = document.getElementById('toggle-proxy-routing');
+            const selectProxyRotation = document.getElementById('select-proxy-rotation');
+            const proxyStatusVal = document.getElementById('proxy-status-val');
+            const proxyModeVal = document.getElementById('proxy-mode-val');
+
+            if (toggleProxyRouting) {
+                toggleProxyRouting.checked = proxyEnabled;
+            }
+            if (selectProxyRotation) {
+                selectProxyRotation.value = proxyMode;
+            }
+            if (proxyStatusVal) {
+                proxyStatusVal.textContent = proxyEnabled ? 'Enabled' : 'Disabled';
+                proxyStatusVal.style.color = proxyEnabled ? 'var(--success)' : 'var(--error)';
+            }
+            if (proxyModeVal) {
+                proxyModeVal.textContent = proxyMode;
+            }
+
+            // Also reload the proxy table contents
+            fetchProxies();
         }
     }
+
+    async function fetchProxies() {
+        const tbody = document.getElementById('proxies-tbody');
+        if (!tbody) return;
+
+        try {
+            const res = await fetch(`${API_BASE}/proxies`);
+            if (res.ok) {
+                const proxies = await res.json();
+                tbody.innerHTML = '';
+
+                let onlineCount = 0;
+                const totalCount = proxies.length;
+
+                proxies.forEach(p => {
+                    const status = p.status || 'unknown';
+                    if (status === 'online') onlineCount++;
+
+                    let latencyText = '-';
+                    if (p.latency !== -1 && status === 'online') {
+                        latencyText = `${Math.round(p.latency * 1000)}ms`;
+                    }
+
+                    const maskUrl = (url) => {
+                        try {
+                            const u = new URL(url);
+                            if (u.username || u.password) {
+                                return `${u.protocol}//${u.username}:${u.password ? '****' : ''}@${u.host}`;
+                            }
+                        } catch (e) {}
+                        return url;
+                    };
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="word-break: break-all;">${maskUrl(p.url)}</td>
+                        <td style="text-align: center;"><span class="status-badge ${status}">${status.toUpperCase()}</span></td>
+                        <td style="text-align: right; color: var(--accent-cyan); font-family: var(--font-mono);">${latencyText}</td>
+                        <td style="text-align: center;">
+                            <input type="checkbox" class="proxy-row-toggle" data-id="${p.id}" ${p.is_enabled === 1 ? 'checked' : ''} style="width: auto; cursor: pointer;">
+                        </td>
+                        <td style="text-align: center;">
+                            <button class="icon-btn btn-delete-proxy" data-id="${p.id}" style="color: var(--error);" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    `;
+
+                    // Row Toggle Event
+                    const toggleInput = tr.querySelector('.proxy-row-toggle');
+                    toggleInput.addEventListener('change', async (e) => {
+                        const is_enabled = e.target.checked;
+                        await fetch(`${API_BASE}/proxies/${p.id}/toggle`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ is_enabled })
+                        });
+                    });
+
+                    // Row Delete Event
+                    const delBtn = tr.querySelector('.btn-delete-proxy');
+                    delBtn.addEventListener('click', async () => {
+                        if (confirm('Delete this proxy?')) {
+                            const dRes = await fetch(`${API_BASE}/proxies/${p.id}`, { method: 'DELETE' });
+                            if (dRes.ok) {
+                                fetchProxies();
+                            }
+                        }
+                    });
+
+                    tbody.appendChild(tr);
+                });
+
+                const onlineCountSpan = document.getElementById('proxy-online-count');
+                const totalCountSpan = document.getElementById('proxy-total-count');
+                if (onlineCountSpan) onlineCountSpan.textContent = onlineCount;
+                if (totalCountSpan) totalCountSpan.textContent = totalCount;
+            }
+        } catch (err) {
+            console.error('Failed to fetch proxies', err);
+        }
+    }
+
+    // Set up proxy events listeners once settings loads
+    function initProxyListeners() {
+        const toggleProxyRouting = document.getElementById('toggle-proxy-routing');
+        const selectProxyRotation = document.getElementById('select-proxy-rotation');
+        const btnAddProxy = document.getElementById('btn-add-proxy');
+        const inputProxyUrl = document.getElementById('input-proxy-url');
+        const btnTestProxies = document.getElementById('btn-test-proxies');
+
+        if (toggleProxyRouting) {
+            toggleProxyRouting.addEventListener('change', async (e) => {
+                const checked = e.target.checked;
+                await fetch(`${API_BASE}/config/preferences`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ proxy_enabled: String(checked) })
+                });
+                const proxyStatusVal = document.getElementById('proxy-status-val');
+                if (proxyStatusVal) {
+                    proxyStatusVal.textContent = checked ? 'Enabled' : 'Disabled';
+                    proxyStatusVal.style.color = checked ? 'var(--success)' : 'var(--error)';
+                }
+            });
+        }
+
+        if (selectProxyRotation) {
+            selectProxyRotation.addEventListener('change', async (e) => {
+                const val = e.target.value;
+                await fetch(`${API_BASE}/config/preferences`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ proxy_rotation_mode: val })
+                });
+                const proxyModeVal = document.getElementById('proxy-mode-val');
+                if (proxyModeVal) {
+                    proxyModeVal.textContent = val;
+                }
+            });
+        }
+
+        if (btnAddProxy && inputProxyUrl) {
+            btnAddProxy.addEventListener('click', async () => {
+                const url = inputProxyUrl.value.trim();
+                if (!url) return;
+
+                const res = await fetch(`${API_BASE}/proxies`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success) {
+                        inputProxyUrl.value = '';
+                        fetchProxies();
+                    } else {
+                        alert(data.error || 'Failed to add proxy');
+                    }
+                }
+            });
+        }
+
+        if (btnTestProxies) {
+            btnTestProxies.addEventListener('click', async () => {
+                btnTestProxies.disabled = true;
+                btnTestProxies.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
+                await fetch(`${API_BASE}/proxies/test`, { method: 'POST' });
+                
+                // Poll check every 2 seconds for a total of 5 times to update table
+                let count = 0;
+                const interval = setInterval(async () => {
+                    await fetchProxies();
+                    count++;
+                    if (count >= 5) {
+                        clearInterval(interval);
+                        btnTestProxies.disabled = false;
+                        btnTestProxies.innerHTML = '<i class="fa-solid fa-play"></i> Test Connectivity';
+                    }
+                }, 2000);
+            });
+        }
+
+        // Drag & Drop Bulk upload list
+        const dragZone = document.getElementById('proxy-drag-zone');
+        const fileInput = document.getElementById('input-proxy-file');
+
+        if (dragZone && fileInput) {
+            dragZone.addEventListener('click', () => fileInput.click());
+
+            dragZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dragZone.style.borderColor = 'var(--accent-cyan)';
+                dragZone.style.background = 'rgba(0, 240, 255, 0.05)';
+            });
+
+            dragZone.addEventListener('dragleave', () => {
+                dragZone.style.borderColor = 'var(--border-color)';
+                dragZone.style.background = 'rgba(0,0,0,0.2)';
+            });
+
+            const uploadFile = async (file) => {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const text = e.target.result;
+                    const res = await fetch(`${API_BASE}/proxies/load`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: text })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        alert(`Successfully loaded ${data.loaded} proxies!`);
+                        fetchProxies();
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            dragZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dragZone.style.borderColor = 'var(--border-color)';
+                dragZone.style.background = 'rgba(0,0,0,0.2)';
+                if (e.dataTransfer.files.length) {
+                    uploadFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length) {
+                    uploadFile(e.target.files[0]);
+                }
+            });
+        }
+    }
+
+    // Call init listeners when loaded
+    initProxyListeners();
 
     // Workspace Management
     btnCreateWs.addEventListener('click', async () => {
