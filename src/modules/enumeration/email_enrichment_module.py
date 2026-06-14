@@ -1,4 +1,3 @@
-import httpx
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -41,7 +40,7 @@ class EmailEnrichmentModule(BaseModule):
             return None
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 r = await client.get(
                     f"https://api.hunter.io/v2/people/find?email={email}&api_key={api_key}",
                     timeout=15,

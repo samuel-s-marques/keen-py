@@ -1,4 +1,3 @@
-import httpx
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -48,7 +47,7 @@ class DomainEnrichmentModule(BaseModule):
             return None
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 r = await client.get(
                     f"https://api.hunter.io/v2/companies/find?domain={domain}&api_key={api_key}",
                     timeout=15,

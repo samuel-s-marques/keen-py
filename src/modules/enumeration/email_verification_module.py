@@ -1,5 +1,4 @@
 from src.utils.user_agents import UserAgents
-import httpx
 import asyncio
 import smtplib
 import socket
@@ -281,7 +280,7 @@ class EmailVerificationModule(BaseModule):
                 )
                 return None
 
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 r = await client.get(
                     f"https://api.apilayer.com/email_verification/{email}",
                     headers={

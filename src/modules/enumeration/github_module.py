@@ -1,4 +1,3 @@
-import httpx
 from typing import Any, Dict, List, Set
 from src.utils.user_agents import UserAgents
 from src.utils.print_utils import error, success, info, warn
@@ -36,7 +35,7 @@ class GitHubModule(BaseModule):
         if token:
             headers["Authorization"] = f"token {token}"
 
-        self.client = httpx.AsyncClient(headers=headers, follow_redirects=True)
+        self.client = self.get_http_client(headers=headers, follow_redirects=True)
 
         await self.execute(target)
 
@@ -51,7 +50,7 @@ class GitHubModule(BaseModule):
             token = str(self.options.get("GITHUB_TOKEN", "")).strip()
             if token:
                 headers["Authorization"] = f"token {token}"
-            self.client = httpx.AsyncClient(headers=headers, follow_redirects=True)
+            self.client = self.get_http_client(headers=headers, follow_redirects=True)
             close_client = True
         else:
             close_client = False

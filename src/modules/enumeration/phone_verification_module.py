@@ -1,5 +1,4 @@
 from src.utils.user_agents import UserAgents
-import httpx
 import phonenumbers
 from phonenumbers import geocoder, carrier, timezone
 from rich.table import Table
@@ -94,7 +93,7 @@ class PhoneVerificationModule(BaseModule):
             return None
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with self.get_http_client(timeout=timeout) as client:
                 r = await client.get(
                     f"https://api.apilayer.com/number_verification/validate?number={phone}",
                     headers={"apikey": api_key, "User-Agent": UserAgents.get()},

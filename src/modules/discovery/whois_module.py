@@ -31,7 +31,8 @@ class WhoisModule(BaseModule):
 
     async def execute(self, target: str) -> None:
         try:
-            w = await query_rdap(target)
+            async with self.get_http_client(follow_redirects=True, timeout=15) as client:
+                w = await query_rdap(target, client=client)
             if w:
                 self.display_whois_results(target, w)
                 await self._save_results(target, w)

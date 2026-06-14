@@ -1,5 +1,4 @@
 import asyncio
-import httpx
 import dns.resolver
 from bs4 import BeautifulSoup
 from rich.table import Table
@@ -141,7 +140,7 @@ class HistoricalDnsModule(BaseModule):
     async def _get_hackertarget_history(self, target: str) -> list[dict]:
         results = []
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 r = await client.get(
                     f"https://api.hackertarget.com/iphistory/?q={target}",
                     timeout=15,
@@ -166,7 +165,7 @@ class HistoricalDnsModule(BaseModule):
         results = []
         try:
             url = f"https://viewdns.info/iphistory/?domain={target}"
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 r = await client.get(
                     url, timeout=15, headers={"User-Agent": UserAgents.get()}
                 )
@@ -198,7 +197,7 @@ class HistoricalDnsModule(BaseModule):
         subdomains = set()
         headers = {"accept": "application/json", "APIKEY": api_key}
 
-        async with httpx.AsyncClient() as client:
+        async with self.get_http_client() as client:
             # Get History
             try:
                 r = await client.get(
@@ -368,7 +367,7 @@ class HistoricalDnsModule(BaseModule):
             return None
 
         # Check in batches
-        async with httpx.AsyncClient() as client:
+        async with self.get_http_client() as client:
             tasks = [check_sub(client, sub) for sub in subdomains]
 
             # Limit concurrency to avoid flooding
