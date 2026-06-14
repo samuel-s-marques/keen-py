@@ -649,6 +649,9 @@ input:focus {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     transform: translateY(20px);
     transition: transform 0.3s ease;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
 }
 
 .modal-overlay.active .modal {
@@ -673,17 +676,20 @@ input:focus {
 
 .modal-body {
     padding: 20px;
+    overflow-y: auto;
 }
 
 .modal-lg {
-    width: 650px;
+    width: 950px;
     max-width: 95%;
 }
 
 .settings-layout {
     padding: 0;
     display: flex;
-    height: 400px;
+    height: 650px;
+    max-height: 100%;
+    flex: 1;
 }
 
 .settings-sidebar {
