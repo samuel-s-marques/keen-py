@@ -138,6 +138,21 @@ class ConfigManager(DatabaseEngine):
         except sqlite3.IntegrityError:
             return False
 
+    def add_proxies(self, urls: list[str]) -> int:
+        cursor = self.conn.cursor()
+        added = 0
+        for url in urls:
+            try:
+                cursor.execute(
+                    "INSERT INTO proxies (url) VALUES (?)",
+                    (url,),
+                )
+                added += 1
+            except sqlite3.IntegrityError:
+                pass
+        self.conn.commit()
+        return added
+
     def delete_proxy(self, proxy_id: int) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM proxies WHERE id = ?", (proxy_id,))

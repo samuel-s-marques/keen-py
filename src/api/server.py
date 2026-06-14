@@ -29,6 +29,13 @@ from src.core.loader import load_modules
 app = FastAPI(title="Keen API Web Server")
 
 PROXY_CREDENTIALS_RE = re.compile(r"^(https?|socks4|socks5)://([^/]+)@")
+PROXY_VALIDATION_RE = re.compile(
+    r"^(?P<scheme>https?|socks4|socks4a|socks5|socks5h)://"
+    r"(?:[^/@:]+(?::[^/@:]+)?@)?"
+    r"(?P<host>[^/:]+)"
+    r":(?P<port>[0-9]+)$",
+    re.IGNORECASE,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -432,14 +439,63 @@ def get_proxies(config: ConfigManager = Depends(get_config)) -> List[Dict[str, A
     return proxies
 
 
+def is_valid_proxy_url(url: str) -> tuple[bool, str]:
+    match = PROXY_VALIDATION_RE.match(url)
+    if not match:
+        from urllib.parse import urlparse
+
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme.lower() not in [
+                "http",
+                "https",
+                "socks4",
+                "socks4a",
+                "socks5",
+                "socks5h",
+            ]:
+                return (
+                    False,
+                    "Invalid scheme. Supported schemes are: http, https, socks4, socks4a, socks5, socks5h",
+                )
+            if not parsed.hostname:
+                return False, "Host is required (e.g. host:port or user:pass@host:port)"
+            try:
+                port = parsed.port
+            except ValueError:
+                return False, "Port must be in range 1-65535"
+            if port is None:
+                return False, "Port is required (e.g. host:port)"
+            if not (1 <= port <= 65535):
+                return False, "Port must be in range 1-65535"
+        except Exception as e:
+            return False, f"Malformed URL: {str(e)}"
+        return False, "Malformed proxy URL. Format: scheme://[user:pass@]host:port"
+
+    try:
+        port = int(match.group("port"))
+        if not (1 <= port <= 65535):
+            return False, "Port must be in range 1-65535"
+    except ValueError:
+        return False, "Port must be in range 1-65535"
+
+    return True, ""
+
+
 @app.post("/api/proxies")
 def add_proxy(
     req: ProxyCreate, config: ConfigManager = Depends(get_config)
 ) -> Dict[str, Any]:
     """Register a new proxy."""
-    if not req.url.strip():
+    url = req.url.strip()
+    if not url:
         return {"success": False, "error": "URL is required"}
-    success = config.add_proxy(req.url.strip())
+
+    is_valid, err_msg = is_valid_proxy_url(url)
+    if not is_valid:
+        return {"success": False, "error": err_msg}
+
+    success = config.add_proxy(url)
     if success:
         return {"success": True}
     return {"success": False, "error": "Proxy already exists"}
@@ -479,10 +535,13 @@ def load_proxies(
         if line.strip() and not line.strip().startswith("#")
     ]
 
-    added = 0
+    valid_urls = []
     for url in urls:
-        if config.add_proxy(url):
-            added += 1
+        is_valid, _ = is_valid_proxy_url(url)
+        if is_valid:
+            valid_urls.append(url)
+
+    added = config.add_proxies(valid_urls)
     return {"success": True, "loaded": added, "total": len(urls)}
 
 
