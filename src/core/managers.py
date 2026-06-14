@@ -124,21 +124,6 @@ class ConfigManager(DatabaseEngine):
             # Column already exists
             pass
 
-        try:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS proxies (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    url TEXT UNIQUE,
-                    status TEXT DEFAULT 'unknown',
-                    latency REAL DEFAULT -1,
-                    is_enabled INTEGER DEFAULT 1,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            self.conn.commit()
-        except sqlite3.OperationalError:
-            pass
-
         self.conn.commit()
 
     def add_proxy(self, url: str) -> bool:
@@ -421,7 +406,7 @@ class ConfigManager(DatabaseEngine):
                 "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."
             )
 
-        filename = new_name.replace(" ", "_")
+        filename = get_valid_name(new_name)
 
         old_path = ws["path"]
         new_path = os.path.join(os.path.dirname(old_path), f"{filename}.keen")
