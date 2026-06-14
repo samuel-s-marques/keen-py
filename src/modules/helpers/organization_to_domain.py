@@ -4,11 +4,11 @@ from ddgs import DDGS
 import re
 import socket
 import ssl
-import whois
 import asyncio
 import httpx
 import unicodedata
 from bs4 import BeautifulSoup
+from src.utils.rdap import query_rdap
 
 from src.core.base_module import BaseModule
 
@@ -267,26 +267,24 @@ class OrgToDomain(BaseModule):
         return await asyncio.to_thread(_check)
 
     async def _check_whois(self, domain: str, clean_name: str) -> bool:
-        """Check if WHOIS registrant information contains the company name."""
+        """Check if RDAP registrant information contains the company name."""
+        try:
+            w = await query_rdap(domain)
+            if not w:
+                return False
 
-        def _check():
-            try:
-                w = whois.whois(domain)
+            # Check registrant organization
+            org = w.get("org")
+            if org and self._match_company_words(clean_name, str(org)):
+                return True
 
-                # Check registrant organization
-                org = w.get("org")
-                if org and self._match_company_words(clean_name, str(org)):
-                    return True
-
-                # Check registrant name
-                name = w.get("name")
-                if name and self._match_company_words(clean_name, str(name)):
-                    return True
-            except Exception:
-                pass
-            return False
-
-        return await asyncio.to_thread(_check)
+            # Check registrar name
+            registrar = w.get("registrar")
+            if registrar and self._match_company_words(clean_name, str(registrar)):
+                return True
+        except Exception:
+            pass
+        return False
 
     def _normalize_text(self, text: str) -> str:
         """Normalize text by converting to lowercase and stripping accents/diacritics."""
