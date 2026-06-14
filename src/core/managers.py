@@ -159,6 +159,22 @@ class ConfigManager(DatabaseEngine):
         self.conn.commit()
         return cursor.rowcount > 0
 
+    def delete_proxies_by_pattern(self, pattern: str) -> int:
+        cursor = self.conn.cursor()
+        if pattern == "*":
+            cursor.execute("DELETE FROM proxies")
+        else:
+            # Convert glob wildcards to SQL LIKE wildcards
+            # Escape existing % and _ first, then convert * to % and ? to _
+            sql_pattern = pattern.replace("%", "\\%").replace("_", "\\_")
+            sql_pattern = sql_pattern.replace("*", "%").replace("?", "_")
+            cursor.execute(
+                "DELETE FROM proxies WHERE url LIKE ? ESCAPE '\\'",
+                (sql_pattern,),
+            )
+        self.conn.commit()
+        return cursor.rowcount
+
     def get_proxy(self, proxy_id: int) -> dict | None:
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM proxies WHERE id = ?", (proxy_id,))
@@ -193,9 +209,11 @@ class ConfigManager(DatabaseEngine):
             return None
 
         cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM proxies WHERE is_enabled = 1 AND status = 'online'")
+        cursor.execute(
+            "SELECT * FROM proxies WHERE is_enabled = 1 AND status = 'online'"
+        )
         proxies = [dict(row) for row in cursor.fetchall()]
-        
+
         # If no online proxies, fallback to all enabled proxies
         if not proxies:
             cursor.execute("SELECT * FROM proxies WHERE is_enabled = 1")
@@ -207,8 +225,9 @@ class ConfigManager(DatabaseEngine):
         mode = self.get_preference("proxy_rotation_mode") or "round-robin"
         if mode == "random":
             import random
+
             return random.choice(proxies)
-        
+
         elif mode == "sticky":
             try:
                 sticky_index = int(self.get_preference("proxy_sticky_index") or 0)
@@ -223,10 +242,10 @@ class ConfigManager(DatabaseEngine):
                 current_idx = int(self.get_preference("proxy_sticky_index") or 0)
             except ValueError:
                 current_idx = 0
-            
+
             if current_idx >= len(proxies):
                 current_idx = 0
-                
+
             selected = proxies[current_idx]
             next_idx = (current_idx + 1) % len(proxies)
             self.set_preference("proxy_sticky_index", str(next_idx))
