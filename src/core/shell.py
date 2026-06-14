@@ -341,11 +341,11 @@ class Shell(Cmd):
         subcommands = ["list", "add", "delete", "load", "test", "set-mode"]
         modes = ["random", "round-robin", "sticky", "off"]
         args = line.split()
-        
+
         # If user typed 'proxy ', suggest subcommands
         if len(args) == 1 or (len(args) == 2 and not line.endswith(" ")):
             return [sc for sc in subcommands if sc.startswith(text.lower())]
-        
+
         # If user typed 'proxy set-mode ', suggest rotation modes
         if len(args) >= 2 and args[1].lower() == "set-mode":
             if len(args) == 2 or (len(args) == 3 and not line.endswith(" ")):
@@ -367,16 +367,25 @@ class Shell(Cmd):
         args = arg.strip().split()
         if not args:
             info("Usage:")
-            info("\tproxy list                                - List all configured proxies")
+            info(
+                "\tproxy list                                - List all configured proxies"
+            )
             info("\tproxy add <url>                           - Add a new proxy URL")
             info("\tproxy delete <id>                         - Delete a proxy by ID")
-            info("\tproxy load <path>                         - Bulk load proxies from file")
-            info("\tproxy test                                - Concurrently test proxy connectivity")
-            info("\tproxy set-mode <mode>                     - Set rotation mode (random|round-robin|sticky|off)")
+            info(
+                "\tproxy load <path>                         - Bulk load proxies from file"
+            )
+            info(
+                "\tproxy test                                - Concurrently test proxy connectivity"
+            )
+            info(
+                "\tproxy set-mode <mode>                     - Set rotation mode (random|round-robin|sticky|off)"
+            )
             return
 
         def mask_url(url: str) -> str:
             from urllib.parse import urlparse
+
             try:
                 parsed = urlparse(url)
                 if parsed.password or parsed.username:
@@ -398,7 +407,9 @@ class Shell(Cmd):
         if subcommand == "list":
             proxies = self.config.get_all_proxies()
             if not proxies:
-                info("No proxies loaded. Add one using 'proxy add <url>' or bulk load with 'proxy load <path>'.")
+                info(
+                    "No proxies loaded. Add one using 'proxy add <url>' or bulk load with 'proxy load <path>'."
+                )
                 return
 
             table = Table(
@@ -418,14 +429,14 @@ class Shell(Cmd):
             for p in proxies:
                 status = p.get("status", "unknown")
                 latency_val = p.get("latency", -1)
-                
+
                 # Dynamic coloring for latency/status
                 if status == "online":
                     status_str = stylize("Online", Style(color=Color.GREEN))
                 elif status == "offline":
                     status_str = stylize("Offline", Style(color=Color.RED))
                 else:
-                    status_str = stylize("Unknown", Style(color=Color.LIGHT_GRAY))
+                    status_str = stylize("Unknown", Style(color=Color.GRAY27))
 
                 if latency_val == -1 or status != "online":
                     latency_str = "-"
@@ -438,12 +449,12 @@ class Shell(Cmd):
                     mask_url(p["url"]),
                     status_str,
                     latency_str,
-                    enabled_str
+                    enabled_str,
                 )
 
             console = Console()
             console.print(table)
-            
+
             # Print current proxy routing status
             is_enabled = self.config.get_preference("proxy_enabled") == "true"
             mode = self.config.get_preference("proxy_rotation_mode") or "round-robin"
@@ -466,18 +477,27 @@ class Shell(Cmd):
 
         elif subcommand == "delete":
             if len(args) < 2:
-                error("Usage: proxy delete <id>")
+                error("Usage: proxy delete <id | wildcard_pattern>")
                 return
-            try:
-                proxy_id = int(args[1])
-            except ValueError:
-                error("Invalid proxy ID format.")
-                return
-            
-            if self.config.delete_proxy(proxy_id):
-                success(f"Proxy with ID {proxy_id} deleted successfully.")
+            target = args[1]
+            if "*" in target or "?" in target or not target.isdigit():
+                # Treat as pattern/wildcard
+                deleted_count = self.config.delete_proxies_by_pattern(target)
+                if deleted_count > 0:
+                    success(
+                        f"Deleted {deleted_count} proxies matching pattern '{target}'."
+                    )
+                else:
+                    info(f"No proxies found matching pattern '{target}'.")
             else:
-                error(f"Proxy with ID {proxy_id} not found.")
+                try:
+                    proxy_id = int(target)
+                    if self.config.delete_proxy(proxy_id):
+                        success(f"Proxy with ID {proxy_id} deleted successfully.")
+                    else:
+                        error(f"Proxy with ID {proxy_id} not found.")
+                except ValueError:
+                    error("Invalid proxy ID or pattern format.")
             return
 
         elif subcommand == "load":
@@ -491,13 +511,19 @@ class Shell(Cmd):
 
             try:
                 with open(path, "r", encoding="utf-8") as f:
-                    urls = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
-                
+                    urls = [
+                        line.strip()
+                        for line in f
+                        if line.strip() and not line.strip().startswith("#")
+                    ]
+
                 added = 0
                 for url in urls:
                     if self.config.add_proxy(url):
                         added += 1
-                success(f"Loaded {added} new proxies from file successfully (skipped {len(urls) - added} duplicates).")
+                success(
+                    f"Loaded {added} new proxies from file successfully (skipped {len(urls) - added} duplicates)."
+                )
             except Exception as e:
                 error(f"Failed to load proxies from file: {e}")
             return
@@ -515,7 +541,9 @@ class Shell(Cmd):
                 self.config.set_preference("proxy_rotation_mode", mode)
                 success(f"Proxy system enabled. Rotation mode set to: {mode}")
             else:
-                error("Invalid rotation mode. Choose from: random, round-robin, sticky, off.")
+                error(
+                    "Invalid rotation mode. Choose from: random, round-robin, sticky, off."
+                )
             return
 
         elif subcommand == "test":
@@ -524,11 +552,14 @@ class Shell(Cmd):
                 info("No proxies loaded to test.")
                 return
 
-            info(f"Verifying {len(proxies)} proxies concurrently against https://httpbin.org/ip...")
-            
+            info(
+                f"Verifying {len(proxies)} proxies concurrently against https://httpbin.org/ip..."
+            )
+
             async def test_single_proxy(p, sem):
                 import httpx
                 import time
+
                 async with sem:
                     url = p["url"]
                     proxy_id = p["id"]
@@ -538,7 +569,9 @@ class Shell(Cmd):
                             resp = await client.get("https://httpbin.org/ip")
                             if resp.status_code == 200:
                                 latency = time.time() - start_time
-                                self.config.update_proxy_status(proxy_id, "online", latency)
+                                self.config.update_proxy_status(
+                                    proxy_id, "online", latency
+                                )
                                 return True
                             else:
                                 self.config.update_proxy_status(proxy_id, "offline", -1)
@@ -554,7 +587,9 @@ class Shell(Cmd):
                 results = await asyncio.gather(*tasks)
                 online_count = sum(1 for r in results if r)
                 offline_count = len(results) - online_count
-                success(f"Test complete: {online_count} Online, {offline_count} Offline.")
+                success(
+                    f"Test complete: {online_count} Online, {offline_count} Offline."
+                )
 
             try:
                 asyncio.run(run_all_tests())
