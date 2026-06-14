@@ -228,13 +228,17 @@ class ConfigManager(DatabaseEngine):
 
             return random.choice(proxies)
 
-        elif mode == "sticky":
+elif mode == "sticky":
             try:
                 sticky_index = int(self.get_preference("proxy_sticky_index") or 0)
             except ValueError:
                 sticky_index = 0
+                self.set_preference("proxy_sticky_index", "0")
+
             if sticky_index >= len(proxies):
                 sticky_index = 0
+                self.set_preference("proxy_sticky_index", "0")
+
             return proxies[sticky_index]
 
         else:  # round-robin
