@@ -588,9 +588,11 @@ async def test_proxies(
         await asyncio.gather(*tasks)
         bg_config.close()
 
-    # Schedule the coroutine in background tasks
-    # Since background_tasks accepts async def functions, let's run it directly
-    background_tasks.add_task(perform_async_checks)
+    # Schedule the coroutine without blocking the request lifecycle/event loop
+    def _schedule() -> None:
+        asyncio.create_task(perform_async_checks())
+
+    background_tasks.add_task(_schedule)
     return {"status": "testing"}
 
 
