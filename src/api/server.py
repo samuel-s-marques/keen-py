@@ -453,44 +453,16 @@ def toggle_proxy(
 def load_proxies(
     req: Dict[str, Any], config: ConfigManager = Depends(get_config)
 ) -> Dict[str, Any]:
-    """Bulk import proxies from text list or filepath under the allowed import directory."""
+    """Bulk import proxies from raw text content."""
     content = req.get("content", "")
-    filepath = req.get("path", "")
-    urls = []
-
-    if filepath:
-        try:
-            allowed_base_dir = os.path.realpath(os.path.join(os.getcwd(), "proxy_imports"))
-            resolved_path = os.path.realpath(os.path.join(allowed_base_dir, filepath))
-            if (
-                os.path.commonpath([allowed_base_dir, resolved_path])
-                != allowed_base_dir
-            ):
-                return {"success": False, "error": "Invalid file path"}
-        except Exception:
-            return {"success": False, "error": "Invalid file path"}
-
-        if os.path.exists(resolved_path) and os.path.isfile(resolved_path):
-            try:
-                with open(resolved_path, "r", encoding="utf-8") as f:
-                    urls = [
-                        line.strip()
-                        for line in f
-                        if line.strip() and not line.strip().startswith("#")
-                    ]
-            except Exception:
-                logger.exception("Failed to read proxy import file")
-                return {"success": False, "error": "Failed to read file"}
-        else:
-            return {"success": False, "error": "File path does not exist"}
-    elif content:
-        urls = [
-            line.strip()
-            for line in content.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
-    else:
+    if not content:
         return {"success": False, "error": "No proxies provided"}
+
+    urls = [
+        line.strip()
+        for line in content.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
 
     added = 0
     for url in urls:
@@ -504,7 +476,6 @@ async def test_proxies(
     background_tasks: BackgroundTasks, config: ConfigManager = Depends(get_config)
 ) -> Dict[str, str]:
     """Trigger concurrent connectivity health checks in the background."""
-    from fastapi import BackgroundTasks
 
     # Need to run connectivity checks asynchronously in a background task
     async def perform_async_checks():
