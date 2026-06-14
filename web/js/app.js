@@ -454,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         latencyText = `${Math.round(p.latency * 1000)}ms`;
                     }
 
-const maskUrl = (url) => {
+                    const maskUrl = (url) => {
                         try {
                             const u = new URL(url);
                             if (u.username || u.password) {
@@ -595,12 +595,13 @@ const maskUrl = (url) => {
                 btnTestProxies.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
                 await fetch(`${API_BASE}/proxies/test`, { method: 'POST' });
 
-                // Poll check every 2 seconds for a total of 5 times to update table
+                // Poll check every 2 seconds for up to 60 seconds to update table
                 let count = 0;
+                const maxPolls = 30;
                 const interval = setInterval(async () => {
                     await fetchProxies();
                     count++;
-                    if (count >= 5) {
+                    if (count >= maxPolls) {
                         clearInterval(interval);
                         // Re-evaluate button disabled state after testing completes
                         const totalCountSpan = document.getElementById('proxy-total-count');
