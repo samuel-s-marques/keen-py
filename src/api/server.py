@@ -460,7 +460,7 @@ def load_proxies(
 
     if filepath:
         try:
-            allowed_base_dir = os.path.realpath(os.getcwd())
+            allowed_base_dir = os.path.realpath(os.path.join(os.getcwd(), "proxy_imports"))
             resolved_path = os.path.realpath(os.path.join(allowed_base_dir, filepath))
             if (
                 os.path.commonpath([allowed_base_dir, resolved_path])
@@ -470,7 +470,7 @@ def load_proxies(
         except Exception:
             return {"success": False, "error": "Invalid file path"}
 
-        if os.path.exists(resolved_path):
+        if os.path.exists(resolved_path) and os.path.isfile(resolved_path):
             try:
                 with open(resolved_path, "r", encoding="utf-8") as f:
                     urls = [
