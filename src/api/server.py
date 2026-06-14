@@ -468,8 +468,9 @@ def is_valid_proxy_url(url: str) -> tuple[bool, str]:
                 return False, "Port is required (e.g. host:port)"
             if not (1 <= port <= 65535):
                 return False, "Port must be in range 1-65535"
-        except Exception as e:
-            return False, f"Malformed URL: {str(e)}"
+        except Exception:
+            logger.exception("Failed to parse proxy URL during validation")
+            return False, "Malformed proxy URL. Format: scheme://[user:pass@]host:port"
         return False, "Malformed proxy URL. Format: scheme://[user:pass@]host:port"
 
     try:
