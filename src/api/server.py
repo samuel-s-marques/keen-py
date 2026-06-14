@@ -438,15 +438,23 @@ def toggle_proxy(proxy_id: int, req: Dict[str, bool], config: ConfigManager = De
 
 @app.post("/api/proxies/load")
 def load_proxies(req: Dict[str, Any], config: ConfigManager = Depends(get_config)) -> Dict[str, Any]:
-    """Bulk import proxies from text list or absolute filepath."""
+    """Bulk import proxies from text list or filepath under the allowed import directory."""
     content = req.get("content", "")
     filepath = req.get("path", "")
     urls = []
 
     if filepath:
-        if os.path.exists(filepath):
+        try:
+            allowed_base_dir = os.path.realpath(os.getcwd())
+            resolved_path = os.path.realpath(os.path.join(allowed_base_dir, filepath))
+            if os.path.commonpath([allowed_base_dir, resolved_path]) != allowed_base_dir:
+                return {"success": False, "error": "Invalid file path"}
+        except Exception:
+            return {"success": False, "error": "Invalid file path"}
+
+        if os.path.exists(resolved_path):
             try:
-                with open(filepath, "r", encoding="utf-8") as f:
+                with open(resolved_path, "r", encoding="utf-8") as f:
                     urls = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
             except Exception as e:
                 return {"success": False, "error": f"Failed to read file: {e}"}

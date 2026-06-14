@@ -454,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         latencyText = `${Math.round(p.latency * 1000)}ms`;
                     }
 
-                    const maskUrl = (url) => {
+const maskUrl = (url) => {
                         try {
                             const u = new URL(url);
                             if (u.username || u.password) {
@@ -464,11 +464,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         return url;
                     };
 
+                    const escapeHtml = (s) =>
+                        String(s).replace(/[&<>"']/g, (c) => ({
+                            '&': '&amp;',
+                            '<': '&lt;',
+                            '>': '&gt;',
+                            '"': '&quot;',
+                            "'": '&#39;'
+                        }[c]));
+
+                    const safeStatus = ['online', 'offline', 'unknown'].includes(status) ? status : 'unknown';
+
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td style="word-break: break-all;">${maskUrl(p.url)}</td>
-                        <td style="text-align: center;"><span class="status-badge ${status}">${status.toUpperCase()}</span></td>
-                        <td style="text-align: right; color: var(--accent-cyan); font-family: var(--font-mono);">${latencyText}</td>
+                        <td style="word-break: break-all;">${escapeHtml(maskUrl(p.url))}</td>
+                        <td style="text-align: center;"><span class="status-badge ${safeStatus}">${safeStatus.toUpperCase()}</span></td>
+                        <td style="text-align: right; color: var(--accent-cyan); font-family: var(--font-mono);">${escapeHtml(latencyText)}</td>
                         <td style="text-align: center;">
                             <input type="checkbox" class="proxy-row-toggle" data-id="${p.id}" ${p.is_enabled === 1 ? 'checked' : ''} style="width: auto; cursor: pointer;">
                         </td>
