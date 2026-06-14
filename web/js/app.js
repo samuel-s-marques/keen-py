@@ -460,7 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (u.username || u.password) {
                                 return `${u.protocol}//${u.username}:${u.password ? '****' : ''}@${u.host}`;
                             }
-                        } catch (e) {}
+                        } catch (e) { }
                         return url;
                     };
 
@@ -578,7 +578,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 btnTestProxies.disabled = true;
                 btnTestProxies.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
                 await fetch(`${API_BASE}/proxies/test`, { method: 'POST' });
-                
+
                 // Poll check every 2 seconds for a total of 5 times to update table
                 let count = 0;
                 const interval = setInterval(async () => {
@@ -612,9 +612,28 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             const uploadFile = async (file) => {
+                // Prevent uploading non-TXT files
+                if (!file.name.toLowerCase().endsWith('.txt')) {
+                    alert('Only .txt files are allowed.');
+                    return;
+                }
+
+                // Check file MIME type (if present)
+                if (file.type && !file.type.startsWith('text/')) {
+                    alert('Selected file is not a valid text file.');
+                    return;
+                }
+
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     const text = e.target.result;
+
+                    // Content-based heuristic check for binary files (e.g., check for null bytes or control characters)
+                    if (text.includes('\0') || /[\x00-\x08\x0E-\x1F\x7F]/.test(text)) {
+                        alert('Error: The file contains binary data and does not appear to be a real text file.');
+                        return;
+                    }
+
                     const res = await fetch(`${API_BASE}/proxies/load`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
