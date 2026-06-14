@@ -356,8 +356,7 @@ class BaseModule:
         try:
             proxy = config.get_next_proxy()
             if proxy:
-                kwargs["proxy"] = proxy["url"]
-        finally:
+                kwargs.setdefault("proxy", proxy["url"])
             if should_close_config and config:
                 config.close()
 
