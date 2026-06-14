@@ -194,16 +194,14 @@ class ConfigManager(DatabaseEngine):
             return None
 
         cursor = self.conn.cursor()
-cursor.execute(
+        cursor.execute(
             "SELECT * FROM proxies WHERE is_enabled = 1 AND status = 'online' ORDER BY id ASC"
         )
         proxies = [dict(row) for row in cursor.fetchall()]
 
         # If no online proxies, fallback to all enabled proxies
         if not proxies:
-            cursor.execute(
-                "SELECT * FROM proxies WHERE is_enabled = 1 ORDER BY id ASC"
-            )
+            cursor.execute("SELECT * FROM proxies WHERE is_enabled = 1 ORDER BY id ASC")
             proxies = [dict(row) for row in cursor.fetchall()]
 
         if not proxies:
