@@ -506,6 +506,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const totalCountSpan = document.getElementById('proxy-total-count');
                 if (onlineCountSpan) onlineCountSpan.textContent = onlineCount;
                 if (totalCountSpan) totalCountSpan.textContent = totalCount;
+
+                const btnTestProxies = document.getElementById('btn-test-proxies');
+                if (btnTestProxies && !btnTestProxies.innerHTML.includes('Testing...')) {
+                    btnTestProxies.disabled = (totalCount === 0);
+                }
             }
         } catch (err) {
             console.error('Failed to fetch proxies', err);
@@ -586,7 +591,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     count++;
                     if (count >= 5) {
                         clearInterval(interval);
-                        btnTestProxies.disabled = false;
+                        // Re-evaluate button disabled state after testing completes
+                        const totalCountSpan = document.getElementById('proxy-total-count');
+                        const totalCount = totalCountSpan ? parseInt(totalCountSpan.textContent || '0', 10) : 0;
+                        btnTestProxies.disabled = (totalCount === 0);
                         btnTestProxies.innerHTML = '<i class="fa-solid fa-play"></i> Test Connectivity';
                     }
                 }, 2000);
