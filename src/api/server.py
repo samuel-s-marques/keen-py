@@ -411,10 +411,34 @@ def update_preferences(
     return {"success": True}
 
 
+def mask_proxy_url(url: str) -> str:
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+        if parsed.username or parsed.password:
+            netloc = ""
+            if parsed.username:
+                netloc += "****"
+            if parsed.password:
+                netloc += ":****"
+            netloc += f"@{parsed.hostname}"
+            if parsed.port:
+                netloc += f":{parsed.port}"
+            return parsed._replace(netloc=netloc).geturl()
+    except Exception:
+        pass
+    return url
+
+
 @app.get("/api/proxies")
 def get_proxies(config: ConfigManager = Depends(get_config)) -> List[Dict[str, Any]]:
     """Get all registered proxies."""
-    return config.get_all_proxies()
+    proxies = config.get_all_proxies()
+    for p in proxies:
+        if "url" in p:
+            p["url"] = mask_proxy_url(p["url"])
+    return proxies
 
 
 @app.post("/api/proxies")
