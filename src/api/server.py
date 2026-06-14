@@ -7,7 +7,14 @@ import uvicorn
 from typing import Optional, Dict, Any, Generator, List, Union
 import io
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request, BackgroundTasks
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    Depends,
+    Request,
+    BackgroundTasks,
+)
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -411,7 +418,9 @@ def get_proxies(config: ConfigManager = Depends(get_config)) -> List[Dict[str, A
 
 
 @app.post("/api/proxies")
-def add_proxy(req: ProxyCreate, config: ConfigManager = Depends(get_config)) -> Dict[str, Any]:
+def add_proxy(
+    req: ProxyCreate, config: ConfigManager = Depends(get_config)
+) -> Dict[str, Any]:
     """Register a new proxy."""
     if not req.url.strip():
         return {"success": False, "error": "URL is required"}
@@ -422,14 +431,18 @@ def add_proxy(req: ProxyCreate, config: ConfigManager = Depends(get_config)) -> 
 
 
 @app.delete("/api/proxies/{proxy_id}")
-def delete_proxy(proxy_id: int, config: ConfigManager = Depends(get_config)) -> Dict[str, bool]:
+def delete_proxy(
+    proxy_id: int, config: ConfigManager = Depends(get_config)
+) -> Dict[str, bool]:
     """Delete a registered proxy."""
     success = config.delete_proxy(proxy_id)
     return {"success": success}
 
 
 @app.post("/api/proxies/{proxy_id}/toggle")
-def toggle_proxy(proxy_id: int, req: Dict[str, bool], config: ConfigManager = Depends(get_config)) -> Dict[str, bool]:
+def toggle_proxy(
+    proxy_id: int, req: Dict[str, bool], config: ConfigManager = Depends(get_config)
+) -> Dict[str, bool]:
     """Toggle is_enabled for a proxy."""
     enabled = req.get("is_enabled", True)
     config.set_proxy_enabled(proxy_id, enabled)
@@ -437,7 +450,9 @@ def toggle_proxy(proxy_id: int, req: Dict[str, bool], config: ConfigManager = De
 
 
 @app.post("/api/proxies/load")
-def load_proxies(req: Dict[str, Any], config: ConfigManager = Depends(get_config)) -> Dict[str, Any]:
+def load_proxies(
+    req: Dict[str, Any], config: ConfigManager = Depends(get_config)
+) -> Dict[str, Any]:
     """Bulk import proxies from text list or filepath under the allowed import directory."""
     content = req.get("content", "")
     filepath = req.get("path", "")
@@ -447,7 +462,10 @@ def load_proxies(req: Dict[str, Any], config: ConfigManager = Depends(get_config
         try:
             allowed_base_dir = os.path.realpath(os.getcwd())
             resolved_path = os.path.realpath(os.path.join(allowed_base_dir, filepath))
-            if os.path.commonpath([allowed_base_dir, resolved_path]) != allowed_base_dir:
+            if (
+                os.path.commonpath([allowed_base_dir, resolved_path])
+                != allowed_base_dir
+            ):
                 return {"success": False, "error": "Invalid file path"}
         except Exception:
             return {"success": False, "error": "Invalid file path"}
@@ -455,13 +473,22 @@ def load_proxies(req: Dict[str, Any], config: ConfigManager = Depends(get_config
         if os.path.exists(resolved_path):
             try:
                 with open(resolved_path, "r", encoding="utf-8") as f:
-                    urls = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
-            except Exception as e:
-                return {"success": False, "error": f"Failed to read file: {e}"}
+                    urls = [
+                        line.strip()
+                        for line in f
+                        if line.strip() and not line.strip().startswith("#")
+                    ]
+            except Exception:
+                logger.exception("Failed to read proxy import file")
+                return {"success": False, "error": "Failed to read file"}
         else:
             return {"success": False, "error": "File path does not exist"}
     elif content:
-        urls = [line.strip() for line in content.splitlines() if line.strip() and not line.strip().startswith("#")]
+        urls = [
+            line.strip()
+            for line in content.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
     else:
         return {"success": False, "error": "No proxies provided"}
 
@@ -478,10 +505,12 @@ async def test_proxies(
 ) -> Dict[str, str]:
     """Trigger concurrent connectivity health checks in the background."""
     from fastapi import BackgroundTasks
+
     # Need to run connectivity checks asynchronously in a background task
     async def perform_async_checks():
         # Setup temporary config instance for background runner
         from src.core.managers import ConfigManager
+
         bg_config = ConfigManager("~/.keen/config.db")
         proxies = bg_config.get_all_proxies()
         if not proxies:
@@ -490,6 +519,7 @@ async def test_proxies(
 
         import httpx
         import time
+
         sem = asyncio.Semaphore(10)
 
         async def check_one(p):
