@@ -6,6 +6,7 @@ import contextlib
 import uvicorn
 from typing import Optional, Dict, Any, Generator, List, Union
 import io
+import re
 
 from fastapi import (
     FastAPI,
@@ -26,6 +27,8 @@ from src.core.managers import ConfigManager, WorkspaceManager
 from src.core.loader import load_modules
 
 app = FastAPI(title="Keen API Web Server")
+
+PROXY_CREDENTIALS_RE = re.compile(r"^(https?|socks4|socks5)://([^/]+)@")
 
 app.add_middleware(
     CORSMiddleware,
@@ -412,22 +415,10 @@ def update_preferences(
 
 
 def mask_proxy_url(url: str) -> str:
-    from urllib.parse import urlparse
-
-    try:
-        parsed = urlparse(url)
-        if parsed.username or parsed.password:
-            netloc = ""
-            if parsed.username:
-                netloc += "****"
-            if parsed.password:
-                netloc += ":****"
-            netloc += f"@{parsed.hostname}"
-            if parsed.port:
-                netloc += f":{parsed.port}"
-            return parsed._replace(netloc=netloc).geturl()
-    except Exception:
-        pass
+    match = PROXY_CREDENTIALS_RE.match(url)
+    if match:
+        scheme = match.group(1)
+        return f"{scheme}://****:****@{url[match.end() :]}"
     return url
 
 
