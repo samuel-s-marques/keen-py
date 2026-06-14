@@ -12,7 +12,7 @@ CACHE_PATH = os.path.expanduser("~/.keen/rdap_bootstrap.json")
 CACHE_EXPIRY = 7 * 24 * 60 * 60  # 7 days
 
 
-async def get_bootstrap_data() -> dict | None:
+async def get_bootstrap_data(client: httpx.AsyncClient | None = None) -> dict | None:
     """Retrieves the RDAP bootstrap registry from IANA and caches it locally."""
     if os.path.exists(CACHE_PATH):
         try:
@@ -26,8 +26,17 @@ async def get_bootstrap_data() -> dict | None:
     # Fetch new registry
     try:
         os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(BOOTSTRAP_URL)
+        from contextlib import asynccontextmanager
+        @asynccontextmanager
+        async def get_bootstrap_client():
+            if client is not None:
+                yield client
+            else:
+                async with httpx.AsyncClient(timeout=10) as local_client:
+                    yield local_client
+
+        async with get_bootstrap_client() as active_client:
+            r = await active_client.get(BOOTSTRAP_URL)
             if r.status_code == 200:
                 data = r.json()
                 with open(CACHE_PATH, "w", encoding="utf-8") as f:
@@ -184,9 +193,9 @@ def parse_rdap_domain_data(data: dict) -> dict[str, Any]:
     }
 
 
-async def query_rdap(domain: str) -> dict[str, Any] | None:
+async def query_rdap(domain: str, client: httpx.AsyncClient | None = None) -> dict[str, Any] | None:
     """Performs an RDAP query for a domain, falls back to rdap.org, and returns parsed data."""
-    bootstrap_data = await get_bootstrap_data()
+    bootstrap_data = await get_bootstrap_data(client)
     base_url = get_rdap_base_url(domain, bootstrap_data)
 
     url = None
@@ -196,15 +205,24 @@ async def query_rdap(domain: str) -> dict[str, Any] | None:
     else:
         url = f"https://rdap.org/domain/{domain}"
 
+    from contextlib import asynccontextmanager
+    @asynccontextmanager
+    async def get_active_client():
+        if client is not None:
+            yield client
+        else:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15) as local_client:
+                yield local_client
+
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-            r = await client.get(url, headers={"Accept": "application/rdap+json"})
+        async with get_active_client() as active_client:
+            r = await active_client.get(url, headers={"Accept": "application/rdap+json"})
             if r.status_code == 200:
                 return parse_rdap_domain_data(r.json())
             
             # If query failed but we resolved via bootstrap, retry with rdap.org redirector
             if base_url:
-                r = await client.get(
+                r = await active_client.get(
                     f"https://rdap.org/domain/{domain}",
                     headers={"Accept": "application/rdap+json"}
                 )
@@ -214,8 +232,8 @@ async def query_rdap(domain: str) -> dict[str, Any] | None:
         # If the direct/bootstrap query timed out or errored, try rdap.org as a final fallback
         if base_url:
             try:
-                async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-                    r = await client.get(
+                async with get_active_client() as active_client:
+                    r = await active_client.get(
                         f"https://rdap.org/domain/{domain}",
                         headers={"Accept": "application/rdap+json"}
                     )

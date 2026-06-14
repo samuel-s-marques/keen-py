@@ -5,7 +5,6 @@ import re
 import socket
 import ssl
 import asyncio
-import httpx
 import unicodedata
 from bs4 import BeautifulSoup
 from src.utils.rdap import query_rdap
@@ -146,7 +145,7 @@ class OrgToDomain(BaseModule):
         # HTML Title & Meta description match
         try:
             headers = {"User-Agent": UserAgents.get()}
-            async with httpx.AsyncClient(follow_redirects=True, timeout=5) as client:
+            async with self.get_http_client(follow_redirects=True, timeout=5) as client:
                 response = await client.get(f"https://{domain}", headers=headers)
                 if response.status_code == 200:
                     soup = BeautifulSoup(response.text, "html.parser")
@@ -269,7 +268,10 @@ class OrgToDomain(BaseModule):
     async def _check_whois(self, domain: str, clean_name: str) -> bool:
         """Check if RDAP registrant information contains the company name."""
         try:
-            w = await query_rdap(domain)
+            async with self.get_http_client(
+                follow_redirects=True, timeout=15
+            ) as client:
+                w = await query_rdap(domain, client=client)
             if not w:
                 return False
 

@@ -1,7 +1,6 @@
 from src.utils.print_utils import warn, error, success
 from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
-import httpx
 
 from src.core.base_module import BaseModule
 
@@ -152,7 +151,7 @@ class LeakModule(BaseModule):
             return []
 
         try:
-            async with httpx.AsyncClient(follow_redirects=True) as client:
+            async with self.get_http_client(follow_redirects=True) as client:
                 r = await client.get(
                     f"https://haveibeenpwned.com/api/v3/breachedAccount/{target}",
                     headers={"User-Agent": "keen-py/1.0.0", "hibp-api-key": api_key},
@@ -195,7 +194,7 @@ class LeakModule(BaseModule):
                 "Content-Type": "application/json",
             }
 
-            async with httpx.AsyncClient(follow_redirects=True) as client:
+            async with self.get_http_client(follow_redirects=True) as client:
                 r = await client.post(
                     "https://breach.vip/api/search", headers=headers, json=payload
                 )
@@ -278,7 +277,7 @@ class LeakModule(BaseModule):
             if api_key:
                 url = f"https://leakcheck.io/api/v2/query/{target}"
 
-            async with httpx.AsyncClient(follow_redirects=True) as client:
+            async with self.get_http_client(follow_redirects=True) as client:
                 r = await client.get(url, headers=headers)
 
             if r.status_code == 403:
@@ -363,7 +362,7 @@ class LeakModule(BaseModule):
                 "DeHashed-Api-Key": api_key,
                 "Content-Type": "application/json",
             }
-            async with httpx.AsyncClient(follow_redirects=True) as client:
+            async with self.get_http_client(follow_redirects=True) as client:
                 r = await client.post(
                     "https://api.dehashed.com/v2/search", headers=headers, json=payload
                 )
@@ -449,7 +448,7 @@ class LeakModule(BaseModule):
             }
             params: dict = {"term": target, "func": "auto"}
 
-            async with httpx.AsyncClient(follow_redirects=True) as client:
+            async with self.get_http_client(follow_redirects=True) as client:
                 r = await client.get(
                     "https://breachdirectory.p.rapidapi.com/",
                     headers=headers,
@@ -525,7 +524,7 @@ class LeakModule(BaseModule):
                 "User-Agent": UserAgents.get(),
             }
 
-            async with httpx.AsyncClient(follow_redirects=True) as client:
+            async with self.get_http_client(follow_redirects=True) as client:
                 r = await client.get(
                     f"https://api.proxynova.com/comb?query={target}&start=0&limit=20",
                     headers=headers,

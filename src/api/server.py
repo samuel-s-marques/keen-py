@@ -6,8 +6,16 @@ import contextlib
 import uvicorn
 from typing import Optional, Dict, Any, Generator, List, Union
 import io
+import re
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    Depends,
+    Request,
+    BackgroundTasks,
+)
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +27,15 @@ from src.core.managers import ConfigManager, WorkspaceManager
 from src.core.loader import load_modules
 
 app = FastAPI(title="Keen API Web Server")
+
+PROXY_CREDENTIALS_RE = re.compile(r"^(https?|socks4|socks5)://([^/]+)@")
+PROXY_VALIDATION_RE = re.compile(
+    r"^(?P<scheme>https?|socks4|socks4a|socks5|socks5h)://"
+    r"(?:[^/@:]+(?::[^/@:]+)?@)?"
+    r"(?P<host>[^/:]+)"
+    r":(?P<port>[0-9]+)$",
+    re.IGNORECASE,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,6 +76,15 @@ class APIKeyCreate(BaseModel):
 
 class WorkspaceRename(BaseModel):
     new_name: str
+
+
+class ProxyCreate(BaseModel):
+    url: str
+
+
+class ProxyUpdate(BaseModel):
+    url: Optional[str] = None
+    is_enabled: Optional[bool] = None
 
 
 class NodePositionsUpdate(BaseModel):
@@ -393,6 +419,181 @@ def update_preferences(
                 continue
             config.set_preference(key, str(val))
     return {"success": True}
+
+
+def mask_proxy_url(url: str) -> str:
+    match = PROXY_CREDENTIALS_RE.match(url)
+    if match:
+        scheme = match.group(1)
+        return f"{scheme}://****:****@{url[match.end() :]}"
+    return url
+
+
+@app.get("/api/proxies")
+def get_proxies(config: ConfigManager = Depends(get_config)) -> List[Dict[str, Any]]:
+    """Get all registered proxies."""
+    proxies = config.get_all_proxies()
+    for p in proxies:
+        if "url" in p:
+            p["url"] = mask_proxy_url(p["url"])
+    return proxies
+
+
+def is_valid_proxy_url(url: str) -> tuple[bool, str]:
+    match = PROXY_VALIDATION_RE.match(url)
+    if not match:
+        from urllib.parse import urlparse
+
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme.lower() not in [
+                "http",
+                "https",
+                "socks4",
+                "socks4a",
+                "socks5",
+                "socks5h",
+            ]:
+                return (
+                    False,
+                    "Invalid scheme. Supported schemes are: http, https, socks4, socks4a, socks5, socks5h",
+                )
+            if not parsed.hostname:
+                return False, "Host is required (e.g. host:port or user:pass@host:port)"
+            try:
+                port = parsed.port
+            except ValueError:
+                return False, "Port must be in range 1-65535"
+            if port is None:
+                return False, "Port is required (e.g. host:port)"
+            if not (1 <= port <= 65535):
+                return False, "Port must be in range 1-65535"
+        except Exception:
+            logger.exception("Failed to parse proxy URL during validation")
+            return False, "Malformed proxy URL. Format: scheme://[user:pass@]host:port"
+        return False, "Malformed proxy URL. Format: scheme://[user:pass@]host:port"
+
+    try:
+        port = int(match.group("port"))
+        if not (1 <= port <= 65535):
+            return False, "Port must be in range 1-65535"
+    except ValueError:
+        return False, "Port must be in range 1-65535"
+
+    return True, ""
+
+
+@app.post("/api/proxies")
+def add_proxy(
+    req: ProxyCreate, config: ConfigManager = Depends(get_config)
+) -> Dict[str, Any]:
+    """Register a new proxy."""
+    url = req.url.strip()
+    if not url:
+        return {"success": False, "error": "URL is required"}
+
+    is_valid, err_msg = is_valid_proxy_url(url)
+    if not is_valid:
+        return {"success": False, "error": err_msg}
+
+    success = config.add_proxy(url)
+    if success:
+        return {"success": True}
+    return {"success": False, "error": "Proxy already exists"}
+
+
+@app.delete("/api/proxies/{proxy_id}")
+def delete_proxy(
+    proxy_id: int, config: ConfigManager = Depends(get_config)
+) -> Dict[str, bool]:
+    """Delete a registered proxy."""
+    success = config.delete_proxy(proxy_id)
+    return {"success": success}
+
+
+@app.post("/api/proxies/{proxy_id}/toggle")
+def toggle_proxy(
+    proxy_id: int, req: Dict[str, Any], config: ConfigManager = Depends(get_config)
+) -> Dict[str, bool]:
+    """Toggle is_enabled for a proxy."""
+    enabled = bool(req.get("is_enabled", True))
+    success = config.set_proxy_enabled(proxy_id, enabled)
+    return {"success": success}
+
+
+@app.post("/api/proxies/load")
+def load_proxies(
+    req: Dict[str, Any], config: ConfigManager = Depends(get_config)
+) -> Dict[str, Any]:
+    """Bulk import proxies from raw text content."""
+    content = req.get("content", "")
+    if not content:
+        return {"success": False, "error": "No proxies provided"}
+
+    urls = [
+        line.strip()
+        for line in content.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+    valid_urls = []
+    for url in urls:
+        is_valid, _ = is_valid_proxy_url(url)
+        if is_valid:
+            valid_urls.append(url)
+
+    added = config.add_proxies(valid_urls)
+    return {"success": True, "loaded": added, "total": len(urls)}
+
+
+@app.post("/api/proxies/test")
+async def test_proxies(
+    background_tasks: BackgroundTasks, config: ConfigManager = Depends(get_config)
+) -> Dict[str, str]:
+    """Trigger concurrent connectivity health checks in the background."""
+
+    # Need to run connectivity checks asynchronously in a background task
+    async def perform_async_checks():
+        # Setup temporary config instance for background runner
+        from src.core.managers import ConfigManager
+
+        bg_config = ConfigManager("~/.keen/config.db")
+        proxies = bg_config.get_all_proxies()
+        if not proxies:
+            bg_config.close()
+            return
+
+        import httpx
+        import time
+
+        sem = asyncio.Semaphore(10)
+
+        async def check_one(p):
+            async with sem:
+                url = p["url"]
+                proxy_id = p["id"]
+                start_time = time.time()
+                try:
+                    async with httpx.AsyncClient(proxy=url, timeout=5.0) as client:
+                        resp = await client.get("https://httpbin.org/ip")
+                        if resp.status_code == 200:
+                            latency = time.time() - start_time
+                            bg_config.update_proxy_status(proxy_id, "online", latency)
+                        else:
+                            bg_config.update_proxy_status(proxy_id, "offline", -1)
+                except Exception:
+                    bg_config.update_proxy_status(proxy_id, "offline", -1)
+
+        tasks = [check_one(p) for p in proxies]
+        await asyncio.gather(*tasks)
+        bg_config.close()
+
+    # Schedule the coroutine without blocking the request lifecycle/event loop
+    def _schedule() -> None:
+        asyncio.create_task(perform_async_checks())
+
+    background_tasks.add_task(_schedule)
+    return {"status": "testing"}
 
 
 @app.delete("/api/workspaces/{name}")

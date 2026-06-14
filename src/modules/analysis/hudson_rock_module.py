@@ -1,5 +1,3 @@
-import httpx
-from typing import Any
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -31,7 +29,7 @@ class HudsonRockModule(BaseModule):
 
     async def execute(self, email: str) -> None:
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 r = await client.get(
                     f"https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-email?email={email}",
                     headers={

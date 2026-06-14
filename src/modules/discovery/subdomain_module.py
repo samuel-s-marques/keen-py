@@ -1,6 +1,5 @@
 import asyncio
 from src.utils.user_agents import UserAgents
-import httpx
 import re
 import concurrent.futures
 import socket
@@ -102,7 +101,7 @@ class SubdomainModule(BaseModule):
         subdomains: set[str] = set()
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 r = await client.get(
                     f"https://crt.sh/?q=%25.{target}&output=json",
                     timeout=60,
@@ -275,7 +274,7 @@ class SubdomainModule(BaseModule):
         subdomains = set()
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 r = await client.get(
                     f"https://anubisdb.com/anubis/subdomains/{target}",
                     timeout=60,
@@ -299,7 +298,7 @@ class SubdomainModule(BaseModule):
         subdomains = set()
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 r = await client.get(
                     f"https://rapiddns.io/subdomain/{target}?full=1",
                     timeout=30,

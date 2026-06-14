@@ -1,5 +1,4 @@
 from src.utils.user_agents import UserAgents
-import httpx
 import dns.resolver
 import asyncio
 import re
@@ -105,7 +104,7 @@ class WafModule(BaseModule):
             # HTTP Analysis (Headers)
             url = target if target.startswith("http") else f"https://{target}"
             try:
-                async with httpx.AsyncClient(verify=False) as client:
+                async with self.get_http_client(verify=False) as client:
                     response = await client.get(
                         url,
                         timeout=10,

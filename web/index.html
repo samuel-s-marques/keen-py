@@ -270,6 +270,9 @@
                     <button class="settings-tab" data-target="settings-preferences">
                         <i class="fa-solid fa-sliders"></i> Preferences
                     </button>
+                    <button class="settings-tab" data-target="settings-proxies">
+                        <i class="fa-solid fa-route"></i> Proxies
+                    </button>
                 </div>
                 <!-- Right Panel: Content -->
                 <div class="settings-content">
@@ -303,7 +306,7 @@
                                     Key</button>
                             </div>
                             <div id="api-keys-list"
-                                style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary); max-height: 200px; overflow-y: auto;">
+                                style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary); max-height: 400px; overflow-y: auto;">
                                 <!-- Keys loaded here -->
                             </div>
                         </div>
@@ -370,6 +373,117 @@
 
                         <button id="btn-save-preferences" class="btn-primary full-width" style="margin-top: 12px;">Save
                             Preferences</button>
+                    </div>
+
+                    <div id="settings-proxies" class="settings-section">
+                        <h4>Proxy Manager</h4>
+                        <p class="section-desc">Manage and route traffic through custom rotating proxies.</p>
+
+                        <!-- Dashboard / Control Hub -->
+                        <div class="proxy-dashboard-grid"
+                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;">
+                            <div class="proxy-dash-card"
+                                style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; text-align: center;">
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">Global Routing</div>
+                                <div id="proxy-status-val"
+                                    style="font-size: 1.1rem; font-weight: 600; color: var(--error); margin-top: 4px;">
+                                    Disabled</div>
+                            </div>
+                            <div class="proxy-dash-card"
+                                style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; text-align: center;">
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">Rotation Mode</div>
+                                <div id="proxy-mode-val"
+                                    style="font-size: 1.1rem; font-weight: 600; color: var(--accent-cyan); margin-top: 4px; text-transform: capitalize;">
+                                    Round-Robin</div>
+                            </div>
+                            <div class="proxy-dash-card"
+                                style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; text-align: center;">
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">Online / Total</div>
+                                <div
+                                    style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-top: 4px;">
+                                    <span id="proxy-online-count">0</span> / <span id="proxy-total-count">0</span></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group"
+                            style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">
+                            <label
+                                style="margin-bottom: 0; font-weight: 600; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px;"
+                                for="toggle-proxy-routing">
+                                <input type="checkbox" id="toggle-proxy-routing" style="width: auto; cursor: pointer;">
+                                Enable Proxy Routing
+                            </label>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label
+                                    style="margin-bottom: 0; font-size: 0.8rem; color: var(--text-secondary);">Mode:</label>
+                                <select id="select-proxy-rotation"
+                                    style="width: 130px; padding: 6px 10px; font-size: 0.85rem;">
+                                    <option value="round-robin">Round-Robin</option>
+                                    <option value="random">Random</option>
+                                    <option value="sticky">Sticky</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Import Tools -->
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label>Add Single Proxy</label>
+                            <div style="display:flex; gap: 8px;">
+                                <input type="text" id="input-proxy-url"
+                                    placeholder="http://user:pass@ip:port or socks5://ip:port" style="flex:1;"
+                                    autocomplete="off">
+                                <button id="btn-add-proxy" class="btn-primary" style="padding: 10px 16px;"><i
+                                        class="fa-solid fa-plus"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label>Bulk Load (Drag & Drop or click to upload)</label>
+                            <div id="proxy-drag-zone" class="proxy-drag-zone"
+                                style="border: 2px dashed var(--border-color); border-radius: 6px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: rgba(0,0,0,0.2);">
+                                <i class="fa-solid fa-cloud-arrow-up"
+                                    style="font-size: 1.8rem; color: var(--text-secondary); margin-bottom: 8px;"></i>
+                                <div style="font-size: 0.8rem; color: var(--text-secondary);">Drop `.txt` list or click
+                                    to select file</div>
+                                <input type="file" id="input-proxy-file" accept=".txt" style="display: none;">
+                            </div>
+                            <div
+                                style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 6px; line-height: 1.4;">
+                                <i class="fa-solid fa-circle-info"
+                                    style="color: var(--accent-cyan); margin-right: 4px;"></i>
+                                <strong>Format:</strong> One URL per line (e.g. <code>http://ip:port</code> or
+                                <code>socks5://user:pass@ip:port</code>). Lines starting with <code>#</code> are treated
+                                as comments.
+                            </div>
+                        </div>
+
+                        <!-- Proxy Table & Tester -->
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; margin-top: 16px;">
+                            <h5 style="color: var(--text-primary); font-size: 0.9rem; margin-bottom: 0;">Loaded Proxies
+                            </h5>
+                            <button id="btn-test-proxies" class="btn-primary"
+                                style="padding: 6px 12px; font-size: 0.8rem;">
+                                <i class="fa-solid fa-play"></i> Test Connectivity
+                            </button>
+                        </div>
+
+                        <div class="table-container" style="max-height: 380px; overflow-y: auto;">
+                            <table class="data-table" style="font-size: 0.8rem;">
+                                <thead>
+                                    <tr>
+                                        <th>URL</th>
+                                        <th style="text-align: center; width: 80px;">Status</th>
+                                        <th style="text-align: right; width: 80px;">Latency</th>
+                                        <th style="text-align: center; width: 60px;">Active</th>
+                                        <th style="text-align: center; width: 40px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="proxies-tbody">
+                                    <!-- Dynamic list of proxies -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>

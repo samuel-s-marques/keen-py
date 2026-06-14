@@ -339,3 +339,26 @@ class BaseModule:
                         except Exception:
                             pass
             self.active_processes.clear()
+
+    def get_http_client(self, **kwargs):
+        """Returns an httpx.AsyncClient configured with active proxy settings if enabled."""
+        import httpx
+        from src.core.managers import ConfigManager
+
+        config = None
+        should_close_config = False
+        if self.shell and getattr(self.shell, "config", None):
+            config = self.shell.config
+        else:
+            config = ConfigManager("~/.keen/config.db")
+            should_close_config = True
+
+        try:
+            proxy = config.get_next_proxy()
+            if proxy:
+                kwargs.setdefault("proxy", proxy["url"])
+        finally:
+            if should_close_config and config:
+                config.close()
+
+        return httpx.AsyncClient(**kwargs)

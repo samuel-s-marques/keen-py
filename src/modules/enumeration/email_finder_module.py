@@ -1,4 +1,3 @@
-import httpx
 from src.utils.print_utils import error, warn, info
 from src.core.base_module import BaseModule
 from src.utils.utils import get_bool
@@ -102,7 +101,7 @@ class EmailFinderModule(BaseModule):
             return None
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.get_http_client() as client:
                 response = await client.get(
                     f"https://api.hunter.io/v2/email-finder?domain={domain}&first_name={first_name}&last_name={last_name}&api_key={api_key}",
                     timeout=15,
