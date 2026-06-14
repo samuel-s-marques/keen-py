@@ -456,12 +456,12 @@ def delete_proxy(
 
 @app.post("/api/proxies/{proxy_id}/toggle")
 def toggle_proxy(
-    proxy_id: int, req: Dict[str, bool], config: ConfigManager = Depends(get_config)
+    proxy_id: int, req: Dict[str, Any], config: ConfigManager = Depends(get_config)
 ) -> Dict[str, bool]:
     """Toggle is_enabled for a proxy."""
-    enabled = req.get("is_enabled", True)
-    config.set_proxy_enabled(proxy_id, enabled)
-    return {"success": True}
+    enabled = bool(req.get("is_enabled", True))
+    success = config.set_proxy_enabled(proxy_id, enabled)
+    return {"success": success}
 
 
 @app.post("/api/proxies/load")

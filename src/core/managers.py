@@ -179,13 +179,14 @@ class ConfigManager(DatabaseEngine):
         )
         self.conn.commit()
 
-    def set_proxy_enabled(self, proxy_id: int, is_enabled: bool) -> None:
+    def set_proxy_enabled(self, proxy_id: int, is_enabled: bool) -> bool:
         cursor = self.conn.cursor()
         cursor.execute(
             "UPDATE proxies SET is_enabled = ? WHERE id = ?",
             (1 if is_enabled else 0, proxy_id),
         )
         self.conn.commit()
+        return cursor.rowcount > 0
 
     def get_next_proxy(self) -> dict | None:
         """Retrieves the next configured proxy according to the global preferences."""
