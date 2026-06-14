@@ -1,6 +1,5 @@
 from typing import Any
-import whois
-import asyncio
+from src.utils.rdap import query_rdap
 
 from src.utils.print_utils import error
 from src.core.base_module import BaseModule
@@ -9,9 +8,9 @@ from src.core.base_module import BaseModule
 class WhoisModule(BaseModule):
     metadata = {
         "name": "Whois",
-        "description": "Retrieves registration details, expiration dates, and nameservers for a domain.",
+        "description": "Retrieves registration details, expiration dates, and nameservers for a domain using RDAP.",
         "author": "Samuel Marques",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "options": {
             "TARGET": [
                 "",
@@ -28,18 +27,18 @@ class WhoisModule(BaseModule):
 
         target: str = str(self.options.get("TARGET")).lower()
 
-        await self.loading(
-            f"Executing WHOIS query on {target}...", self.execute, target
-        )
+        await self.loading(f"Executing RDAP query on {target}...", self.execute, target)
 
     async def execute(self, target: str) -> None:
         try:
-            # Wrap in to_thread to prevent blocking the event loop on network sockets
-            w: dict[str, Any] = await asyncio.to_thread(whois.whois, target)
-            self.display_whois_results(target, w)
-            await self._save_results(target, w)
+            w = await query_rdap(target)
+            if w:
+                self.display_whois_results(target, w)
+                await self._save_results(target, w)
+            else:
+                error(f"RDAP lookup failed: No data retrieved for {target}")
         except Exception as e:
-            error(f"WHOIS lookup failed: {str(e)}")
+            error(f"RDAP lookup failed: {str(e)}")
 
     def display_whois_results(self, target: str, data: dict[str, Any]) -> None:
         from rich.console import Console
@@ -86,7 +85,7 @@ class WhoisModule(BaseModule):
             console.print(
                 Panel(
                     table,
-                    title=f"[bold cyan]WHOIS Information: {target}[/bold cyan]",
+                    title=f"[bold cyan]RDAP Information: {target}[/bold cyan]",
                     border_style="cyan",
                     box=box.HEAVY,
                 )
