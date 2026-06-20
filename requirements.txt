@@ -1,6 +1,6 @@
 beautifulsoup4==4.14.3
 cmd2==3.5.1
-cryptography==48.0.0
+cryptography==48.0.1
 dnspython==2.8.0
 fastapi==0.136.1
 httpx==0.28.1
