@@ -151,20 +151,26 @@ class ThinkingPartnerEngine:
             # 4. Formulate System & User Prompts
             system_prompt = (
                 "You are an expert OSINT investigator and proactive Thinking Partner. Your job is to analyze the current investigation graph, "
-                "identify matching patterns, correlations (e.g. matching usernames, emails, aliases across modules/sources), and formulate hypotheses. "
-                "You must suggest high-value next steps (pivots) for the investigator, using ONLY the available OSINT modules in the system.\n\n"
+                "identify matching patterns, correlations (e.g. matching usernames, emails, aliases across modules/sources), and formulate hypotheses.\n\n"
+                "You must perform two tasks and return the results in a single JSON object:\n"
+                "1. Generate a high-level case analysis summary and synthesis (key findings, suspected patterns, overall hypotheses) formatted in clean Markdown.\n"
+                "2. Suggest high-value next steps (pivots) for the investigator, using ONLY the available OSINT modules in the system.\n\n"
                 "Available OSINT modules inside the system:\n"
                 f"{json.dumps(modules_summary, indent=2)}\n\n"
-                "Your suggestions must be highly specific, actionable, and formatted as a JSON array of objects. "
-                "Each suggestion object must conform exactly to this schema:\n"
+                "The output must be a single JSON object conforming exactly to this schema:\n"
                 "{\n"
-                '  "suggestion_text": "Clear explanation of the pattern, matching correlation, or hypothesis, and why this pivot is recommended.",\n'
-                '  "pivot_type": "run_module" or "manual_search" or "add_node",\n'
-                '  "module_name": "The exact module_id of the suggested module (if pivot_type is run_module), or null",\n'
-                '  "module_options": { "OptionKey": "Pre-filled option value based on graph data" } or null,\n'
-                '  "context_nodes": ["List of node values or node IDs involved in this correlation or suggestion"]\n'
+                '  "analysis_summary": "Markdown-formatted text containing your high-level case synthesis, findings, and hypotheses.",\n'
+                '  "suggestions": [\n'
+                "    {\n"
+                '      "suggestion_text": "Clear explanation of the pattern, matching correlation, or hypothesis, and why this pivot is recommended.",\n'
+                '      "pivot_type": "run_module" or "manual_search" or "add_node",\n'
+                '      "module_name": "The exact module_id of the suggested module (if pivot_type is run_module), or null",\n'
+                '      "module_options": { "OptionKey": "Pre-filled option value based on graph data" } or null,\n'
+                '      "context_nodes": ["List of node values or node IDs involved in this correlation or suggestion"]\n'
+                "    }\n"
+                "  ]\n"
                 "}\n\n"
-                "Return ONLY a raw JSON array. Do not wrap in markdown code blocks or add any conversational prologue/epilogue."
+                "Return ONLY a raw JSON object. Do not wrap in markdown code blocks or add any conversational prologue/epilogue."
             )
 
             user_prompt: Dict[str, Any] = {
@@ -200,29 +206,42 @@ class ThinkingPartnerEngine:
                         cleaned_json = cleaned_json[:-3].strip()
 
                 try:
-                    suggestions_list = json.loads(cleaned_json)
-                    if isinstance(suggestions_list, list):
-                        for sug in suggestions_list:
-                            sug_text = sug.get("suggestion_text")
-                            if sug_text:
-                                pivot_type = sug.get("pivot_type")
-                                m_name = sug.get("module_name")
-                                m_opts = sug.get("module_options", {})
-                                ctx_nodes = sug.get("context_nodes", [])
+                    parsed_data = json.loads(cleaned_json)
+                    analysis_text = None
+                    suggestions_list = []
 
-                                # Save to workspace DB
-                                workspace.add_suggestion(
-                                    suggestion_text=sug_text,
-                                    pivot_type=pivot_type,
-                                    module_name=m_name,
-                                    module_options=m_opts,
-                                    context_nodes=ctx_nodes,
-                                )
-                                parsed_suggestions.append(sug)
-                        logger.info(
-                            f"Successfully generated and stored {len(parsed_suggestions)} AI suggestions."
-                        )
-                        self.log_activity(workspace_name, f"[AI] Analysis complete. Generated and saved {len(parsed_suggestions)} suggestions.", is_generating=False)
+                    if isinstance(parsed_data, dict):
+                        analysis_text = parsed_data.get("analysis_summary")
+                        suggestions_list = parsed_data.get("suggestions", [])
+                    elif isinstance(parsed_data, list):
+                        suggestions_list = parsed_data
+
+                    # Save high-level thoughts/analysis if present
+                    if analysis_text:
+                        workspace.add_analysis(analysis_text)
+                        self.log_activity(workspace_name, "[AI] Successfully saved high-level case analysis.")
+
+                    for sug in suggestions_list:
+                        sug_text = sug.get("suggestion_text")
+                        if sug_text:
+                            pivot_type = sug.get("pivot_type")
+                            m_name = sug.get("module_name")
+                            m_opts = sug.get("module_options", {})
+                            ctx_nodes = sug.get("context_nodes", [])
+
+                            # Save to workspace DB
+                            workspace.add_suggestion(
+                                suggestion_text=sug_text,
+                                pivot_type=pivot_type,
+                                module_name=m_name,
+                                module_options=m_opts,
+                                context_nodes=ctx_nodes,
+                            )
+                            parsed_suggestions.append(sug)
+                    logger.info(
+                        f"Successfully generated and stored {len(parsed_suggestions)} AI suggestions."
+                    )
+                    self.log_activity(workspace_name, f"[AI] Analysis complete. Generated and saved {len(parsed_suggestions)} suggestions.", is_generating=False)
                 except json.JSONDecodeError as e:
                     logger.error(
                         f"Failed to parse AI response as JSON: {e}. Raw response: {suggestions_json}"
