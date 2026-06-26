@@ -27,6 +27,151 @@ document.addEventListener('DOMContentLoaded', () => {
         if (activeWorkspace) selectWorkspace(activeWorkspace); // Redraw graph to apply theme
     });
 
+    // --- Layout Resizing System ---
+    const sidebar = document.querySelector('.sidebar');
+    const rightPanel = document.querySelector('.right-panel');
+    const terminalContainer = document.querySelector('.terminal-container');
+    
+    const sidebarResizer = document.getElementById('sidebar-resizer');
+    const rightPanelResizer = document.getElementById('right-panel-resizer');
+    const terminalResizer = document.getElementById('terminal-resizer');
+
+    // Load persisted sizes
+    const savedSidebarWidth = localStorage.getItem('keen-sidebar-width');
+    const savedRightPanelWidth = localStorage.getItem('keen-right-panel-width');
+    const savedTerminalHeight = localStorage.getItem('keen-terminal-height');
+
+    if (savedSidebarWidth && sidebar) {
+        sidebar.style.width = `${savedSidebarWidth}px`;
+    }
+    if (savedRightPanelWidth && rightPanel) {
+        rightPanel.style.width = `${savedRightPanelWidth}px`;
+    }
+    if (savedTerminalHeight && terminalContainer) {
+        terminalContainer.style.height = `${savedTerminalHeight}px`;
+    }
+
+    function triggerNetworkResize() {
+        if (network) {
+            try {
+                network.setSize('100%', '100%');
+                network.redraw();
+            } catch (e) {
+                console.warn('Failed to resize network visualizer', e);
+            }
+        }
+    }
+
+    function makeResizable(resizer, resizeTarget, direction, minSize, maxSize, storageKey) {
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            resizer.classList.add('dragging');
+            document.body.classList.add('resizing-active');
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startWidth = resizeTarget.offsetWidth;
+            const startHeight = resizeTarget.offsetHeight;
+
+            function onMouseMove(moveEvent) {
+                if (direction === 'horizontal-left') {
+                    const deltaX = startX - moveEvent.clientX;
+                    const newWidth = Math.max(minSize, Math.min(maxSize, startWidth + deltaX));
+                    resizeTarget.style.width = `${newWidth}px`;
+                    triggerNetworkResize();
+                } else if (direction === 'horizontal-right') {
+                    const deltaX = moveEvent.clientX - startX;
+                    const newWidth = Math.max(minSize, Math.min(maxSize, startWidth + deltaX));
+                    resizeTarget.style.width = `${newWidth}px`;
+                    triggerNetworkResize();
+                } else if (direction === 'vertical-up') {
+                    const deltaY = startY - moveEvent.clientY;
+                    const newHeight = Math.max(minSize, Math.min(maxSize, startHeight + deltaY));
+                    resizeTarget.style.height = `${newHeight}px`;
+                }
+            }
+
+            function onMouseUp() {
+                resizer.classList.remove('dragging');
+                document.body.classList.remove('resizing-active');
+                
+                if (direction.startsWith('horizontal')) {
+                    localStorage.setItem(storageKey, resizeTarget.offsetWidth);
+                    triggerNetworkResize();
+                } else {
+                    localStorage.setItem(storageKey, resizeTarget.offsetHeight);
+                }
+
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+
+        // Touch support
+        resizer.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) return;
+            const touch = e.touches[0];
+            resizer.classList.add('dragging');
+            document.body.classList.add('resizing-active');
+
+            const startX = touch.clientX;
+            const startY = touch.clientY;
+            const startWidth = resizeTarget.offsetWidth;
+            const startHeight = resizeTarget.offsetHeight;
+
+            function onTouchMove(moveEvent) {
+                if (moveEvent.touches.length !== 1) return;
+                const currentTouch = moveEvent.touches[0];
+                if (direction === 'horizontal-left') {
+                    const deltaX = startX - currentTouch.clientX;
+                    const newWidth = Math.max(minSize, Math.min(maxSize, startWidth + deltaX));
+                    resizeTarget.style.width = `${newWidth}px`;
+                    triggerNetworkResize();
+                } else if (direction === 'horizontal-right') {
+                    const deltaX = currentTouch.clientX - startX;
+                    const newWidth = Math.max(minSize, Math.min(maxSize, startWidth + deltaX));
+                    resizeTarget.style.width = `${newWidth}px`;
+                    triggerNetworkResize();
+                } else if (direction === 'vertical-up') {
+                    const deltaY = startY - currentTouch.clientY;
+                    const newHeight = Math.max(minSize, Math.min(maxSize, startHeight + deltaY));
+                    resizeTarget.style.height = `${newHeight}px`;
+                }
+            }
+
+            function onTouchEnd() {
+                resizer.classList.remove('dragging');
+                document.body.classList.remove('resizing-active');
+                
+                if (direction.startsWith('horizontal')) {
+                    localStorage.setItem(storageKey, resizeTarget.offsetWidth);
+                    triggerNetworkResize();
+                } else {
+                    localStorage.setItem(storageKey, resizeTarget.offsetHeight);
+                }
+
+                document.removeEventListener('touchmove', onTouchMove);
+                document.removeEventListener('touchend', onTouchEnd);
+            }
+
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
+        });
+    }
+
+    if (sidebarResizer && sidebar) {
+        makeResizable(sidebarResizer, sidebar, 'horizontal-right', 220, 450, 'keen-sidebar-width');
+    }
+    if (rightPanelResizer && rightPanel) {
+        makeResizable(rightPanelResizer, rightPanel, 'horizontal-left', 300, 600, 'keen-right-panel-width');
+    }
+    if (terminalResizer && terminalContainer) {
+        makeResizable(terminalResizer, terminalContainer, 'vertical-up', 80, 500, 'keen-terminal-height');
+    }
+
     // State
     let activeWorkspace = null;
     let modulesData = {};
@@ -51,6 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let timelineTimestamps = [];
     let isTimelinePlaying = false;
     let timelineTimer = null;
+    let aiPollingInterval = null;
 
     const NODE_TO_VALIDATOR_MAP = {
         'email-addr': ['email'],
@@ -156,6 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isConfigUnlocked) fetchApiKeys();
         fetchPreferences();
         fetchProxies();
+        loadAISettings();
     });
 
     closeModals.forEach(btn => btn.addEventListener('click', () => {
@@ -957,6 +1104,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Refresh workspace to show new nodes
             if (activeWorkspace) {
                 selectWorkspace(activeWorkspace);
+                pollAISuggestionsStatus(activeWorkspace);
             }
         };
     }
@@ -1348,6 +1496,8 @@ document.addEventListener('DOMContentLoaded', () => {
             renderTables();
 
             initTimeline();
+            loadSuggestions();
+            pollAISuggestionsStatus(name);
 
             // Note: we don't call fetchWorkspaces() here anymore to avoid infinite loops, 
             // since fetchWorkspaces recreates DOM elements. Just update stats manually if needed.
@@ -1523,7 +1673,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (minimapNodesDataSet && minimapEdgesDataSet) {
                 const newMinimapNodeIds = new Set(minimapVisNodes.map(n => n.id));
                 const minimapNodeIdsToRemove = minimapNodesDataSet.getIds().filter(id => !newMinimapNodeIds.has(id));
-                
+
                 if (minimapNodeIdsToRemove.length > 0) {
                     minimapNodesDataSet.remove(minimapNodeIdsToRemove);
                 }
@@ -1534,7 +1684,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Synchronize minimap edges
                 const newMinimapEdgeIds = new Set(visEdges.map(e => e.id));
                 const minimapEdgeIdsToRemove = minimapEdgesDataSet.getIds().filter(id => !newMinimapEdgeIds.has(id));
-                
+
                 if (minimapEdgeIdsToRemove.length > 0) {
                     minimapEdgesDataSet.remove(minimapEdgeIdsToRemove);
                 }
@@ -1904,48 +2054,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!infoEmpty || !infoContent) return;
 
-            if (totalSelected === 0) {
-                infoEmpty.style.display = 'flex';
-                infoContent.style.display = 'none';
-                moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
-                moduleDetails.classList.add('hidden');
-            } else if (selectedNodeIds.length === 1 && selectedEdgeIds.length === 0) {
+            if (selectedNodeIds.length === 1) {
                 const nodeId = selectedNodeIds[0];
-                const selectedNode = currentNodes.find(n => n.id === nodeId || n.value === nodeId);
+                const selectedNode = currentNodes.find(n => String(n.id) === String(nodeId) || n.value === nodeId);
                 if (selectedNode) {
                     handleNodeSelection(selectedNode);
                 }
-            } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 1) {
-                const edgeId = selectedEdgeIds[0];
-                const selectedEdge = currentEdges.find(e => e.id === edgeId);
-                if (selectedEdge) {
-                    populateNodeInfo(selectedEdge, true);
-                    moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
-                    moduleDetails.classList.add('hidden');
-                }
-            } else {
-                // Multi-select
+            } else if (selectedNodeIds.length > 1) {
+                // Multi-node select
                 infoEmpty.style.display = 'none';
                 infoContent.style.display = 'flex';
 
                 let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
-
-                if (selectedNodeIds.length > 0) {
-                    html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Nodes (${selectedNodeIds.length}):</strong></div>`;
-                    html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
-                    selectedNodeIds.forEach(id => {
-                        const node = currentNodes.find(n => n.id === id || n.value === id);
-                        const val = node ? (node.label || node.value) : id;
-                        html += `<span class="badge">${val}</span>`;
-                    });
-                    html += `</div>`;
-                }
+                html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Nodes (${selectedNodeIds.length}):</strong></div>`;
+                html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
+                selectedNodeIds.forEach(id => {
+                    const node = currentNodes.find(n => String(n.id) === String(id) || n.value === id);
+                    const val = node ? (node.label || node.value) : id;
+                    html += `<span class="badge">${val}</span>`;
+                });
+                html += `</div>`;
 
                 if (selectedEdgeIds.length > 0) {
                     html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
                     html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
                     selectedEdgeIds.forEach(id => {
-                        const edge = currentEdges.find(e => e.id === id);
+                        const edge = currentEdges.find(e => String(e.id) === String(id));
                         const rel = edge ? edge.relationship : id;
                         html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
                     });
@@ -1961,6 +2095,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (infoPanel) infoPanel.classList.add('active');
 
                 moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple nodes selected --</option>';
+                moduleDetails.classList.add('hidden');
+            } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 1) {
+                const edgeId = selectedEdgeIds[0];
+                const selectedEdge = currentEdges.find(e => String(e.id) === String(edgeId));
+                if (selectedEdge) {
+                    populateNodeInfo(selectedEdge, true);
+                    moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
+                    moduleDetails.classList.add('hidden');
+                }
+            } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length > 1) {
+                // Multi-edge select
+                infoEmpty.style.display = 'none';
+                infoContent.style.display = 'flex';
+
+                let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
+                html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
+                html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
+                selectedEdgeIds.forEach(id => {
+                    const edge = currentEdges.find(e => String(e.id) === String(id));
+                    const rel = edge ? edge.relationship : id;
+                    html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
+                });
+                html += `</div>`;
+
+                infoContent.innerHTML = html;
+
+                // Auto-switch to Info tab
+                const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
+                if (infoTab) infoTab.classList.add('active');
+                const infoPanel = document.getElementById('tab-node-info');
+                if (infoPanel) infoPanel.classList.add('active');
+
+                moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple edges selected --</option>';
+                moduleDetails.classList.add('hidden');
+            } else {
+                // totalSelected === 0
+                infoEmpty.style.display = 'flex';
+                infoContent.style.display = 'none';
+                moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
                 moduleDetails.classList.add('hidden');
             }
 
@@ -2815,6 +2988,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Refresh workspace to show new nodes and edges
             if (activeWorkspace) {
                 selectWorkspace(activeWorkspace);
+                pollAISuggestionsStatus(activeWorkspace);
             }
         };
     }
@@ -2928,6 +3102,560 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isTimelinePlaying) {
                 toggleTimelinePlay(false);
                 toggleTimelinePlay(true);
+            }
+        });
+    }
+
+    // --- Analysis Modal ---
+    window.openAnalysisModal = function () {
+        const modal = document.getElementById('analysis-modal');
+        const modalBody = document.getElementById('analysis-modal-body');
+        const srcBody = document.getElementById('analysis-summary-body');
+        if (modal && modalBody && srcBody) {
+            modalBody.innerHTML = srcBody.innerHTML;
+            modal.style.display = 'flex';
+            document.addEventListener('keydown', _closeModalOnEsc);
+        }
+    };
+    window.closeAnalysisModal = function () {
+        const modal = document.getElementById('analysis-modal');
+        if (modal) modal.style.display = 'none';
+        document.removeEventListener('keydown', _closeModalOnEsc);
+    };
+    function _closeModalOnEsc(e) {
+        if (e.key === 'Escape') window.closeAnalysisModal();
+    }
+    // Close on backdrop click
+    document.getElementById('analysis-modal')?.addEventListener('click', function (e) {
+        if (e.target === this) window.closeAnalysisModal();
+    });
+
+    // --- AI Thinking Partner Logic ---
+    const prefAiProvider = document.getElementById('pref-ai-provider');
+    const groupAiBaseUrl = document.getElementById('group-ai-base-url');
+    const prefAiEnabled = document.getElementById('pref-ai-enabled');
+    const prefAiModel = document.getElementById('pref-ai-model');
+    const prefAiBaseUrl = document.getElementById('pref-ai-base-url');
+    const prefAiApiKey = document.getElementById('pref-ai-api-key');
+    const btnSaveAiSettings = document.getElementById('btn-save-ai-settings');
+    const suggestionsList = document.getElementById('suggestions-list');
+    const btnAnalyzeGraph = document.getElementById('btn-analyze-graph');
+
+    if (prefAiProvider && groupAiBaseUrl) {
+        prefAiProvider.addEventListener('change', () => {
+            const provider = prefAiProvider.value;
+            if (provider === 'openai' || provider === 'anthropic') {
+                groupAiBaseUrl.style.display = 'none';
+            } else {
+                groupAiBaseUrl.style.display = 'block';
+            }
+        });
+    }
+
+    async function loadAISettings() {
+        try {
+            const res = await fetch(`${API_BASE}/config/preferences`);
+            if (res.ok) {
+                const prefs = await res.json();
+                if (prefAiEnabled) prefAiEnabled.checked = prefs.llm_thinking_partner_enabled === 'true';
+                if (prefAiProvider) {
+                    prefAiProvider.value = prefs.llm_provider || 'openai';
+                    prefAiProvider.dispatchEvent(new Event('change'));
+                }
+                if (prefAiModel) prefAiModel.value = prefs.llm_model || 'gpt-4o';
+                if (prefAiBaseUrl) prefAiBaseUrl.value = prefs.llm_base_url || '';
+
+                const prefAiExportEnabled = document.getElementById('pref-ai-export-enabled');
+                if (prefAiExportEnabled) {
+                    prefAiExportEnabled.checked = prefs.llm_export_suggestions_enabled === 'true';
+                }
+
+                const prefAiExportAnalysisEnabled = document.getElementById('pref-ai-export-analysis-enabled');
+                if (prefAiExportAnalysisEnabled) {
+                    prefAiExportAnalysisEnabled.checked = prefs.llm_export_analysis_enabled === 'true';
+                }
+            }
+
+            // Load API key if config is unlocked
+            if (isConfigUnlocked && prefAiProvider && prefAiApiKey) {
+                const provider = prefAiProvider.value.toLowerCase();
+                const keysRes = await fetch(`${API_BASE}/config/keys`);
+                if (keysRes.ok) {
+                    const keys = await keysRes.json();
+                    const matchingKey = keys.find(k => k.service.toLowerCase() === provider);
+                    if (matchingKey) {
+                        prefAiApiKey.value = matchingKey.api_key;
+                    } else {
+                        prefAiApiKey.value = '';
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Failed to load AI settings', err);
+        }
+    }
+
+    if (btnSaveAiSettings) {
+        btnSaveAiSettings.addEventListener('click', async () => {
+            const enabled = String(prefAiEnabled.checked);
+            const provider = prefAiProvider.value;
+            const model = prefAiModel.value.trim();
+            const baseUrl = prefAiBaseUrl.value.trim();
+            const apiKey = prefAiApiKey.value.trim();
+            const prefAiExportEnabled = document.getElementById('pref-ai-export-enabled');
+            const exportEnabled = String(prefAiExportEnabled ? prefAiExportEnabled.checked : false);
+            const prefAiExportAnalysisEnabled = document.getElementById('pref-ai-export-analysis-enabled');
+            const exportAnalysisEnabled = String(prefAiExportAnalysisEnabled ? prefAiExportAnalysisEnabled.checked : false);
+
+            btnSaveAiSettings.disabled = true;
+            btnSaveAiSettings.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+
+            try {
+                // Save preferences
+                await fetch(`${API_BASE}/config/preferences`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        llm_thinking_partner_enabled: enabled,
+                        llm_provider: provider,
+                        llm_model: model,
+                        llm_base_url: baseUrl,
+                        llm_export_suggestions_enabled: exportEnabled,
+                        llm_export_analysis_enabled: exportAnalysisEnabled
+                    })
+                });
+
+                // Save API key if provided and config is unlocked
+                if (apiKey && isConfigUnlocked) {
+                    await fetch(`${API_BASE}/config/keys`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            service: provider.toLowerCase(),
+                            api_key: apiKey
+                        })
+                    });
+                    fetchApiKeys(); // Refresh keys list
+                }
+
+                alert('AI Thinking Partner settings saved!');
+            } catch (err) {
+                console.error('Failed to save AI settings', err);
+                alert('Error saving settings.');
+            } finally {
+                btnSaveAiSettings.disabled = false;
+                btnSaveAiSettings.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save AI Settings';
+            }
+        });
+    }
+
+    async function pollAISuggestionsStatus(workspaceName) {
+        if (!workspaceName) return;
+
+        if (aiPollingInterval) {
+            clearInterval(aiPollingInterval);
+            aiPollingInterval = null;
+        }
+
+        const pulseDot = document.getElementById('partner-tab-pulse');
+        const logsContainer = document.getElementById('partner-logs-container');
+        const logsBody = document.getElementById('partner-logs-body');
+
+        let consecutiveErrors = 0;
+
+        const checkStatus = async () => {
+            if (activeWorkspace !== workspaceName) {
+                if (aiPollingInterval) {
+                    clearInterval(aiPollingInterval);
+                    aiPollingInterval = null;
+                }
+                if (pulseDot) pulseDot.classList.add('hidden');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/workspaces/${workspaceName}/suggestions/status`);
+                if (res.ok) {
+                    consecutiveErrors = 0;
+                    const statusData = await res.json();
+
+                    if (statusData.is_generating) {
+                        if (pulseDot) pulseDot.classList.remove('hidden');
+                        if (logsContainer) logsContainer.style.display = 'flex';
+                    }
+
+                    if (logsBody && statusData.logs) {
+                        logsBody.innerHTML = statusData.logs.map(line => {
+                            let typeClass = '';
+                            const lower = line.toLowerCase();
+                            if (lower.includes('error')) typeClass = 'error';
+                            else if (lower.includes('warn')) typeClass = 'warning';
+                            else if (lower.includes('complete') || lower.includes('success')) typeClass = 'success';
+                            return `<div class="log-line ${typeClass}">${line}</div>`;
+                        }).join('');
+                        logsBody.scrollTop = logsBody.scrollHeight;
+                    }
+
+                    if (!statusData.is_generating) {
+                        if (aiPollingInterval) {
+                            clearInterval(aiPollingInterval);
+                            aiPollingInterval = null;
+                        }
+                        if (pulseDot) pulseDot.classList.add('hidden');
+
+                        loadSuggestions();
+
+                        setTimeout(() => {
+                            if (!aiPollingInterval && logsContainer && activeWorkspace === workspaceName) {
+                                logsContainer.style.display = 'none';
+                            }
+                        }, 5000);
+                    }
+                } else {
+                    consecutiveErrors++;
+                }
+            } catch (err) {
+                console.error('Error polling AI status', err);
+                consecutiveErrors++;
+            }
+
+            if (consecutiveErrors > 5) {
+                if (aiPollingInterval) {
+                    clearInterval(aiPollingInterval);
+                    aiPollingInterval = null;
+                }
+                if (pulseDot) pulseDot.classList.add('hidden');
+            }
+        };
+
+        await checkStatus();
+
+        if (aiPollingInterval === null) {
+            aiPollingInterval = setInterval(checkStatus, 1500);
+        }
+    }
+
+    async function loadSuggestions() {
+        if (!activeWorkspace || !suggestionsList) return;
+
+        try {
+            const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/suggestions`);
+            if (res.ok) {
+                const data = await res.json();
+                let suggestions = [];
+                let latestAnalysis = null;
+                if (Array.isArray(data)) {
+                    suggestions = data;
+                } else if (data && typeof data === 'object') {
+                    suggestions = data.suggestions || [];
+                    latestAnalysis = data.latest_analysis;
+                }
+
+                const analysisContainer = document.getElementById('analysis-summary-container');
+                const analysisBody = document.getElementById('analysis-summary-body');
+                const analysisModalBody = document.getElementById('analysis-modal-body');
+                if (analysisContainer && analysisBody) {
+                    if (latestAnalysis && latestAnalysis.analysis_text) {
+                        const mdHtml = (typeof marked !== 'undefined')
+                            ? marked.parse(latestAnalysis.analysis_text)
+                            : `<pre>${latestAnalysis.analysis_text}</pre>`;
+                        analysisBody.classList.add('md-prose');
+                        analysisBody.innerHTML = mdHtml;
+                        if (analysisModalBody) analysisModalBody.innerHTML = mdHtml;
+                        analysisContainer.style.display = 'block';
+                    } else {
+                        analysisBody.innerHTML = '';
+                        if (analysisModalBody) analysisModalBody.innerHTML = '';
+                        analysisContainer.style.display = 'none';
+                    }
+                }
+
+                renderSuggestions(suggestions);
+            }
+        } catch (err) {
+            console.error('Failed to load suggestions', err);
+        }
+    }
+
+    function renderSuggestions(suggestions) {
+        if (!suggestionsList) return;
+        suggestionsList.innerHTML = '';
+
+        // Filter out dismissed suggestions, only show pending/accepted/rejected
+        const activeSuggestions = suggestions.filter(s => s.status !== 'dismissed');
+
+        if (activeSuggestions.length === 0) {
+            suggestionsList.innerHTML = `
+                <div style="color: var(--text-secondary); text-align: center; margin-top: 20px;">
+                    No suggestions yet. Click "Analyze" or run modules to generate insights.
+                </div>
+            `;
+            return;
+        }
+
+        activeSuggestions.forEach(s => {
+            const card = document.createElement('div');
+            card.className = `suggestion-card ${s.status}`;
+            card.dataset.id = s.id;
+
+            // Gather context badges
+            let badgesHtml = '';
+            if (s.context_nodes && s.context_nodes.length) {
+                s.context_nodes.forEach(nodeVal => {
+                    badgesHtml += `<span class="suggestion-badge node-context"><i class="fa-solid fa-circle-nodes"></i> ${nodeVal}</span>`;
+                });
+            }
+            if (s.pivot_type === 'run_module' && s.module_name) {
+                badgesHtml += `<span class="suggestion-badge pivot-action"><i class="fa-solid fa-bolt"></i> ${s.module_name.split('/').pop()}</span>`;
+            } else if (s.pivot_type) {
+                badgesHtml += `<span class="suggestion-badge pivot-action"><i class="fa-solid fa-magnifying-glass"></i> ${s.pivot_type}</span>`;
+            }
+
+            let actionsHtml = '';
+            if (s.status === 'pending') {
+                actionsHtml = `
+                    <div class="suggestion-actions">
+                        <button class="suggestion-btn dismiss-btn" title="Dismiss"><i class="fa-solid fa-eye-slash"></i> Dismiss</button>
+                        <button class="suggestion-btn feedback-btn" title="Send Feedback"><i class="fa-solid fa-comment"></i> Feedback</button>
+                        ${s.pivot_type === 'run_module' ? `<button class="suggestion-btn accept-btn" title="Accept and Pivot"><i class="fa-solid fa-circle-play"></i> Pivot</button>` : ''}
+                    </div>
+                `;
+            } else {
+                actionsHtml = `
+                    <div style="font-size:0.72rem; color:var(--text-secondary); text-align:right; margin-top:6px; font-style:italic;">
+                        Status: ${(s.status || 'pending').toUpperCase()} ${s.feedback ? `(${s.feedback})` : ''}
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="suggestion-text">${s.suggestion_text}</div>
+                <div class="suggestion-meta">${badgesHtml}</div>
+                ${actionsHtml}
+                <div class="feedback-container" style="display: none;">
+                    <textarea class="feedback-textarea" placeholder="Why accept or reject? (e.g., 'Sherlock is perfect here')"></textarea>
+                    <div style="display: flex; justify-content: flex-end; gap: 6px;">
+                        <button class="suggestion-btn reject-submit" style="color: var(--error); border-color: rgba(255,23,68,0.3);"><i class="fa-solid fa-thumbs-down"></i> Reject</button>
+                        <button class="suggestion-btn accept-submit" style="color: var(--success); border-color: rgba(0,230,118,0.3);"><i class="fa-solid fa-thumbs-up"></i> Accept</button>
+                    </div>
+                </div>
+            `;
+
+            // Bind card button actions
+            const pivotBtn = card.querySelector('.accept-btn');
+            const dismissBtn = card.querySelector('.dismiss-btn');
+            const feedbackToggleBtn = card.querySelector('.feedback-btn');
+            const feedbackContainer = card.querySelector('.feedback-container');
+            const textarea = card.querySelector('.feedback-textarea');
+
+            if (pivotBtn) {
+                pivotBtn.onclick = () => {
+                    const modName = s.module_name;
+                    const options = s.module_options || {};
+
+                    if (modName && modulesData[modName]) {
+                        // Switch tab to Runner
+                        const runnerTab = document.querySelector('.right-tab[data-target="tab-module-runner"]');
+                        if (runnerTab) runnerTab.click();
+
+                        // Select module
+                        moduleSelect.value = modName;
+                        moduleSelect.dispatchEvent(new Event('change'));
+
+                        // Pre-fill options
+                        setTimeout(() => {
+                            for (const [optKey, optVal] of Object.entries(options)) {
+                                const input = moduleForm.querySelector(`[name="${optKey}"]`);
+                                if (input) {
+                                    input.value = optVal;
+                                    input.style.borderColor = 'var(--accent-cyan)';
+                                    input.style.boxShadow = '0 0 8px rgba(0, 240, 255, 0.2)';
+                                }
+                            }
+                        }, 100);
+
+                        submitFeedback(s.id, 'accepted', 'Pivoted to suggested module');
+                    }
+                };
+            }
+
+            if (dismissBtn) {
+                dismissBtn.onclick = () => {
+                    submitFeedback(s.id, 'dismissed', '');
+                };
+            }
+
+            if (feedbackToggleBtn && feedbackContainer) {
+                feedbackToggleBtn.onclick = () => {
+                    const isHidden = feedbackContainer.style.display === 'none';
+                    feedbackContainer.style.display = isHidden ? 'flex' : 'none';
+                };
+            }
+
+            const acceptSubmit = card.querySelector('.accept-submit');
+            const rejectSubmit = card.querySelector('.reject-submit');
+
+            if (acceptSubmit && textarea) {
+                acceptSubmit.onclick = () => {
+                    submitFeedback(s.id, 'accepted', textarea.value.trim());
+                };
+            }
+
+            if (rejectSubmit && textarea) {
+                rejectSubmit.onclick = () => {
+                    submitFeedback(s.id, 'rejected', textarea.value.trim());
+                };
+            }
+
+            suggestionsList.appendChild(card);
+        });
+    }
+
+    async function submitFeedback(suggestionId, status, feedbackText) {
+        if (!activeWorkspace) return;
+        try {
+            const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/suggestions/${suggestionId}/feedback`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status, feedback: feedbackText })
+            });
+            if (res.ok) {
+                loadSuggestions();
+            }
+        } catch (err) {
+            console.error('Failed to submit feedback', err);
+        }
+    }
+
+    if (btnAnalyzeGraph) {
+        btnAnalyzeGraph.addEventListener('click', async () => {
+            if (!activeWorkspace) {
+                alert('Please select a workspace first.');
+                return;
+            }
+
+            btnAnalyzeGraph.disabled = true;
+            btnAnalyzeGraph.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analyzing...';
+            termPrint(`[AI Thinking Partner] Triggering manual graph analysis...`, 'sys-msg');
+
+            // Start polling immediately to show pulsing dot and activity log container
+            pollAISuggestionsStatus(activeWorkspace);
+
+            try {
+                const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/suggestions/generate`, {
+                    method: 'POST'
+                });
+                if (res.ok) {
+                    const suggestions = await res.json();
+                    termPrint(`[AI Thinking Partner] Completed. Generated ${suggestions.length} suggestions.`, 'success');
+                    renderSuggestions(suggestions);
+                } else {
+                    const err = await res.json();
+                    termPrint(`[AI Thinking Partner] Error: ${err.error || 'Failed to generate'}`, 'error');
+                    alert(`Failed to analyze: ${err.error || 'Unknown error'}`);
+                }
+            } catch (err) {
+                console.error('Failed to generate suggestions', err);
+                termPrint(`[AI Thinking Partner] Network error during analysis.`, 'error');
+            } finally {
+                btnAnalyzeGraph.disabled = false;
+                btnAnalyzeGraph.innerHTML = '<i class="fa-solid fa-sync"></i> Analyze';
+            }
+        });
+    }
+
+    const btnTestAiConn = document.getElementById('btn-test-ai-conn');
+    const btnDetectAiModel = document.getElementById('btn-detect-ai-model');
+
+    if (btnTestAiConn) {
+        btnTestAiConn.addEventListener('click', async () => {
+            const provider = prefAiProvider.value;
+            const model = prefAiModel.value.trim();
+            const baseUrl = prefAiBaseUrl.value.trim();
+            const apiKey = prefAiApiKey.value.trim();
+
+            btnTestAiConn.disabled = true;
+            btnTestAiConn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
+
+            try {
+                const res = await fetch(`${API_BASE}/config/ai/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider,
+                        model,
+                        base_url: baseUrl,
+                        api_key: apiKey
+                    })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success) {
+                        alert('API Connection Successful!');
+                    } else {
+                        alert(`API Connection Failed:\n\n${data.error || 'Unknown error'}`);
+                    }
+                } else {
+                    alert(`API Connection Failed: Server returned status ${res.status}`);
+                }
+            } catch (err) {
+                console.error('Test connection error', err);
+                alert('API Connection Failed: Network error.');
+            } finally {
+                btnTestAiConn.disabled = false;
+                btnTestAiConn.innerHTML = '<i class="fa-solid fa-vial"></i> Test API';
+            }
+        });
+    }
+
+    if (btnDetectAiModel) {
+        btnDetectAiModel.addEventListener('click', async () => {
+            const provider = prefAiProvider.value;
+            const baseUrl = prefAiBaseUrl.value.trim();
+            const apiKey = prefAiApiKey.value.trim();
+
+            btnDetectAiModel.disabled = true;
+            btnDetectAiModel.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Detecting...';
+
+            try {
+                const res = await fetch(`${API_BASE}/config/ai/detect-models`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider,
+                        base_url: baseUrl,
+                        api_key: apiKey
+                    })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.models && data.models.length > 0) {
+                        if (data.models.length === 1) {
+                            prefAiModel.value = data.models[0];
+                            alert(`Auto-detected model: ${data.models[0]}`);
+                        } else {
+                            const modelList = data.models.map((m, idx) => `${idx + 1}. ${m}`).join('\n');
+                            const choice = prompt(`Select a model number to use:\n\n${modelList}`, "1");
+                            if (choice !== null) {
+                                const selectedIdx = parseInt(choice, 10) - 1;
+                                if (selectedIdx >= 0 && selectedIdx < data.models.length) {
+                                    prefAiModel.value = data.models[selectedIdx];
+                                    alert(`Set model to: ${data.models[selectedIdx]}`);
+                                }
+                            }
+                        }
+                    } else {
+                        alert(`Failed to detect models:\n\n${data.error || 'No models found'}`);
+                    }
+                } else {
+                    alert(`Failed to detect models: Server returned status ${res.status}`);
+                }
+            } catch (err) {
+                console.error('Detect models error', err);
+                alert('Failed to detect models: Network error.');
+            } finally {
+                btnDetectAiModel.disabled = false;
+                btnDetectAiModel.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Detect Model';
             }
         });
     }

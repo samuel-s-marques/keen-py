@@ -1,8 +1,40 @@
 import datetime
 import json
+import re
 
 
-def export_to_html(workspace_name: str, nodes: list, edges: list, path: str) -> None:
+def md_to_html(md_text: str) -> str:
+    if not md_text:
+        return ""
+    # Escape HTML special characters to prevent injection/broken layout
+    html = md_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    
+    # Convert bold **text**
+    html = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", html)
+    # Convert italic *text*
+    html = re.sub(r"\*(.*?)\*", r"<em>\1</em>", html)
+    
+    # Convert headers (###, ##, #)
+    html = re.sub(r"^### (.*?)$", r"<h4 style='color: var(--accent-cyan); margin-top: 12px; margin-bottom: 8px;'>\1</h4>", html, flags=re.MULTILINE)
+    html = re.sub(r"^## (.*?)$", r"<h3 style='color: #fff; margin-top: 16px; margin-bottom: 10px;'>\1</h3>", html, flags=re.MULTILINE)
+    html = re.sub(r"^# (.*?)$", r"<h2 style='color: #fff; margin-top: 20px; margin-bottom: 12px;'>\1</h2>", html, flags=re.MULTILINE)
+    
+    # Convert bullet points * or -
+    html = re.sub(r"^[*-] (.*?)$", r"<li>\1</li>", html, flags=re.MULTILINE)
+    
+    # Convert newlines to <br/>
+    html = html.replace("\n", "<br/>")
+    return html
+
+
+def export_to_html(
+    workspace_name: str,
+    nodes: list,
+    edges: list,
+    path: str,
+    suggestions: list = [],
+    analysis: str | None = None,
+) -> None:
     nodes_by_type = {}
     for n in nodes:
         t = n["type"]
@@ -109,6 +141,73 @@ def export_to_html(workspace_name: str, nodes: list, edges: list, path: str) -> 
         </div>
     </div>
     """
+
+    suggestions_html = ""
+    if suggestions:
+        active_suggestions = [s for s in suggestions if s.get("status") != "dismissed"]
+        if active_suggestions:
+            rows_html = ""
+            for s in active_suggestions:
+                text = s.get("suggestion_text", "")
+                pivot = s.get("pivot_type", "-")
+                if s.get("module_name"):
+                    pivot = f"{pivot} ({s['module_name'].split('/')[-1]})"
+                status = s.get("status", "pending").upper()
+                feedback = s.get("feedback", "-") or "-"
+
+                status_color = "var(--accent-cyan)"
+                if status == "ACCEPTED":
+                    status_color = "var(--success)"
+                elif status == "REJECTED":
+                    status_color = "#ff5252"
+
+                rows_html += f"""
+                <tr>
+                    <td><span class='node-val' style='font-family: var(--font-main); font-size: 0.85rem; color: var(--text-primary);'>{text}</span></td>
+                    <td><span class='badge' style='background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);'>{pivot}</span></td>
+                    <td><span class='badge' style='background: rgba(0, 0, 0, 0.2); color: {status_color}; border-color: {status_color}44;'>{status}</span></td>
+                    <td style='color: var(--text-secondary); font-size: 0.85rem;'>{feedback}</td>
+                </tr>
+                """
+
+            suggestions_html = f"""
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-header" style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-brain" style="color: var(--accent-cyan);"></i>
+                    <h3>AI Thinking Partner Insights</h3>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 50%;">Recommendation</th>
+                                <th>Pivot Action</th>
+                                <th>Status</th>
+                                <th>User Feedback</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows_html}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            """
+
+    analysis_html = ""
+    if analysis:
+        formatted_analysis = md_to_html(analysis)
+        analysis_html = f"""
+        <div class="card" style="margin-top: 20px; border: 1px dashed rgba(0, 240, 255, 0.3); background: rgba(0, 240, 255, 0.02);">
+            <div class="card-header" style="display: flex; align-items: center; gap: 10px; border-bottom: 1px dashed rgba(0, 240, 255, 0.2);">
+                <i class="fa-solid fa-brain" style="color: var(--accent-cyan);"></i>
+                <h3 style="color: var(--accent-cyan);">AI Case Analysis & Synthesis</h3>
+            </div>
+            <div style="padding: 20px 24px; line-height: 1.6; color: var(--text-primary);">
+                {formatted_analysis}
+            </div>
+        </div>
+        """
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -411,6 +510,10 @@ def export_to_html(workspace_name: str, nodes: list, edges: list, path: str) -> 
         
         {edges_html}
         
+        {analysis_html}
+        
+        {suggestions_html}
+        
         <footer>
             <p>Generated automatically by Keen. Confidential intelligence data.</p>
         </footer>
@@ -418,5 +521,6 @@ def export_to_html(workspace_name: str, nodes: list, edges: list, path: str) -> 
 </body>
 </html>
 """
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(html_content)

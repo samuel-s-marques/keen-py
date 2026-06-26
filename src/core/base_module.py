@@ -280,6 +280,35 @@ class BaseModule:
                 if should_close_config:
                     config.close()
 
+        # Trigger AI Thinking Partner suggestion engine in background if enabled
+        if workspace:
+            config = getattr(self.shell, "config", None)
+            should_close_config = False
+            if not config:
+                from src.core.managers import ConfigManager
+                config = ConfigManager("~/.keen/config.db")
+                should_close_config = True
+
+            try:
+                if config.get_preference("llm_thinking_partner_enabled") == "true":
+                    import asyncio
+                    from src.core.thinking_partner import ThinkingPartnerEngine
+                    
+                    async def run_thinking_partner():
+                        try:
+                            engine = ThinkingPartnerEngine()
+                            await engine.generate_suggestions(workspace.name)
+                        except Exception as e_bg:
+                            self.logger.error(f"Error in background AI Thinking Partner task: {e_bg}")
+                            
+                    # Schedule task in background without blocking
+                    asyncio.create_task(run_thinking_partner())
+            except Exception as e:
+                self.logger.error(f"Failed to trigger AI Thinking Partner: {e}")
+            finally:
+                if should_close_config:
+                    config.close()
+
     def register_process(self, process) -> None:
         """Register a subprocess for cleanup on cancellation."""
         if not hasattr(self, "active_processes"):

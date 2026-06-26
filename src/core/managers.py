@@ -115,6 +115,22 @@ class ConfigManager(DatabaseEngine):
             INSERT OR IGNORE INTO preferences (key, value) 
             VALUES ('proxy_sticky_index', '0')
         """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('llm_provider', 'openai')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('llm_model', 'gpt-4o')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('llm_base_url', '')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('llm_thinking_partner_enabled', 'false')
+        """)
 
         # Handle migration for existing databases missing the description column
         try:
@@ -506,9 +522,35 @@ class WorkspaceManager(DatabaseEngine):
 
         # Add timestamp column for edges if it doesn't exist
         try:
-            cursor.execute("ALTER TABLE edge ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP")
+            cursor.execute(
+                "ALTER TABLE edge ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP"
+            )
         except Exception:
             pass
+
+        # Create AI suggestions table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ai_suggestions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                suggestion_text TEXT NOT NULL,
+                pivot_type TEXT,
+                module_name TEXT,
+                module_options TEXT,
+                context_nodes TEXT,
+                status TEXT DEFAULT 'pending',
+                feedback TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Create AI analysis history table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ai_analysis_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                analysis_text TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
         self.conn.commit()
 
@@ -648,11 +690,24 @@ class WorkspaceManager(DatabaseEngine):
         if type not in ["pdf", "html", "markdown", "json", "stix2"]:
             raise ValueError("Invalid export type.")
 
-        if Path(path).suffix != f".{type}":
-            path = f"{path}.{type}"
+        # Map formats to their standard extensions
+        ext_map = {
+            "pdf": ".pdf",
+            "html": ".html",
+            "markdown": ".md",
+            "json": ".json",
+            "stix2": ".json"
+        }
+        expected_ext = ext_map.get(type, f".{type}")
 
-        if Path(path).exists():
-            raise FileExistsError(f"File {path} already exists.")
+        # Only append extension if the path does not already end with a valid extension
+        current_suffix = Path(path).suffix.lower()
+        valid_suffixes = [expected_ext, f".{type}"]
+        if type == "markdown":
+            valid_suffixes.append(".markdown")
+
+        if current_suffix not in valid_suffixes:
+            path = f"{path}{expected_ext}"
 
         Path(path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -662,4 +717,106 @@ class WorkspaceManager(DatabaseEngine):
         cursor.execute("SELECT * FROM edge")
         edges = [dict(row) for row in cursor.fetchall()]
 
-        export_workspace(self.name, type, nodes, edges, path)
+        # Retrieve AI suggestions and analysis if enabled in global preferences
+        config = ConfigManager("~/.keen/config.db")
+        export_suggestions = (
+            config.get_preference("llm_export_suggestions_enabled") == "true"
+        )
+        export_analysis = (
+            config.get_preference("llm_export_analysis_enabled") == "true"
+        )
+        config.close()
+
+        suggestions = []
+        if export_suggestions:
+            suggestions = self.get_suggestions()
+
+        analysis = None
+        if export_analysis:
+            latest = self.get_latest_analysis()
+            if latest:
+                analysis = latest.get("analysis_text")
+
+        export_workspace(
+            self.name,
+            type,
+            nodes,
+            edges,
+            path,
+            suggestions=suggestions,
+            analysis=analysis,
+        )
+
+    def get_latest_analysis(self) -> dict | None:
+        """Retrieve the most recent AI thoughts/analysis text."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT * FROM ai_analysis_history ORDER BY created_at DESC, id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_analysis_history(self) -> list[dict]:
+        """Retrieve all historical AI thoughts/analysis entries."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM ai_analysis_history ORDER BY created_at DESC, id DESC")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def add_analysis(self, analysis_text: str) -> int | None:
+        """Insert a new AI thoughts/analysis entry into the workspace database."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT INTO ai_analysis_history (analysis_text) VALUES (?)",
+            (analysis_text,),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_suggestions(self) -> list[dict]:
+        """Retrieve all AI suggestions for the active workspace."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM ai_suggestions ORDER BY created_at DESC")
+        rows = [dict(row) for row in cursor.fetchall()]
+        for row in rows:
+            if row.get("module_options"):
+                try:
+                    row["module_options"] = json.loads(row["module_options"])
+                except Exception:
+                    pass
+            if row.get("context_nodes"):
+                try:
+                    row["context_nodes"] = json.loads(row["context_nodes"])
+                except Exception:
+                    pass
+        return rows
+
+    def add_suggestion(
+        self,
+        suggestion_text: str,
+        pivot_type: str | None = None,
+        module_name: str | None = None,
+        module_options: dict | None = None,
+        context_nodes: list | None = None,
+    ) -> int | None:
+        """Insert a new AI suggestion into the workspace database."""
+        cursor = self.conn.cursor()
+        options_json = json.dumps(module_options or {})
+        nodes_json = json.dumps(context_nodes or [])
+        cursor.execute(
+            "INSERT INTO ai_suggestions (suggestion_text, pivot_type, module_name, module_options, context_nodes) VALUES (?, ?, ?, ?, ?)",
+            (suggestion_text, pivot_type, module_name, options_json, nodes_json),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def update_suggestion_status(
+        self, suggestion_id: int, status: str, feedback: str | None = None
+    ) -> bool:
+        """Update the status and feedback of an AI suggestion."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE ai_suggestions SET status = ?, feedback = ? WHERE id = ?",
+            (status, feedback, suggestion_id),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
