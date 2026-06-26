@@ -651,7 +651,7 @@ def export_workspace(
     name: str,
     format: str,
     background_tasks: BackgroundTasks,
-    config: ConfigManager = Depends(get_config)
+    config: ConfigManager = Depends(get_config),
 ) -> Any:
     """Export workspace to multiple formats.
 
@@ -668,7 +668,9 @@ def export_workspace(
 
     format = format.lower()
     if format not in ["pdf", "html", "stix2", "json", "markdown"]:
-        return JSONResponse(status_code=400, content={"error": f"Unsupported export format: {format}"})
+        return JSONResponse(
+            status_code=400, content={"error": f"Unsupported export format: {format}"}
+        )
 
     import tempfile
     import os
@@ -679,7 +681,7 @@ def export_workspace(
         "html": ".html",
         "stix2": ".json",
         "json": ".json",
-        "markdown": ".md"
+        "markdown": ".md",
     }
     ext = ext_map.get(format, ".txt")
 
@@ -697,7 +699,10 @@ def export_workspace(
                 os.remove(temp_path)
             except OSError:
                 pass
-        return JSONResponse(status_code=500, content={"error": f"Export failed: {str(e)}"})
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Export failed due to an internal server error."},
+        )
 
     def cleanup():
         if os.path.exists(temp_path):
@@ -713,7 +718,7 @@ def export_workspace(
         "html": "text/html",
         "stix2": "application/json",
         "json": "application/json",
-        "markdown": "text/markdown"
+        "markdown": "text/markdown",
     }
 
     filename = f"{name}_export{ext}"
@@ -721,9 +726,8 @@ def export_workspace(
     return FileResponse(
         path=temp_path,
         media_type=media_types.get(format, "application/octet-stream"),
-        filename=filename
+        filename=filename,
     )
-
 
 
 @app.post("/api/workspaces/{name}/edges", response_model=None)
