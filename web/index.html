@@ -122,6 +122,32 @@
                                 title="Delete Selected Node(s)/Edge(s)"><i class="fa-solid fa-trash"></i></button>
                         </div>
                         <div id="network-canvas" class="graph-container"></div>
+                        
+                        <!-- Dynamic Event Timeline -->
+                        <div id="graph-timeline" class="timeline-container" style="display: none;">
+                            <button id="btn-timeline-play" class="timeline-btn" title="Play Timeline">
+                                <i class="fa-solid fa-play"></i>
+                            </button>
+                            <div class="timeline-slider-wrapper">
+                                <input type="range" id="timeline-slider" class="timeline-slider" min="0" max="0" value="0">
+                                <div class="timeline-labels">
+                                    <span id="timeline-start-time">-</span>
+                                    <span id="timeline-end-time">-</span>
+                                </div>
+                            </div>
+                            <div class="timeline-info">
+                                <span id="timeline-current-time" class="timeline-current-time">No active timeline</span>
+                                <span id="timeline-stats" class="timeline-stats">0 / 0 nodes visible</span>
+                            </div>
+                            <div class="timeline-speed-control">
+                                <select id="timeline-speed" title="Playback Speed">
+                                    <option value="2000">0.5x</option>
+                                    <option value="1000" selected>1.0x</option>
+                                    <option value="500">2.0x</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div id="graph-minimap"
                             style="position: absolute; bottom: 16px; right: 16px; width: 200px; height: 150px; background: rgba(26, 28, 35, 0.9); border: 1px solid var(--border-color); border-radius: 6px; z-index: 10; overflow: hidden; cursor: pointer;">
                             <div id="minimap-canvas" style="width: 100%; height: 100%;"></div>
