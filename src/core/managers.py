@@ -543,6 +543,15 @@ class WorkspaceManager(DatabaseEngine):
             )
         """)
 
+        # Create AI analysis history table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ai_analysis_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                analysis_text TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         self.conn.commit()
 
     def get_or_add_node(
@@ -708,10 +717,13 @@ class WorkspaceManager(DatabaseEngine):
         cursor.execute("SELECT * FROM edge")
         edges = [dict(row) for row in cursor.fetchall()]
 
-        # Retrieve AI suggestions if enabled in global preferences
+        # Retrieve AI suggestions and analysis if enabled in global preferences
         config = ConfigManager("~/.keen/config.db")
         export_suggestions = (
             config.get_preference("llm_export_suggestions_enabled") == "true"
+        )
+        export_analysis = (
+            config.get_preference("llm_export_analysis_enabled") == "true"
         )
         config.close()
 
@@ -719,7 +731,46 @@ class WorkspaceManager(DatabaseEngine):
         if export_suggestions:
             suggestions = self.get_suggestions()
 
-        export_workspace(self.name, type, nodes, edges, path, suggestions=suggestions)
+        analysis = None
+        if export_analysis:
+            latest = self.get_latest_analysis()
+            if latest:
+                analysis = latest.get("analysis_text")
+
+        export_workspace(
+            self.name,
+            type,
+            nodes,
+            edges,
+            path,
+            suggestions=suggestions,
+            analysis=analysis,
+        )
+
+    def get_latest_analysis(self) -> dict | None:
+        """Retrieve the most recent AI thoughts/analysis text."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT * FROM ai_analysis_history ORDER BY created_at DESC, id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_analysis_history(self) -> list[dict]:
+        """Retrieve all historical AI thoughts/analysis entries."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM ai_analysis_history ORDER BY created_at DESC, id DESC")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def add_analysis(self, analysis_text: str) -> int | None:
+        """Insert a new AI thoughts/analysis entry into the workspace database."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT INTO ai_analysis_history (analysis_text) VALUES (?)",
+            (analysis_text,),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
 
     def get_suggestions(self) -> list[dict]:
         """Retrieve all AI suggestions for the active workspace."""
