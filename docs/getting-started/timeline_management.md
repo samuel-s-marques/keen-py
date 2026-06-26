@@ -19,6 +19,8 @@ The timeline interface consists of the following elements:
 5. **Visibility Stats:** Shows how many nodes are currently visible relative to the total size of the graph (e.g. `12 / 18 nodes visible`).
 6. **Playback Speed Selector:** Adjusts the auto-play speed (0.5x, 1.0x, 2.0x).
 
+![View of the web server UI, showing the Event Timeline feature.](../assets/images/timeline_screenshot.png)
+
 ---
 
 ## How It Works
