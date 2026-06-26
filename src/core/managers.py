@@ -1,3 +1,4 @@
+from pathlib import Path
 from src.utils.config_util import get_valid_name
 import base64
 import json
@@ -636,6 +637,17 @@ class WorkspaceManager(DatabaseEngine):
         self.conn.commit()
 
     def export(self, type: str, path: str) -> None:
+        if type not in ["pdf", "html", "markdown", "json", "stix2"]:
+            raise ValueError("Invalid export type.")
+
+        if Path(path).suffix != f".{type}":
+            path = f"{path}.{type}"
+
+        if Path(path).exists():
+            raise FileExistsError(f"File {path} already exists.")
+
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM nodes")
         nodes = [dict(row) for row in cursor.fetchall()]
@@ -657,16 +669,973 @@ class WorkspaceManager(DatabaseEngine):
                 raise ValueError(f"Unknown export type: {type}")
 
     def _export_to_pdf(self, nodes, edges, path):
-        raise NotImplementedError("PDF export is not implemented yet")
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib import colors
+        from reportlab.platypus import (
+            SimpleDocTemplate,
+            Paragraph,
+            Spacer,
+            Table,
+            TableStyle,
+            PageBreak,
+        )
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        import datetime
+        import json
+
+        doc = SimpleDocTemplate(
+            path,
+            pagesize=letter,
+            rightMargin=54,
+            leftMargin=54,
+            topMargin=54,
+            bottomMargin=54,
+        )
+
+        styles = getSampleStyleSheet()
+
+        primary_color = colors.HexColor("#0f172a")
+        secondary_color = colors.HexColor("#475569")
+        accent_color = colors.HexColor("#0284c7")
+        bg_light = colors.HexColor("#f8fafc")
+        border_color = colors.HexColor("#e2e8f0")
+
+        title_style = ParagraphStyle(
+            "ReportTitle",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=24,
+            leading=28,
+            textColor=primary_color,
+            spaceAfter=15,
+        )
+
+        subtitle_style = ParagraphStyle(
+            "ReportSubtitle",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=12,
+            leading=14,
+            textColor=secondary_color,
+            spaceAfter=30,
+        )
+
+        h1_style = ParagraphStyle(
+            "SectionH1",
+            parent=styles["Heading1"],
+            fontName="Helvetica-Bold",
+            fontSize=16,
+            leading=20,
+            textColor=primary_color,
+            spaceBefore=15,
+            spaceAfter=10,
+            keepWithNext=True,
+        )
+
+        h2_style = ParagraphStyle(
+            "SectionH2",
+            parent=styles["Heading2"],
+            fontName="Helvetica-Bold",
+            fontSize=13,
+            leading=16,
+            textColor=accent_color,
+            spaceBefore=12,
+            spaceAfter=8,
+            keepWithNext=True,
+        )
+
+        body_style = ParagraphStyle(
+            "ReportBody",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=10,
+            leading=14,
+            textColor=primary_color,
+        )
+
+        body_bold_style = ParagraphStyle(
+            "ReportBodyBold", parent=body_style, fontName="Helvetica-Bold"
+        )
+
+        body_secondary_style = ParagraphStyle(
+            "ReportBodySecondary", parent=body_style, textColor=secondary_color
+        )
+
+        code_style = ParagraphStyle(
+            "ReportCode",
+            parent=styles["Normal"],
+            fontName="Courier",
+            fontSize=9,
+            leading=11,
+            textColor=primary_color,
+        )
+
+        story: list[Any] = []
+
+        # Header
+        story.append(Paragraph("Keen Intelligence Report", title_style))
+        story.append(Paragraph(f"Workspace: {self.name}", subtitle_style))
+        story.append(Spacer(1, 0.25 * inch))
+
+        # Summary
+        story.append(Paragraph("Executive Summary", h1_style))
+        summary_text = (
+            f"This report presents an intelligence summary generated from the Keen workspace <b>{self.name}</b>. "
+            f"The workspace contains a structured intelligence graph consisting of a total of <b>{len(nodes)}</b> entities (nodes) and "
+            f"<b>{len(edges)}</b> documented connections (relationships) between them. The details are categorized below."
+        )
+        story.append(Paragraph(summary_text, body_style))
+        story.append(Spacer(1, 0.2 * inch))
+
+        # Stats Table
+        stats_data = [
+            [
+                Paragraph("<b>Metric</b>", body_bold_style),
+                Paragraph("<b>Count / Value</b>", body_bold_style),
+            ],
+            [
+                Paragraph("Total Identified Entities (Nodes)", body_style),
+                Paragraph(str(len(nodes)), body_style),
+            ],
+            [
+                Paragraph("Documented Relationships (Edges)", body_style),
+                Paragraph(str(len(edges)), body_style),
+            ],
+            [
+                Paragraph("Export Date", body_style),
+                Paragraph(
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), body_style
+                ),
+            ],
+        ]
+        stats_table = Table(stats_data, colWidths=[3.5 * inch, 3.5 * inch])
+        stats_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), bg_light),
+                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 8),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                    ("LINEBELOW", (0, 0), (-1, -1), 0.5, border_color),
+                    ("BOX", (0, 0), (-1, -1), 1, primary_color),
+                ]
+            )
+        )
+        story.append(stats_table)
+        story.append(Spacer(1, 0.3 * inch))
+
+        # Entities Section
+        story.append(Paragraph("Intelligence Graph Entities", h1_style))
+
+        nodes_by_type = {}
+        for n in nodes:
+            t = n["type"]
+            nodes_by_type.setdefault(t, []).append(n)
+
+        for n_type, n_list in sorted(nodes_by_type.items()):
+            story.append(
+                Paragraph(f"{n_type.capitalize()} Entities ({len(n_list)})", h2_style)
+            )
+
+            table_data = [
+                [
+                    Paragraph("<b>Value</b>", body_bold_style),
+                    Paragraph("<b>Timestamp</b>", body_bold_style),
+                    Paragraph("<b>Details / Properties</b>", body_bold_style),
+                ]
+            ]
+
+            for n in sorted(n_list, key=lambda x: x["value"]):
+                meta = {}
+                if n.get("metadata"):
+                    try:
+                        meta = (
+                            json.loads(n["metadata"])
+                            if isinstance(n["metadata"], str)
+                            else n["metadata"]
+                        )
+                    except Exception:
+                        pass
+
+                meta_details = []
+                if isinstance(meta, dict):
+                    for k, v in meta.items():
+                        if k in ["stix2", "misp"]:
+                            continue
+                        meta_details.append(f"<b>{k}:</b> {v}")
+
+                meta_text = ", ".join(meta_details) if meta_details else "-"
+
+                table_data.append(
+                    [
+                        Paragraph(n["value"], code_style),
+                        Paragraph(n.get("timestamp", "-"), body_secondary_style),
+                        Paragraph(meta_text, body_style),
+                    ]
+                )
+
+            node_table = Table(
+                table_data, colWidths=[2.5 * inch, 1.5 * inch, 3.0 * inch]
+            )
+            node_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), bg_light),
+                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                        ("TOPPADDING", (0, 0), (-1, -1), 6),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                        ("LINEBELOW", (0, 0), (-1, -1), 0.5, border_color),
+                        ("LINEBELOW", (0, 0), (-1, 0), 1.5, primary_color),
+                    ]
+                )
+            )
+            story.append(node_table)
+            story.append(Spacer(1, 0.25 * inch))
+
+        story.append(PageBreak())
+
+        # Relationships Section
+        story.append(Paragraph("Intelligence Relationships", h1_style))
+        story.append(
+            Paragraph(
+                "Below are the connections documented between the identified entities in this workspace:",
+                body_style,
+            )
+        )
+        story.append(Spacer(1, 0.15 * inch))
+
+        if edges:
+            node_id_to_val = {n["id"]: n["value"] for n in nodes}
+            node_id_to_type = {n["id"]: n["type"] for n in nodes}
+
+            edge_table_data = [
+                [
+                    Paragraph("<b>Source Entity</b>", body_bold_style),
+                    Paragraph("<b>Relationship</b>", body_bold_style),
+                    Paragraph("<b>Target Entity</b>", body_bold_style),
+                ]
+            ]
+
+            for e in edges:
+                src_val = node_id_to_val.get(e["source_id"], f"ID {e['source_id']}")
+                src_type = node_id_to_type.get(e["source_id"], "unknown")
+                tgt_val = node_id_to_val.get(e["target_id"], f"ID {e['target_id']}")
+                tgt_type = node_id_to_type.get(e["target_id"], "unknown")
+                rel = e["relationship"]
+
+                edge_table_data.append(
+                    [
+                        Paragraph(
+                            f"{src_val}<br/><font color='#64748b' size='8'>({src_type})</font>",
+                            body_style,
+                        ),
+                        Paragraph(
+                            f"<b>{rel}</b>",
+                            ParagraphStyle(
+                                "rel", parent=body_style, textColor=accent_color
+                            ),
+                        ),
+                        Paragraph(
+                            f"{tgt_val}<br/><font color='#64748b' size='8'>({tgt_type})</font>",
+                            body_style,
+                        ),
+                    ]
+                )
+
+            edge_table = Table(
+                edge_table_data, colWidths=[2.7 * inch, 1.6 * inch, 2.7 * inch]
+            )
+            edge_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), bg_light),
+                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                        ("TOPPADDING", (0, 0), (-1, -1), 8),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                        ("LINEBELOW", (0, 0), (-1, -1), 0.5, border_color),
+                        ("LINEBELOW", (0, 0), (-1, 0), 1.5, primary_color),
+                    ]
+                )
+            )
+            story.append(edge_table)
+        else:
+            story.append(
+                Paragraph("<i>No relationships have been defined yet.</i>", body_style)
+            )
+
+        doc.build(story)
 
     def _export_to_html(self, nodes, edges, path):
-        raise NotImplementedError("HTML export is not implemented yet")
+        import datetime
+        import json
+
+        nodes_by_type = {}
+        for n in nodes:
+            t = n["type"]
+            nodes_by_type.setdefault(t, []).append(n)
+
+        node_id_to_val = {n["id"]: n["value"] for n in nodes}
+        node_id_to_type = {n["id"]: n["type"] for n in nodes}
+
+        nodes_html = ""
+        for n_type, n_list in sorted(nodes_by_type.items()):
+            table_rows = ""
+            for n in sorted(n_list, key=lambda x: x["value"]):
+                meta = {}
+                if n.get("metadata"):
+                    try:
+                        meta = (
+                            json.loads(n["metadata"])
+                            if isinstance(n["metadata"], str)
+                            else n["metadata"]
+                        )
+                    except Exception:
+                        pass
+
+                meta_details = ""
+                if isinstance(meta, dict):
+                    for k, v in meta.items():
+                        if k in ["stix2", "misp"]:
+                            continue
+                        meta_details += (
+                            f"<span class='meta-tag'><strong>{k}:</strong> {v}</span> "
+                        )
+                if not meta_details:
+                    meta_details = "<span class='meta-tag-empty'>No metadata</span>"
+
+                table_rows += f"""
+                <tr>
+                    <td><span class='node-val'>{n["value"]}</span></td>
+                    <td><span class='badge'>{n_type}</span></td>
+                    <td>{n.get("timestamp", "-")}</td>
+                    <td>{meta_details}</td>
+                </tr>
+                """
+
+            nodes_html += f"""
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-header">
+                    <h3>{n_type.capitalize()} Nodes ({len(n_list)})</h3>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Value</th>
+                                <th>Type</th>
+                                <th>Timestamp</th>
+                                <th>Metadata</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {table_rows}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            """
+
+        edges_rows = ""
+        for e in edges:
+            src_val = node_id_to_val.get(e["source_id"], f"ID {e['source_id']}")
+            src_type = node_id_to_type.get(e["source_id"], "unknown")
+            tgt_val = node_id_to_val.get(e["target_id"], f"ID {e['target_id']}")
+            tgt_type = node_id_to_type.get(e["target_id"], "unknown")
+            rel = e["relationship"]
+
+            edges_rows += f"""
+            <tr>
+                <td><span class='node-val'>{src_val}</span> <span class='badge-small'>{src_type}</span></td>
+                <td><span class='rel-badge'>{rel}</span></td>
+                <td><span class='node-val'>{tgt_val}</span> <span class='badge-small'>{tgt_type}</span></td>
+            </tr>
+            """
+
+        if not edges:
+            edges_rows = "<tr><td colspan='3' class='empty-state'>No relationships found in this workspace.</td></tr>"
+
+        edges_html = f"""
+        <div class="card" style="margin-top: 20px;">
+            <div class="card-header">
+                <h3>Relationships ({len(edges)})</h3>
+            </div>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Source Node</th>
+                            <th>Relationship</th>
+                            <th>Target Node</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {edges_rows}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        """
+
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keen Report - {self.name}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {{
+            --bg-main: #090a0f;
+            --bg-card: rgba(20, 22, 30, 0.6);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f0f2f8;
+            --text-secondary: #8b92a5;
+            --accent-cyan: #00f0ff;
+            --accent-blue: #0072ff;
+            --success: #00e676;
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'Fira Code', monospace;
+        }}
+        
+        * {{
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }}
+        
+        body {{
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            padding: 40px 20px;
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(0, 114, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(0, 240, 255, 0.05) 0%, transparent 50%);
+            min-height: 100vh;
+        }}
+        
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+        }}
+        
+        header {{
+            margin-bottom: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 24px;
+        }}
+        
+        .header-title h1 {{
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff, var(--text-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }}
+        
+        .header-title p {{
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }}
+        
+        .meta-info {{
+            text-align: right;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }}
+        
+        .meta-info span {{
+            display: block;
+            margin-bottom: 4px;
+        }}
+        
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }}
+        
+        .stat-card {{
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+        }}
+        
+        .stat-icon {{
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            background: rgba(0, 240, 255, 0.1);
+            color: var(--accent-cyan);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+        }}
+        
+        .stat-info h3 {{
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: #fff;
+        }}
+        
+        .stat-info p {{
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }}
+        
+        .card {{
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            margin-bottom: 30px;
+        }}
+        
+        .card-header {{
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.1);
+        }}
+        
+        .card-header h3 {{
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #fff;
+        }}
+        
+        .table-responsive {{
+            width: 100%;
+            overflow-x: auto;
+        }}
+        
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            text-align: left;
+        }}
+        
+        th, td {{
+            padding: 14px 24px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }}
+        
+        th {{
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        
+        tr:last-child td {{
+            border-bottom: none;
+        }}
+        
+        tr:hover td {{
+            background: rgba(255, 255, 255, 0.01);
+        }}
+        
+        .node-val {{
+            font-family: var(--font-mono);
+            font-weight: 500;
+            color: #fff;
+        }}
+        
+        .badge {{
+            background: rgba(0, 240, 255, 0.1);
+            color: var(--accent-cyan);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            font-weight: 500;
+            white-space: nowrap;
+        }}
+        
+        .badge-small {{
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            border: 1px solid var(--border-color);
+            margin-left: 6px;
+        }}
+        
+        .rel-badge {{
+            background: rgba(255, 0, 255, 0.1);
+            color: var(--accent-magenta, #ff00ff);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            border: 1px solid rgba(255, 0, 255, 0.2);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        
+        .meta-tag {{
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-right: 6px;
+            margin-bottom: 6px;
+            color: var(--text-secondary);
+        }}
+        
+        .meta-tag strong {{
+            color: var(--text-primary);
+        }}
+        
+        .meta-tag-empty {{
+            color: var(--text-secondary);
+            font-style: italic;
+            font-size: 0.8rem;
+        }}
+        
+        .empty-state {{
+            text-align: center;
+            color: var(--text-secondary);
+            font-style: italic;
+            padding: 30px;
+        }}
+        
+        footer {{
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-title">
+                <h1>{self.name}</h1>
+                <p>OSINT & Intelligence Gathering Workspace Report</p>
+            </div>
+            <div class="meta-info">
+                <span><strong>Generated:</strong> {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</span>
+                <span><strong>Source Tool:</strong> Keen</span>
+            </div>
+        </header>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fa-solid fa-circle-nodes"></i></div>
+                <div class="stat-info">
+                    <h3>{len(nodes)}</h3>
+                    <p>Total Nodes</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(255, 0, 255, 0.1); color:#ff00ff; border-color:rgba(255,0,255,0.2);"><i class="fa-solid fa-link"></i></div>
+                <div class="stat-info">
+                    <h3>{len(edges)}</h3>
+                    <p>Relationships</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(0, 230, 118, 0.1); color:#00e676; border-color:rgba(0,230,118,0.2);"><i class="fa-solid fa-folder"></i></div>
+                <div class="stat-info">
+                    <h3>{len(nodes_by_type)}</h3>
+                    <p>Categories</p>
+                </div>
+            </div>
+        </div>
+        
+        {nodes_html}
+        
+        {edges_html}
+        
+        <footer>
+            <p>Generated automatically by Keen. Confidential intelligence data.</p>
+        </footer>
+    </div>
+</body>
+</html>
+"""
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(html_content)
 
     def _export_to_markdown(self, nodes, edges, path):
-        raise NotImplementedError("Markdown export is not implemented yet")
+        import json
+
+        lines = []
+        lines.append(f"# Keen Intelligence Report: {self.name}")
+        lines.append("")
+        lines.append("## Overview")
+        lines.append(f"- **Total Nodes:** {len(nodes)}")
+        lines.append(f"- **Total Relationships:** {len(edges)}")
+        lines.append("")
+
+        nodes_by_type = {}
+        for n in nodes:
+            t = n["type"]
+            nodes_by_type.setdefault(t, []).append(n)
+
+        lines.append("## Intelligence Graph Nodes")
+        lines.append("")
+        for n_type, n_list in sorted(nodes_by_type.items()):
+            lines.append(f"### {n_type.capitalize()} ({len(n_list)})")
+            lines.append("")
+            lines.append("| Value | Created At | Extra Details |")
+            lines.append("|-------|------------|---------------|")
+            for n in sorted(n_list, key=lambda x: x["value"]):
+                val = n["value"]
+                ts = n.get("timestamp", "-")
+
+                meta = {}
+                if n.get("metadata"):
+                    try:
+                        meta = (
+                            json.loads(n["metadata"])
+                            if isinstance(n["metadata"], str)
+                            else n["metadata"]
+                        )
+                    except Exception:
+                        pass
+
+                meta_details = []
+                if isinstance(meta, dict):
+                    for k, v in meta.items():
+                        if k in ["stix2", "misp"]:
+                            continue
+                        meta_details.append(f"{k}: {v}")
+
+                meta_str = ", ".join(meta_details) if meta_details else "-"
+                meta_str = meta_str.replace("|", "\\|")
+                lines.append(f"| {val} | {ts} | {meta_str} |")
+            lines.append("")
+
+        lines.append("## Intelligence Graph Relationships")
+        lines.append("")
+        if edges:
+            lines.append("| Source | Relationship | Target |")
+            lines.append("|--------|--------------|--------|")
+
+            node_id_to_val = {n["id"]: n["value"] for n in nodes}
+            for e in edges:
+                src_val = node_id_to_val.get(e["source_id"], f"ID {e['source_id']}")
+                tgt_val = node_id_to_val.get(e["target_id"], f"ID {e['target_id']}")
+                rel = e["relationship"]
+                lines.append(f"| {src_val} | {rel} | {tgt_val} |")
+        else:
+            lines.append("*No relationships documented in this workspace.*")
+
+        lines.append("")
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
 
     def _export_to_json(self, nodes, edges, path):
-        raise NotImplementedError("JSON export is not implemented yet")
+        import json
+
+        formatted_nodes = []
+        for n in nodes:
+            node_dict = dict(n)
+            if node_dict.get("metadata") and isinstance(node_dict["metadata"], str):
+                try:
+                    node_dict["metadata"] = json.loads(node_dict["metadata"])
+                except Exception:
+                    pass
+            formatted_nodes.append(node_dict)
+
+        formatted_edges = []
+        for e in edges:
+            edge_dict = dict(e)
+            if edge_dict.get("metadata") and isinstance(edge_dict["metadata"], str):
+                try:
+                    edge_dict["metadata"] = json.loads(edge_dict["metadata"])
+                except Exception:
+                    pass
+            formatted_edges.append(edge_dict)
+
+        data = {
+            "workspace": self.name,
+            "nodes": formatted_nodes,
+            "edges": formatted_edges,
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
 
     def _export_to_stix2(self, nodes, edges, path):
-        raise NotImplementedError("STIX2 export is not implemented yet")
+        import uuid
+        import json
+        from src.core.result_builder import STIXNamespaces
+
+        stix_objects = []
+        node_id_to_stix_id = {}
+
+        for n in nodes:
+            node_id = n["id"]
+            node_type = n["type"]
+            node_val = n["value"]
+
+            meta = {}
+            if n.get("metadata"):
+                try:
+                    meta = (
+                        json.loads(n["metadata"])
+                        if isinstance(n["metadata"], str)
+                        else n["metadata"]
+                    )
+                except Exception:
+                    pass
+
+            stix_obj = None
+            if (
+                isinstance(meta, dict)
+                and "stix2" in meta
+                and isinstance(meta["stix2"], dict)
+            ):
+                stix_obj = meta["stix2"].copy()
+            else:
+                stix_type_map = {
+                    "email-addr": "email-addr",
+                    "domain-name": "domain-name",
+                    "ipv4-addr": "ipv4-addr",
+                    "ipv6-addr": "ipv6-addr",
+                    "user-account": "user-account",
+                    "x-phone-number": "x-phone-number",
+                    "phone-number": "x-phone-number",
+                    "organization": "identity",
+                    "person": "identity",
+                    "url": "url",
+                    "x-url": "url",
+                    "location": "location",
+                }
+                stix_type = stix_type_map.get(node_type, "x-keen-node")
+
+                ns_map = {
+                    "email-addr": STIXNamespaces.EMAIL,
+                    "domain-name": STIXNamespaces.DOMAIN,
+                    "ipv4-addr": STIXNamespaces.IP,
+                    "ipv6-addr": STIXNamespaces.IP,
+                    "user-account": STIXNamespaces.ACCOUNT,
+                    "x-phone-number": STIXNamespaces.PHONE,
+                    "phone-number": STIXNamespaces.PHONE,
+                    "organization": STIXNamespaces.IDENTITY,
+                    "person": STIXNamespaces.IDENTITY,
+                    "url": STIXNamespaces.URL,
+                    "x-url": STIXNamespaces.URL,
+                    "location": STIXNamespaces.LOCATION,
+                }
+                ns = ns_map.get(stix_type, STIXNamespaces.URL)
+                obj_uuid = uuid.uuid5(ns, node_val)
+                stix_id = f"{stix_type}--{obj_uuid}"
+
+                stix_obj = {
+                    "type": stix_type,
+                    "id": stix_id,
+                    "spec_version": "2.1",
+                }
+
+                if stix_type in [
+                    "email-addr",
+                    "domain-name",
+                    "ipv4-addr",
+                    "ipv6-addr",
+                    "url",
+                    "x-phone-number",
+                ]:
+                    stix_obj["value"] = node_val
+                elif stix_type == "user-account":
+                    stix_obj["user_id"] = node_val
+                elif stix_type == "identity":
+                    stix_obj["name"] = node_val
+                    stix_obj["identity_class"] = (
+                        "organization" if node_type == "organization" else "individual"
+                    )
+                elif stix_type == "location":
+                    stix_obj["name"] = node_val
+                else:
+                    stix_obj["name"] = node_val
+
+            if stix_obj:
+                node_id_to_stix_id[node_id] = stix_obj["id"]
+                stix_objects.append(stix_obj)
+
+        for e in edges:
+            source_id = e["source_id"]
+            target_id = e["target_id"]
+            rel_type = e["relationship"].replace("_", "-").lower()
+
+            source_ref = node_id_to_stix_id.get(source_id)
+            target_ref = node_id_to_stix_id.get(target_id)
+
+            if source_ref and target_ref:
+                rel_uuid = uuid.uuid4()
+                rel_obj = {
+                    "type": "relationship",
+                    "id": f"relationship--{rel_uuid}",
+                    "spec_version": "2.1",
+                    "source_ref": source_ref,
+                    "target_ref": target_ref,
+                    "relationship_type": rel_type,
+                }
+
+                meta = {}
+                if e.get("metadata"):
+                    try:
+                        meta = (
+                            json.loads(e["metadata"])
+                            if isinstance(e["metadata"], str)
+                            else e["metadata"]
+                        )
+                    except Exception:
+                        pass
+                if isinstance(meta, dict) and "description" in meta:
+                    rel_obj["description"] = meta["description"]
+
+                stix_objects.append(rel_obj)
+
+        bundle = {
+            "type": "bundle",
+            "id": f"bundle--{uuid.uuid4()}",
+            "objects": stix_objects,
+        }
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(bundle, f, indent=4)
