@@ -35,6 +35,7 @@ To maintain visual integrity, an edge (relationship) is only rendered on the gra
 
 ### Real-Time Update Synchronization
 When background enrichment modules run or Magic Chaining discovers new nodes, the timeline automatically updates in the background. 
+
 - If you are looking at the **complete graph** (slider at the end), the timeline automatically expands and renders new findings in real-time.
 - If you are **scrubbing or playing** an older segment, the timeline preserves your active scrubbing time index so your focus is never disrupted, while still incorporating the new events in the underlying track.
 
@@ -43,10 +44,12 @@ When background enrichment modules run or Magic Chaining discovers new nodes, th
 ## Advanced: Database Schema & Compatibility
 
 Workspaces are standard SQLite databases (`.keen` files). Timestamps are stored directly in the schema:
+
 - **Nodes:** `nodes.timestamp DATETIME DEFAULT CURRENT_TIMESTAMP`
 - **Edges:** `edge.timestamp DATETIME DEFAULT CURRENT_TIMESTAMP`
 
 ### Backward Compatibility & Fallbacks
 For older workspaces created before the timeline feature was introduced:
+
 1. **Self-Healing Migration:** Upon opening an older workspace, Keen automatically executes a schema migration to add the `timestamp` column to the `edge` table.
 2. **Edge Fallback Logic:** If an edge has a null or missing timestamp, Keen calculates a fallback timestamp equal to the `MAX` of its source and target node timestamps. The relationship will automatically appear on the timeline as soon as both nodes become visible.
