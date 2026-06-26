@@ -1,5 +1,30 @@
 import datetime
 import json
+import re
+
+
+def md_to_html(md_text: str) -> str:
+    if not md_text:
+        return ""
+    # Escape HTML special characters to prevent injection/broken layout
+    html = md_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    
+    # Convert bold **text**
+    html = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", html)
+    # Convert italic *text*
+    html = re.sub(r"\*(.*?)\*", r"<em>\1</em>", html)
+    
+    # Convert headers (###, ##, #)
+    html = re.sub(r"^### (.*?)$", r"<h4 style='color: var(--accent-cyan); margin-top: 12px; margin-bottom: 8px;'>\1</h4>", html, flags=re.MULTILINE)
+    html = re.sub(r"^## (.*?)$", r"<h3 style='color: #fff; margin-top: 16px; margin-bottom: 10px;'>\1</h3>", html, flags=re.MULTILINE)
+    html = re.sub(r"^# (.*?)$", r"<h2 style='color: #fff; margin-top: 20px; margin-bottom: 12px;'>\1</h2>", html, flags=re.MULTILINE)
+    
+    # Convert bullet points * or -
+    html = re.sub(r"^[*-] (.*?)$", r"<li>\1</li>", html, flags=re.MULTILINE)
+    
+    # Convert newlines to <br/>
+    html = html.replace("\n", "<br/>")
+    return html
 
 
 def export_to_html(
@@ -8,6 +33,7 @@ def export_to_html(
     edges: list,
     path: str,
     suggestions: list = [],
+    analysis: str | None = None,
 ) -> None:
     nodes_by_type = {}
     for n in nodes:
@@ -167,6 +193,21 @@ def export_to_html(
                 </div>
             </div>
             """
+
+    analysis_html = ""
+    if analysis:
+        formatted_analysis = md_to_html(analysis)
+        analysis_html = f"""
+        <div class="card" style="margin-top: 20px; border: 1px dashed rgba(0, 240, 255, 0.3); background: rgba(0, 240, 255, 0.02);">
+            <div class="card-header" style="display: flex; align-items: center; gap: 10px; border-bottom: 1px dashed rgba(0, 240, 255, 0.2);">
+                <i class="fa-solid fa-brain" style="color: var(--accent-cyan);"></i>
+                <h3 style="color: var(--accent-cyan);">AI Case Analysis & Synthesis</h3>
+            </div>
+            <div style="padding: 20px 24px; line-height: 1.6; color: var(--text-primary);">
+                {formatted_analysis}
+            </div>
+        </div>
+        """
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -469,6 +510,8 @@ def export_to_html(
         
         {edges_html}
         
+        {analysis_html}
+        
         {suggestions_html}
         
         <footer>
@@ -478,5 +521,6 @@ def export_to_html(
 </body>
 </html>
 """
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(html_content)

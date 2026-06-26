@@ -12,14 +12,15 @@ def export_workspace(
     edges: list,
     path: str,
     suggestions: list = [],
+    analysis: str | None = None,
 ) -> None:
     export_type = export_type.lower()
     if export_type == "pdf":
-        export_to_pdf(workspace_name, nodes, edges, path, suggestions=suggestions)
+        export_to_pdf(workspace_name, nodes, edges, path, suggestions=suggestions, analysis=analysis)
     elif export_type == "html":
-        export_to_html(workspace_name, nodes, edges, path, suggestions=suggestions)
+        export_to_html(workspace_name, nodes, edges, path, suggestions=suggestions, analysis=analysis)
     elif export_type in ["markdown", "md"]:
-        export_to_markdown(workspace_name, nodes, edges, path, suggestions=suggestions)
+        export_to_markdown(workspace_name, nodes, edges, path, suggestions=suggestions, analysis=analysis)
     elif export_type == "json":
         export_to_json(workspace_name, nodes, edges, path)
     elif export_type in ["stix2", "stix"]:

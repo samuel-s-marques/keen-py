@@ -15,12 +15,38 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
 
+def md_to_pdf_html(md_text: str) -> str:
+    if not md_text:
+        return ""
+    import re
+    # Escape HTML special characters to prevent reportlab markup errors
+    html = md_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    
+    # Convert bold **text**
+    html = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", html)
+    # Convert italic *text*
+    html = re.sub(r"\*(.*?)\*", r"<i>\1</i>", html)
+    
+    # Convert headers
+    html = re.sub(r"^### (.*?)$", r"<br/><b>\1</b><br/>", html, flags=re.MULTILINE)
+    html = re.sub(r"^## (.*?)$", r"<br/><font size='12'><b>\1</b></font><br/>", html, flags=re.MULTILINE)
+    html = re.sub(r"^# (.*?)$", r"<br/><font size='14'><b>\1</b></font><br/>", html, flags=re.MULTILINE)
+    
+    # Convert bullet points
+    html = re.sub(r"^[*-] (.*?)$", r"&bull; \1", html, flags=re.MULTILINE)
+    
+    # Convert newlines to <br/>
+    html = html.replace("\n", "<br/>")
+    return html
+
+
 def export_to_pdf(
     workspace_name: str,
     nodes: list,
     edges: list,
     path: str,
     suggestions: list = [],
+    analysis: str | None = None,
 ) -> None:
     doc = SimpleDocTemplate(
         path,
@@ -308,6 +334,15 @@ def export_to_pdf(
         story.append(
             Paragraph("<i>No relationships have been defined yet.</i>", body_style)
         )
+
+    # Append AI Analysis if present
+    if analysis:
+        story.append(PageBreak())
+        story.append(Paragraph("AI Case Analysis & Synthesis", h1_style))
+        story.append(Spacer(1, 0.15 * inch))
+        formatted_analysis = md_to_pdf_html(analysis)
+        story.append(Paragraph(formatted_analysis, body_style))
+        story.append(Spacer(1, 0.2 * inch))
 
     # Append AI Suggestions if present and enabled
     if suggestions:

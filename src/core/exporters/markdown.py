@@ -2,7 +2,12 @@ import json
 
 
 def export_to_markdown(
-    workspace_name: str, nodes: list, edges: list, path: str, suggestions: list = []
+    workspace_name: str,
+    nodes: list,
+    edges: list,
+    path: str,
+    suggestions: list = [],
+    analysis: str | None = None,
 ) -> None:
     lines = []
     lines.append(f"# Keen Intelligence Report: {workspace_name}")
@@ -67,6 +72,13 @@ def export_to_markdown(
         lines.append("*No relationships documented in this workspace.*")
 
     lines.append("")
+
+    # Append AI Analysis if present
+    if analysis:
+        lines.append("## AI Case Analysis & Synthesis")
+        lines.append("")
+        lines.append(analysis)
+        lines.append("")
 
     # Append AI Suggestions if present
     if suggestions:
