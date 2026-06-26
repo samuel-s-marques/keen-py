@@ -2,7 +2,13 @@ import datetime
 import json
 
 
-def export_to_html(workspace_name: str, nodes: list, edges: list, path: str) -> None:
+def export_to_html(
+    workspace_name: str,
+    nodes: list,
+    edges: list,
+    path: str,
+    suggestions: list = [],
+) -> None:
     nodes_by_type = {}
     for n in nodes:
         t = n["type"]
@@ -109,6 +115,58 @@ def export_to_html(workspace_name: str, nodes: list, edges: list, path: str) -> 
         </div>
     </div>
     """
+
+    suggestions_html = ""
+    if suggestions:
+        active_suggestions = [s for s in suggestions if s.get("status") != "dismissed"]
+        if active_suggestions:
+            rows_html = ""
+            for s in active_suggestions:
+                text = s.get("suggestion_text", "")
+                pivot = s.get("pivot_type", "-")
+                if s.get("module_name"):
+                    pivot = f"{pivot} ({s['module_name'].split('/')[-1]})"
+                status = s.get("status", "pending").upper()
+                feedback = s.get("feedback", "-") or "-"
+
+                status_color = "var(--accent-cyan)"
+                if status == "ACCEPTED":
+                    status_color = "var(--success)"
+                elif status == "REJECTED":
+                    status_color = "#ff5252"
+
+                rows_html += f"""
+                <tr>
+                    <td><span class='node-val' style='font-family: var(--font-main); font-size: 0.85rem; color: var(--text-primary);'>{text}</span></td>
+                    <td><span class='badge' style='background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);'>{pivot}</span></td>
+                    <td><span class='badge' style='background: rgba(0, 0, 0, 0.2); color: {status_color}; border-color: {status_color}44;'>{status}</span></td>
+                    <td style='color: var(--text-secondary); font-size: 0.85rem;'>{feedback}</td>
+                </tr>
+                """
+
+            suggestions_html = f"""
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-header" style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-brain" style="color: var(--accent-cyan);"></i>
+                    <h3>AI Thinking Partner Insights</h3>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 50%;">Recommendation</th>
+                                <th>Pivot Action</th>
+                                <th>Status</th>
+                                <th>User Feedback</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows_html}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            """
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -410,6 +468,8 @@ def export_to_html(workspace_name: str, nodes: list, edges: list, path: str) -> 
         {nodes_html}
         
         {edges_html}
+        
+        {suggestions_html}
         
         <footer>
             <p>Generated automatically by Keen. Confidential intelligence data.</p>
