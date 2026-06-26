@@ -44,6 +44,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeSocketsMap = new Map();
     let currentWorkspaces = [];
     const activeRuns = new Set(); // Tracks "moduleName:targetValue" strings to prevent duplicates
+    
+    // Timeline State
+    let timelineTimestamps = [];
+    let isTimelinePlaying = false;
+    let timelineTimer = null;
 
     const NODE_TO_VALIDATOR_MAP = {
         'email-addr': ['email'],
@@ -1249,6 +1254,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (network) network.destroy();
                         const exportDropdown = document.getElementById('export-dropdown');
                         if (exportDropdown) exportDropdown.style.display = 'none';
+                        const timelineContainer = document.getElementById('graph-timeline');
+                        if (timelineContainer) timelineContainer.style.display = 'none';
+                        const minimapEl = document.getElementById('graph-minimap');
+                        if (minimapEl) minimapEl.style.bottom = '16px';
                     }
                     fetchWorkspaces();
                 }
@@ -1280,6 +1289,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function selectWorkspace(name) {
+        // Clear any active play timers on workspace switch
+        if (isTimelinePlaying) {
+            toggleTimelinePlay(false);
+        }
+
         activeWorkspace = name;
         activeWorkspaceTitle.textContent = name;
 
@@ -1312,7 +1326,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             renderTables();
 
-            drawGraph(nodes, edges);
+            initTimeline();
 
             // Note: we don't call fetchWorkspaces() here anymore to avoid infinite loops, 
             // since fetchWorkspaces recreates DOM elements. Just update stats manually if needed.
@@ -1933,6 +1947,195 @@ document.addEventListener('DOMContentLoaded', () => {
 
             contextMenu.classList.add('hidden');
         });
+    }
+
+    function getEdgeTimestamp(edge) {
+        if (edge.timestamp) return edge.timestamp;
+        const sourceNode = currentNodes.find(n => n.id === edge.source_id);
+        const targetNode = currentNodes.find(n => n.id === edge.target_id);
+        const t1 = sourceNode ? sourceNode.timestamp : null;
+        const t2 = targetNode ? targetNode.timestamp : null;
+        if (!t1 && !t2) return null;
+        if (!t1) return t2;
+        if (!t2) return t1;
+        return t1 > t2 ? t1 : t2;
+    }
+
+    function initTimeline() {
+        const timelineContainer = document.getElementById('graph-timeline');
+        const slider = document.getElementById('timeline-slider');
+        const startTimeSpan = document.getElementById('timeline-start-time');
+        const endTimeSpan = document.getElementById('timeline-end-time');
+        
+        if (!timelineContainer || !slider) return;
+
+        // Remember previous state to handle real-time updates seamlessly
+        const prevActiveTime = timelineTimestamps.length > 0 ? timelineTimestamps[parseInt(slider.value, 10)] : null;
+        const wasAtEnd = timelineTimestamps.length > 0 && parseInt(slider.value, 10) === timelineTimestamps.length - 1;
+
+        // Gather all timestamps
+        const tsSet = new Set();
+        currentNodes.forEach(n => { if (n.timestamp) tsSet.add(n.timestamp); });
+        currentEdges.forEach(e => {
+            const ts = getEdgeTimestamp(e);
+            if (ts) tsSet.add(ts);
+        });
+
+        timelineTimestamps = Array.from(tsSet).sort();
+
+        // If not enough data, hide timeline
+        if (timelineTimestamps.length < 2) {
+            timelineContainer.style.display = 'none';
+            const minimapEl = document.getElementById('graph-minimap');
+            if (minimapEl) minimapEl.style.bottom = '16px';
+            if (isTimelinePlaying) {
+                toggleTimelinePlay(false);
+            }
+            drawGraph(currentNodes, currentEdges);
+            return;
+        }
+
+        // Show timeline
+        timelineContainer.style.display = 'flex';
+        const minimapEl = document.getElementById('graph-minimap');
+        if (minimapEl) minimapEl.style.bottom = '96px';
+
+        // Setup slider bounds
+        slider.min = 0;
+        slider.max = timelineTimestamps.length - 1;
+
+        // Smart position preservation
+        if (wasAtEnd || prevActiveTime === null) {
+            slider.value = timelineTimestamps.length - 1;
+        } else {
+            let bestIdx = 0;
+            let minDiff = Infinity;
+            const prevDate = new Date(prevActiveTime.replace(' ', 'T') + 'Z').getTime();
+            
+            timelineTimestamps.forEach((ts, idx) => {
+                const d = new Date(ts.replace(' ', 'T') + 'Z').getTime();
+                const diff = Math.abs(d - prevDate);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestIdx = idx;
+                }
+            });
+            slider.value = bestIdx;
+        }
+
+        // Format dates for display
+        const formatDate = (tsStr) => {
+            if (!tsStr) return '-';
+            try {
+                const d = new Date(tsStr.replace(' ', 'T') + 'Z');
+                if (isNaN(d.getTime())) return tsStr;
+                return d.toLocaleString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                return tsStr;
+            }
+        };
+
+        startTimeSpan.textContent = formatDate(timelineTimestamps[0]);
+        endTimeSpan.textContent = formatDate(timelineTimestamps[timelineTimestamps.length - 1]);
+        
+        updateTimelineFilter();
+    }
+
+    function updateTimelineFilter() {
+        const slider = document.getElementById('timeline-slider');
+        const currentTimeSpan = document.getElementById('timeline-current-time');
+        const statsSpan = document.getElementById('timeline-stats');
+        
+        if (!slider || timelineTimestamps.length < 2) return;
+
+        const idx = parseInt(slider.value, 10);
+        const activeTime = timelineTimestamps[idx];
+
+        const formatDate = (tsStr) => {
+            if (!tsStr) return '-';
+            try {
+                const d = new Date(tsStr.replace(' ', 'T') + 'Z');
+                if (isNaN(d.getTime())) return tsStr;
+                return d.toLocaleString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                return tsStr;
+            }
+        };
+
+        currentTimeSpan.textContent = formatDate(activeTime);
+
+        // Filter nodes
+        const filteredNodes = currentNodes.filter(n => !n.timestamp || n.timestamp <= activeTime);
+        const visibleNodeIds = new Set(filteredNodes.map(n => n.id || n.value));
+
+        // Filter edges: must be <= activeTime AND both source and target must be visible
+        const filteredEdges = currentEdges.filter(e => {
+            const ts = getEdgeTimestamp(e);
+            const isTimeMatch = !ts || ts <= activeTime;
+            const areNodesVisible = visibleNodeIds.has(e.source_id) && visibleNodeIds.has(e.target_id);
+            return isTimeMatch && areNodesVisible;
+        });
+
+        // Update stats
+        statsSpan.textContent = `${filteredNodes.length} / ${currentNodes.length} nodes visible`;
+
+        // Update the live graph
+        drawGraph(filteredNodes, filteredEdges);
+    }
+
+    function toggleTimelinePlay(forceState) {
+        const btn = document.getElementById('btn-timeline-play');
+        const slider = document.getElementById('timeline-slider');
+        const speedSelect = document.getElementById('timeline-speed');
+        
+        if (!btn || !slider) return;
+
+        const nextState = forceState !== undefined ? forceState : !isTimelinePlaying;
+        
+        if (nextState) {
+            isTimelinePlaying = true;
+            btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            btn.title = 'Pause Timeline';
+
+            if (parseInt(slider.value, 10) >= timelineTimestamps.length - 1) {
+                slider.value = 0;
+                updateTimelineFilter();
+            }
+
+            const interval = parseInt(speedSelect ? speedSelect.value : '1000', 10);
+            
+            timelineTimer = setInterval(() => {
+                const val = parseInt(slider.value, 10);
+                if (val < timelineTimestamps.length - 1) {
+                    slider.value = val + 1;
+                    updateTimelineFilter();
+                } else {
+                    toggleTimelinePlay(false);
+                }
+            }, interval);
+        } else {
+            isTimelinePlaying = false;
+            btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+            btn.title = 'Play Timeline';
+            if (timelineTimer) {
+                clearInterval(timelineTimer);
+                timelineTimer = null;
+            }
+        }
     }
 
     window.addEventListener('keydown', (e) => {
@@ -2636,6 +2839,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateSnackbar(snackbarId, displayName, 'Export failed: network error.', 'error', 5000);
                 }
             });
+        });
+    }
+
+    // --- Event Timeline Event Listeners ---
+    const timelineSlider = document.getElementById('timeline-slider');
+    const btnTimelinePlay = document.getElementById('btn-timeline-play');
+    const timelineSpeed = document.getElementById('timeline-speed');
+
+    if (timelineSlider) {
+        timelineSlider.addEventListener('input', () => {
+            if (isTimelinePlaying) {
+                toggleTimelinePlay(false);
+            }
+            updateTimelineFilter();
+        });
+    }
+
+    if (btnTimelinePlay) {
+        btnTimelinePlay.addEventListener('click', () => {
+            toggleTimelinePlay();
+        });
+    }
+
+    if (timelineSpeed) {
+        timelineSpeed.addEventListener('change', () => {
+            if (isTimelinePlaying) {
+                toggleTimelinePlay(false);
+                toggleTimelinePlay(true);
+            }
         });
     }
 });
