@@ -681,11 +681,24 @@ class WorkspaceManager(DatabaseEngine):
         if type not in ["pdf", "html", "markdown", "json", "stix2"]:
             raise ValueError("Invalid export type.")
 
-        if Path(path).suffix != f".{type}":
-            path = f"{path}.{type}"
+        # Map formats to their standard extensions
+        ext_map = {
+            "pdf": ".pdf",
+            "html": ".html",
+            "markdown": ".md",
+            "json": ".json",
+            "stix2": ".json"
+        }
+        expected_ext = ext_map.get(type, f".{type}")
 
-        if Path(path).exists():
-            raise FileExistsError(f"File {path} already exists.")
+        # Only append extension if the path does not already end with a valid extension
+        current_suffix = Path(path).suffix.lower()
+        valid_suffixes = [expected_ext, f".{type}"]
+        if type == "markdown":
+            valid_suffixes.append(".markdown")
+
+        if current_suffix not in valid_suffixes:
+            path = f"{path}{expected_ext}"
 
         Path(path).parent.mkdir(parents=True, exist_ok=True)
 
