@@ -36,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentWorkspace = null;
     let lastSelection = { nodes: [], edges: [] };
     let minimap = null;
+    let minimapNodesDataSet = null;
+    let minimapEdgesDataSet = null;
     let isConfigUnlocked = false;
     let configKeys = {};
     let currentNodes = [];
@@ -44,6 +46,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeSocketsMap = new Map();
     let currentWorkspaces = [];
     const activeRuns = new Set(); // Tracks "moduleName:targetValue" strings to prevent duplicates
+
+    // Timeline State
+    let timelineTimestamps = [];
+    let isTimelinePlaying = false;
+    let timelineTimer = null;
 
     const NODE_TO_VALIDATOR_MAP = {
         'email-addr': ['email'],
@@ -1249,6 +1256,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (network) network.destroy();
                         const exportDropdown = document.getElementById('export-dropdown');
                         if (exportDropdown) exportDropdown.style.display = 'none';
+                        const timelineContainer = document.getElementById('graph-timeline');
+                        if (timelineContainer) timelineContainer.style.display = 'none';
+                        const minimapEl = document.getElementById('graph-minimap');
+                        if (minimapEl) minimapEl.style.bottom = '16px';
                     }
                     fetchWorkspaces();
                 }
@@ -1280,6 +1291,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function selectWorkspace(name) {
+        // Clear any active play timers on workspace switch
+        if (isTimelinePlaying) {
+            toggleTimelinePlay(false);
+        }
+
         activeWorkspace = name;
         activeWorkspaceTitle.textContent = name;
 
@@ -1310,9 +1326,28 @@ document.addEventListener('DOMContentLoaded', () => {
             countNodes.textContent = nodes.length || 0;
             countEdges.textContent = edges.length || 0;
 
+            // Update stats on the sidebar workspace list item manually
+            const activeItem = Array.from(workspaceList.querySelectorAll('.workspace-item')).find(el => {
+                const nameEl = el.querySelector('.workspace-name');
+                return nameEl && nameEl.textContent === name;
+            });
+            if (activeItem) {
+                const statBadges = activeItem.querySelectorAll('.stat-badge');
+                if (statBadges.length >= 2) {
+                    statBadges[0].innerHTML = `<i class="fa-solid fa-circle-nodes"></i> ${nodes.length}`;
+                    statBadges[1].innerHTML = `<i class="fa-solid fa-link"></i> ${edges.length}`;
+                }
+                // Update local currentWorkspaces array to persist stats during filtering/search
+                const ws = currentWorkspaces.find(w => w.name === name);
+                if (ws) {
+                    ws.node_count = nodes.length;
+                    ws.edge_count = edges.length;
+                }
+            }
+
             renderTables();
 
-            drawGraph(nodes, edges);
+            initTimeline();
 
             // Note: we don't call fetchWorkspaces() here anymore to avoid infinite loops, 
             // since fetchWorkspaces recreates DOM elements. Just update stats manually if needed.
@@ -1435,6 +1470,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return visNode;
         });
 
+        const minimapVisNodes = visNodes.map(n => ({
+            ...n,
+            icon: n.icon ? { ...n.icon, size: 12 } : undefined,
+            font: { size: 0 }
+        }));
+
         const visEdges = edges.map(e => ({
             id: e.id,
             from: e.source_id,
@@ -1478,6 +1519,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 edgesDataSet.update(visEdges);
             }
 
+            // Synchronize minimap nodes
+            if (minimapNodesDataSet && minimapEdgesDataSet) {
+                const newMinimapNodeIds = new Set(minimapVisNodes.map(n => n.id));
+                const minimapNodeIdsToRemove = minimapNodesDataSet.getIds().filter(id => !newMinimapNodeIds.has(id));
+                
+                if (minimapNodeIdsToRemove.length > 0) {
+                    minimapNodesDataSet.remove(minimapNodeIdsToRemove);
+                }
+                if (minimapVisNodes.length > 0) {
+                    minimapNodesDataSet.update(minimapVisNodes);
+                }
+
+                // Synchronize minimap edges
+                const newMinimapEdgeIds = new Set(visEdges.map(e => e.id));
+                const minimapEdgeIdsToRemove = minimapEdgesDataSet.getIds().filter(id => !newMinimapEdgeIds.has(id));
+                
+                if (minimapEdgeIdsToRemove.length > 0) {
+                    minimapEdgesDataSet.remove(minimapEdgeIdsToRemove);
+                }
+                if (visEdges.length > 0) {
+                    minimapEdgesDataSet.update(visEdges);
+                }
+            }
+
             // If there are new nodes without positions, enable physics so they float in smoothly
             if (newNodesWithoutPos.length > 0) {
                 network.setOptions({ physics: { enabled: true } });
@@ -1495,6 +1560,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         nodesDataSet = new vis.DataSet(visNodes);
         edgesDataSet = new vis.DataSet(visEdges);
+        minimapNodesDataSet = new vis.DataSet(minimapVisNodes);
+        minimapEdgesDataSet = new vis.DataSet(visEdges);
 
         const data = {
             nodes: nodesDataSet,
@@ -1587,6 +1654,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (minimapCanvas) {
             const minimapOptions = {
+                nodes: {
+                    icon: { size: 12 },
+                    font: { size: 0 }
+                },
                 edges: {
                     smooth: false,
                     font: { size: 0 } // Hide edge labels on minimap
@@ -1600,7 +1671,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     hover: false
                 }
             };
-            minimap = new vis.Network(minimapCanvas, data, minimapOptions);
+            const minimapData = {
+                nodes: minimapNodesDataSet,
+                edges: minimapEdgesDataSet
+            };
+            minimap = new vis.Network(minimapCanvas, minimapData, minimapOptions);
 
             setTimeout(() => {
                 if (minimap) minimap.fit();
@@ -1811,7 +1886,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const edgeId = this.getEdgeAt(params.pointer.DOM);
 
             if (nodeId) {
-                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
+                const selectedNode = currentNodes.find(n => n.id === nodeId || n.value === nodeId);
                 if (selectedNode) {
                     showContextMenu(params.event.pageX, params.event.pageY, selectedNode, null);
                 }
@@ -1836,13 +1911,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 moduleDetails.classList.add('hidden');
             } else if (selectedNodeIds.length === 1 && selectedEdgeIds.length === 0) {
                 const nodeId = selectedNodeIds[0];
-                const selectedNode = nodes.find(n => n.id === nodeId || n.value === nodeId);
+                const selectedNode = currentNodes.find(n => n.id === nodeId || n.value === nodeId);
                 if (selectedNode) {
                     handleNodeSelection(selectedNode);
                 }
             } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 1) {
                 const edgeId = selectedEdgeIds[0];
-                const selectedEdge = edges.find(e => e.id === edgeId);
+                const selectedEdge = currentEdges.find(e => e.id === edgeId);
                 if (selectedEdge) {
                     populateNodeInfo(selectedEdge, true);
                     moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
@@ -1859,7 +1934,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Nodes (${selectedNodeIds.length}):</strong></div>`;
                     html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
                     selectedNodeIds.forEach(id => {
-                        const node = nodes.find(n => n.id === id || n.value === id);
+                        const node = currentNodes.find(n => n.id === id || n.value === id);
                         const val = node ? (node.label || node.value) : id;
                         html += `<span class="badge">${val}</span>`;
                     });
@@ -1870,7 +1945,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
                     html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
                     selectedEdgeIds.forEach(id => {
-                        const edge = edges.find(e => e.id === id);
+                        const edge = currentEdges.find(e => e.id === id);
                         const rel = edge ? edge.relationship : id;
                         html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
                     });
@@ -1933,6 +2008,195 @@ document.addEventListener('DOMContentLoaded', () => {
 
             contextMenu.classList.add('hidden');
         });
+    }
+
+    function getEdgeTimestamp(edge) {
+        if (edge.timestamp) return edge.timestamp;
+        const sourceNode = currentNodes.find(n => n.id === edge.source_id);
+        const targetNode = currentNodes.find(n => n.id === edge.target_id);
+        const t1 = sourceNode ? sourceNode.timestamp : null;
+        const t2 = targetNode ? targetNode.timestamp : null;
+        if (!t1 && !t2) return null;
+        if (!t1) return t2;
+        if (!t2) return t1;
+        return t1 > t2 ? t1 : t2;
+    }
+
+    function initTimeline() {
+        const timelineContainer = document.getElementById('graph-timeline');
+        const slider = document.getElementById('timeline-slider');
+        const startTimeSpan = document.getElementById('timeline-start-time');
+        const endTimeSpan = document.getElementById('timeline-end-time');
+
+        if (!timelineContainer || !slider) return;
+
+        // Remember previous state to handle real-time updates seamlessly
+        const prevActiveTime = timelineTimestamps.length > 0 ? timelineTimestamps[parseInt(slider.value, 10)] : null;
+        const wasAtEnd = timelineTimestamps.length > 0 && parseInt(slider.value, 10) === timelineTimestamps.length - 1;
+
+        // Gather all timestamps
+        const tsSet = new Set();
+        currentNodes.forEach(n => { if (n.timestamp) tsSet.add(n.timestamp); });
+        currentEdges.forEach(e => {
+            const ts = getEdgeTimestamp(e);
+            if (ts) tsSet.add(ts);
+        });
+
+        timelineTimestamps = Array.from(tsSet).sort();
+
+        // If not enough data, hide timeline
+        if (timelineTimestamps.length < 2) {
+            timelineContainer.style.display = 'none';
+            const minimapEl = document.getElementById('graph-minimap');
+            if (minimapEl) minimapEl.style.bottom = '16px';
+            if (isTimelinePlaying) {
+                toggleTimelinePlay(false);
+            }
+            drawGraph(currentNodes, currentEdges);
+            return;
+        }
+
+        // Show timeline
+        timelineContainer.style.display = 'flex';
+        const minimapEl = document.getElementById('graph-minimap');
+        if (minimapEl) minimapEl.style.bottom = '96px';
+
+        // Setup slider bounds
+        slider.min = 0;
+        slider.max = timelineTimestamps.length - 1;
+
+        // Smart position preservation
+        if (wasAtEnd || prevActiveTime === null) {
+            slider.value = timelineTimestamps.length - 1;
+        } else {
+            let bestIdx = 0;
+            let minDiff = Infinity;
+            const prevDate = new Date(prevActiveTime.replace(' ', 'T') + 'Z').getTime();
+
+            timelineTimestamps.forEach((ts, idx) => {
+                const d = new Date(ts.replace(' ', 'T') + 'Z').getTime();
+                const diff = Math.abs(d - prevDate);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestIdx = idx;
+                }
+            });
+            slider.value = bestIdx;
+        }
+
+        // Format dates for display
+        const formatDate = (tsStr) => {
+            if (!tsStr) return '-';
+            try {
+                const d = new Date(tsStr.replace(' ', 'T') + 'Z');
+                if (isNaN(d.getTime())) return tsStr;
+                return d.toLocaleString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                return tsStr;
+            }
+        };
+
+        startTimeSpan.textContent = formatDate(timelineTimestamps[0]);
+        endTimeSpan.textContent = formatDate(timelineTimestamps[timelineTimestamps.length - 1]);
+
+        updateTimelineFilter();
+    }
+
+    function updateTimelineFilter() {
+        const slider = document.getElementById('timeline-slider');
+        const currentTimeSpan = document.getElementById('timeline-current-time');
+        const statsSpan = document.getElementById('timeline-stats');
+
+        if (!slider || timelineTimestamps.length < 2) return;
+
+        const idx = parseInt(slider.value, 10);
+        const activeTime = timelineTimestamps[idx];
+
+        const formatDate = (tsStr) => {
+            if (!tsStr) return '-';
+            try {
+                const d = new Date(tsStr.replace(' ', 'T') + 'Z');
+                if (isNaN(d.getTime())) return tsStr;
+                return d.toLocaleString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                return tsStr;
+            }
+        };
+
+        currentTimeSpan.textContent = formatDate(activeTime);
+
+        // Filter nodes
+        const filteredNodes = currentNodes.filter(n => !n.timestamp || n.timestamp <= activeTime);
+        const visibleNodeIds = new Set(filteredNodes.map(n => n.id || n.value));
+
+        // Filter edges: must be <= activeTime AND both source and target must be visible
+        const filteredEdges = currentEdges.filter(e => {
+            const ts = getEdgeTimestamp(e);
+            const isTimeMatch = !ts || ts <= activeTime;
+            const areNodesVisible = visibleNodeIds.has(e.source_id) && visibleNodeIds.has(e.target_id);
+            return isTimeMatch && areNodesVisible;
+        });
+
+        // Update stats
+        statsSpan.textContent = `${filteredNodes.length} / ${currentNodes.length} nodes visible`;
+
+        // Update the live graph
+        drawGraph(filteredNodes, filteredEdges);
+    }
+
+    function toggleTimelinePlay(forceState) {
+        const btn = document.getElementById('btn-timeline-play');
+        const slider = document.getElementById('timeline-slider');
+        const speedSelect = document.getElementById('timeline-speed');
+
+        if (!btn || !slider) return;
+
+        const nextState = forceState !== undefined ? forceState : !isTimelinePlaying;
+
+        if (nextState) {
+            isTimelinePlaying = true;
+            btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            btn.title = 'Pause Timeline';
+
+            if (parseInt(slider.value, 10) >= timelineTimestamps.length - 1) {
+                slider.value = 0;
+                updateTimelineFilter();
+            }
+
+            const interval = parseInt(speedSelect ? speedSelect.value : '1000', 10);
+
+            timelineTimer = setInterval(() => {
+                const val = parseInt(slider.value, 10);
+                if (val < timelineTimestamps.length - 1) {
+                    slider.value = val + 1;
+                    updateTimelineFilter();
+                } else {
+                    toggleTimelinePlay(false);
+                }
+            }, interval);
+        } else {
+            isTimelinePlaying = false;
+            btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+            btn.title = 'Play Timeline';
+            if (timelineTimer) {
+                clearInterval(timelineTimer);
+                timelineTimer = null;
+            }
+        }
     }
 
     window.addEventListener('keydown', (e) => {
@@ -2611,7 +2875,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (disposition && disposition.indexOf('attachment') !== -1) {
                             const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
                             const matches = filenameRegex.exec(disposition);
-                            if (matches != null && matches[1]) { 
+                            if (matches != null && matches[1]) {
                                 filename = matches[1].replace(/['"]/g, '');
                             }
                         }
@@ -2636,6 +2900,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateSnackbar(snackbarId, displayName, 'Export failed: network error.', 'error', 5000);
                 }
             });
+        });
+    }
+
+    // --- Event Timeline Event Listeners ---
+    const timelineSlider = document.getElementById('timeline-slider');
+    const btnTimelinePlay = document.getElementById('btn-timeline-play');
+    const timelineSpeed = document.getElementById('timeline-speed');
+
+    if (timelineSlider) {
+        timelineSlider.addEventListener('input', () => {
+            if (isTimelinePlaying) {
+                toggleTimelinePlay(false);
+            }
+            updateTimelineFilter();
+        });
+    }
+
+    if (btnTimelinePlay) {
+        btnTimelinePlay.addEventListener('click', () => {
+            toggleTimelinePlay();
+        });
+    }
+
+    if (timelineSpeed) {
+        timelineSpeed.addEventListener('change', () => {
+            if (isTimelinePlaying) {
+                toggleTimelinePlay(false);
+                toggleTimelinePlay(true);
+            }
         });
     }
 });

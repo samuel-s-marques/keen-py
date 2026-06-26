@@ -13,6 +13,7 @@ nav:
                   - Usage: getting-started/usage.md
                   - Preferences: getting-started/preferences.md
                   - Workspace Management: getting-started/workspace_management.md
+                  - Timeline Management: getting-started/timeline_management.md
                   - API Keys Management: getting-started/api_keys_management.md
                   - Proxy Management: getting-started/proxy_management.md
                   - Magic Engine: getting-started/magic_engine.md
