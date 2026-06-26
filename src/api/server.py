@@ -646,6 +646,86 @@ def rename_workspace(
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@app.get("/api/workspaces/{name}/export")
+def export_workspace(
+    name: str,
+    format: str,
+    background_tasks: BackgroundTasks,
+    config: ConfigManager = Depends(get_config)
+) -> Any:
+    """Export workspace to multiple formats.
+
+    Args:
+        name (str): Workspace name.
+        format (str): Export format.
+
+    Returns:
+        Any: File response.
+    """
+    w = config.get_workspace(name)
+    if not w:
+        raise WorkspaceNotFoundException()
+
+    format = format.lower()
+    if format not in ["pdf", "html", "stix2", "json", "markdown"]:
+        return JSONResponse(status_code=400, content={"error": f"Unsupported export format: {format}"})
+
+    import tempfile
+    import os
+    from fastapi.responses import FileResponse
+
+    ext_map = {
+        "pdf": ".pdf",
+        "html": ".html",
+        "stix2": ".json",
+        "json": ".json",
+        "markdown": ".md"
+    }
+    ext = ext_map.get(format, ".txt")
+
+    temp_fd, temp_path = tempfile.mkstemp(suffix=ext)
+    os.close(temp_fd)
+
+    try:
+        wm = WorkspaceManager(w["path"], name=name)
+        wm.export(format, temp_path)
+        wm.close()
+    except Exception as e:
+        logger.exception("Workspace export failed")
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+        return JSONResponse(status_code=500, content={"error": f"Export failed: {str(e)}"})
+
+    def cleanup():
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+    background_tasks.add_task(cleanup)
+
+    media_types = {
+        "pdf": "application/pdf",
+        "html": "text/html",
+        "stix2": "application/json",
+        "json": "application/json",
+        "markdown": "text/markdown"
+    }
+
+    filename = f"{name}_export{ext}"
+
+    return FileResponse(
+        path=temp_path,
+        media_type=media_types.get(format, "application/octet-stream"),
+        filename=filename
+    )
+
+
+
 @app.post("/api/workspaces/{name}/edges", response_model=None)
 def create_workspace_edge(
     req: EdgeCreate, wm: WorkspaceManager = Depends(get_workspace_manager)
