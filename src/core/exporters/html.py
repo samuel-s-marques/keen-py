@@ -207,7 +207,6 @@ def export_to_html(workspace_name: str, nodes: list, edges: list, path: str) -> 
             display: flex;
             align-items: center;
             gap: 20px;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
         }}
         
         .stat-icon {{
@@ -242,7 +241,6 @@ def export_to_html(workspace_name: str, nodes: list, edges: list, path: str) -> 
             backdrop-filter: blur(12px);
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
             overflow: hidden;
             margin-bottom: 30px;
         }}
