@@ -115,6 +115,22 @@ class ConfigManager(DatabaseEngine):
             INSERT OR IGNORE INTO preferences (key, value) 
             VALUES ('proxy_sticky_index', '0')
         """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('llm_provider', 'openai')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('llm_model', 'gpt-4o')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('llm_base_url', '')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value) 
+            VALUES ('llm_thinking_partner_enabled', 'false')
+        """)
 
         # Handle migration for existing databases missing the description column
         try:
@@ -506,9 +522,26 @@ class WorkspaceManager(DatabaseEngine):
 
         # Add timestamp column for edges if it doesn't exist
         try:
-            cursor.execute("ALTER TABLE edge ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP")
+            cursor.execute(
+                "ALTER TABLE edge ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP"
+            )
         except Exception:
             pass
+
+        # Create AI suggestions table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ai_suggestions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                suggestion_text TEXT NOT NULL,
+                pivot_type TEXT,
+                module_name TEXT,
+                module_options TEXT,
+                context_nodes TEXT,
+                status TEXT DEFAULT 'pending',
+                feedback TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
         self.conn.commit()
 
@@ -662,4 +695,64 @@ class WorkspaceManager(DatabaseEngine):
         cursor.execute("SELECT * FROM edge")
         edges = [dict(row) for row in cursor.fetchall()]
 
-        export_workspace(self.name, type, nodes, edges, path)
+        # Retrieve AI suggestions if enabled in global preferences
+        config = ConfigManager("~/.keen/config.db")
+        export_suggestions = (
+            config.get_preference("llm_export_suggestions_enabled") == "true"
+        )
+        config.close()
+
+        suggestions = []
+        if export_suggestions:
+            suggestions = self.get_suggestions()
+
+        export_workspace(self.name, type, nodes, edges, path, suggestions=suggestions)
+
+    def get_suggestions(self) -> list[dict]:
+        """Retrieve all AI suggestions for the active workspace."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM ai_suggestions ORDER BY created_at DESC")
+        rows = [dict(row) for row in cursor.fetchall()]
+        for row in rows:
+            if row.get("module_options"):
+                try:
+                    row["module_options"] = json.loads(row["module_options"])
+                except Exception:
+                    pass
+            if row.get("context_nodes"):
+                try:
+                    row["context_nodes"] = json.loads(row["context_nodes"])
+                except Exception:
+                    pass
+        return rows
+
+    def add_suggestion(
+        self,
+        suggestion_text: str,
+        pivot_type: str | None = None,
+        module_name: str | None = None,
+        module_options: dict | None = None,
+        context_nodes: list | None = None,
+    ) -> int | None:
+        """Insert a new AI suggestion into the workspace database."""
+        cursor = self.conn.cursor()
+        options_json = json.dumps(module_options or {})
+        nodes_json = json.dumps(context_nodes or [])
+        cursor.execute(
+            "INSERT INTO ai_suggestions (suggestion_text, pivot_type, module_name, module_options, context_nodes) VALUES (?, ?, ?, ?, ?)",
+            (suggestion_text, pivot_type, module_name, options_json, nodes_json),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def update_suggestion_status(
+        self, suggestion_id: int, status: str, feedback: str | None = None
+    ) -> bool:
+        """Update the status and feedback of an AI suggestion."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE ai_suggestions SET status = ?, feedback = ? WHERE id = ?",
+            (status, feedback, suggestion_id),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
