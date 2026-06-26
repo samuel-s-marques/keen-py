@@ -485,6 +485,7 @@ class WorkspaceManager(DatabaseEngine):
                 target_id INTEGER,
                 relationship TEXT,
                 metadata TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(source_id) REFERENCES nodes(id),
                 FOREIGN KEY(target_id) REFERENCES nodes(id)
             )
@@ -500,6 +501,12 @@ class WorkspaceManager(DatabaseEngine):
         # Add metadata column for edges if it doesn't exist
         try:
             cursor.execute("ALTER TABLE edge ADD COLUMN metadata TEXT")
+        except Exception:
+            pass
+
+        # Add timestamp column for edges if it doesn't exist
+        try:
+            cursor.execute("ALTER TABLE edge ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP")
         except Exception:
             pass
 
