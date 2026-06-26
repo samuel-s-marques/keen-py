@@ -208,6 +208,8 @@
                             style="padding: 10px 16px;"><i class="fa-solid fa-bolt"></i> Runner</button>
                         <button class="tab right-tab" data-target="tab-node-info" style="padding: 10px 16px;"><i
                                 class="fa-solid fa-circle-info"></i> Info</button>
+                        <button class="tab right-tab" data-target="tab-thinking-partner" style="padding: 10px 16px; position: relative;"><i
+                                class="fa-solid fa-brain"></i> Partner<span id="partner-tab-pulse" class="pulse-dot hidden"></span></button>
                     </div>
                 </div>
 
@@ -246,6 +248,32 @@
                         <div id="node-info-content"
                             style="display: none; flex-direction: column; gap: 12px; font-size: 0.85rem; color: var(--text-secondary);">
                             <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div id="tab-thinking-partner" class="tab-content right-tab-content"
+                        style="padding: 16px; flex-direction: column; height: 100%;">
+                        <div class="partner-header"
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-shrink: 0;">
+                            <h4 style="margin: 0; font-size: 1rem; color: var(--text-primary);"><i
+                                    class="fa-solid fa-lightbulb"
+                                    style="color: var(--accent-cyan); margin-right: 6px;"></i> AI Insights</h4>
+                            <button id="btn-analyze-graph" class="btn-primary"
+                                style="padding: 6px 12px; font-size: 0.8rem; height: 32px; box-shadow: none; display: flex; align-items: center; gap: 6px;">
+                                <i class="fa-solid fa-sync"></i> Analyze
+                            </button>
+                        </div>
+
+                        <div id="partner-logs-container" class="terminal-container" style="height: 120px; margin-bottom: 12px; display: none; flex-shrink: 0; border: 1px solid var(--border-color); border-radius: 6px;">
+                            <div class="terminal-header" style="padding: 6px 12px;"><span>AI Activity Logs</span></div>
+                            <div class="terminal-body" id="partner-logs-body" style="font-size: 0.75rem; padding: 8px;"></div>
+                        </div>
+
+                        <div id="suggestions-list"
+                            style="display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; padding-right: 4px;">
+                            <div style="color: var(--text-secondary); text-align: center; margin-top: 20px;">
+                                No suggestions yet. Click "Analyze" or run modules to generate insights.
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -325,6 +353,9 @@
                     </button>
                     <button class="settings-tab" data-target="settings-proxies">
                         <i class="fa-solid fa-route"></i> Proxies
+                    </button>
+                    <button class="settings-tab" data-target="settings-ai-partner">
+                        <i class="fa-solid fa-brain"></i> AI Partner
                     </button>
                 </div>
                 <!-- Right Panel: Content -->
@@ -538,6 +569,79 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+
+                    <div id="settings-ai-partner" class="settings-section">
+                        <h4>AI Thinking Partner</h4>
+                        <p class="section-desc">Configure the AI suggestion engine for proactive investigative prompts.
+                        </p>
+
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" id="pref-ai-enabled" style="width: auto; cursor: pointer;">
+                                <label for="pref-ai-enabled"
+                                    style="margin-bottom: 0; cursor: pointer; user-select: none; font-weight: 500;">
+                                    Enable Proactive Suggestions
+                                </label>
+                            </div>
+                            <span
+                                style="color: var(--text-secondary); font-size: 0.78rem; line-height: 1.4; margin-top: 4px; display: block; padding-left: 24px;">
+                                Automatically analyzes the graph state and generates investigative hypotheses in
+                                real-time.
+                            </span>
+                        </div>
+
+                        <div class="form-group">
+                            <label>LLM Provider</label>
+                            <select id="pref-ai-provider" style="width: 100%;">
+                                <option value="openai">OpenAI (Cloud)</option>
+                                <option value="anthropic">Anthropic (Cloud)</option>
+                                <option value="local">LM Studio (Local)</option>
+                                <option value="ollama">Ollama (Local)</option>
+                                <option value="koboldcpp">KoboldCpp (Local)</option>
+                                <option value="custom">OpenAI Compatible (Custom)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="group-ai-base-url" style="display: none;">
+                            <label>Base URL / Endpoint</label>
+                            <input type="text" id="pref-ai-base-url" placeholder="e.g. http://localhost:1234/v1">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Model Name</label>
+                            <input type="text" id="pref-ai-model" placeholder="e.g. gpt-4o, claude-3-5-sonnet, llama3">
+                        </div>
+
+                        <div class="form-group" id="group-ai-api-key">
+                            <label>API Key</label>
+                            <input type="password" id="pref-ai-api-key" placeholder="Enter API Key (will be encrypted)"
+                                autocomplete="off">
+                        </div>
+
+                        <div class="form-group" style="margin-top: 12px; margin-bottom: 16px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" id="pref-ai-export-enabled" style="width: auto; cursor: pointer;">
+                                <label for="pref-ai-export-enabled" style="margin-bottom: 0; cursor: pointer; user-select: none; font-weight: 500;">
+                                    Include AI Insights in Workspace Exports
+                                </label>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 8px; margin-top: 12px; margin-bottom: 12px;">
+                            <button id="btn-test-ai-conn" class="btn-primary"
+                                style="flex: 1; padding: 10px; font-size: 0.85rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); color: var(--text-primary); box-shadow: none;">
+                                <i class="fa-solid fa-vial"></i> Test API
+                            </button>
+                            <button id="btn-detect-ai-model" class="btn-primary"
+                                style="flex: 1; padding: 10px; font-size: 0.85rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); color: var(--text-primary); box-shadow: none;">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> Detect Model
+                            </button>
+                        </div>
+
+                        <button id="btn-save-ai-settings" class="btn-primary full-width" style="margin-top: 16px;">
+                            <i class="fa-solid fa-floppy-disk"></i> Save AI Settings
+                        </button>
                     </div>
                 </div>
             </div>
