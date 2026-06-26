@@ -18,6 +18,7 @@ nav:
                   - Proxy Management: getting-started/proxy_management.md
                   - Magic Engine: getting-started/magic_engine.md
                   - Web Server: getting-started/web.md
+                  - AI Partner: getting-started/ai_partner.md
         - Modules:
                   - Selecting and Using a Module: modules/index.md
                   - Analysis:
