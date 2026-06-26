@@ -1,3 +1,4 @@
+from pathlib import Path
 from src.utils.config_util import get_valid_name
 import base64
 import json
@@ -10,6 +11,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from typing import Any
 
 from src.core.database_engine import DatabaseEngine
+from src.core.exporters import export_workspace
 
 
 class ConfigManager(DatabaseEngine):
@@ -636,37 +638,21 @@ class WorkspaceManager(DatabaseEngine):
         self.conn.commit()
 
     def export(self, type: str, path: str) -> None:
+        if type not in ["pdf", "html", "markdown", "json", "stix2"]:
+            raise ValueError("Invalid export type.")
+
+        if Path(path).suffix != f".{type}":
+            path = f"{path}.{type}"
+
+        if Path(path).exists():
+            raise FileExistsError(f"File {path} already exists.")
+
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM nodes")
         nodes = [dict(row) for row in cursor.fetchall()]
         cursor.execute("SELECT * FROM edge")
         edges = [dict(row) for row in cursor.fetchall()]
 
-        match type:
-            case "pdf":
-                self._export_to_pdf(nodes, edges, path)
-            case "html":
-                self._export_to_html(nodes, edges, path)
-            case "markdown":
-                self._export_to_markdown(nodes, edges, path)
-            case "json":
-                self._export_to_json(nodes, edges, path)
-            case "stix2":
-                self._export_to_stix2(nodes, edges, path)
-            case _:
-                raise ValueError(f"Unknown export type: {type}")
-
-    def _export_to_pdf(self, nodes, edges, path):
-        raise NotImplementedError("PDF export is not implemented yet")
-
-    def _export_to_html(self, nodes, edges, path):
-        raise NotImplementedError("HTML export is not implemented yet")
-
-    def _export_to_markdown(self, nodes, edges, path):
-        raise NotImplementedError("Markdown export is not implemented yet")
-
-    def _export_to_json(self, nodes, edges, path):
-        raise NotImplementedError("JSON export is not implemented yet")
-
-    def _export_to_stix2(self, nodes, edges, path):
-        raise NotImplementedError("STIX2 export is not implemented yet")
+        export_workspace(self.name, type, nodes, edges, path)

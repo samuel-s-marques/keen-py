@@ -62,11 +62,37 @@
             <!-- Center Panel: Active Workspace Data -->
             <main class="center-panel">
                 <div class="panel-header">
-                    <h2 id="active-workspace-title">No Workspace Selected</h2>
-                    <div class="tabs">
-                        <button class="tab active" data-target="tab-graph">Graph Map</button>
-                        <button class="tab" data-target="tab-nodes">Nodes (<span id="count-nodes">0</span>)</button>
-                        <button class="tab" data-target="tab-edges">Edges (<span id="count-edges">0</span>)</button>
+                    <div
+                        style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; width: 100%; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+                        <div style="display: flex; align-items: center; gap: 16px;">
+                            <h2 id="active-workspace-title" style="border: none; padding: 0; margin-bottom: 0;">No
+                                Workspace Selected</h2>
+                            <div class="dropdown" id="export-dropdown" style="display: none;">
+                                <button class="btn-primary dropdown-toggle" id="btn-export-ws" title="Export Workspace"
+                                    style="padding: 8px 16px; font-size: 0.85rem; height: 36px; box-shadow: none;">
+                                    <i class="fa-solid fa-download"></i> Export <i class="fa-solid fa-chevron-down"
+                                        style="font-size: 0.75rem; margin-left: 4px;"></i>
+                                </button>
+                                <div class="dropdown-menu" id="export-menu">
+                                    <a href="#" data-format="pdf"><i class="fa-regular fa-file-pdf"></i> PDF Report</a>
+                                    <a href="#" data-format="html"><i class="fa-regular fa-file-code"></i> HTML
+                                        Report</a>
+                                    <a href="#" data-format="markdown"><i class="fa-regular fa-file-lines"></i> Markdown
+                                        Report</a>
+                                    <a href="#" data-format="stix2"><i class="fa-solid fa-shield-halved"></i> STIX 2.1
+                                        JSON</a>
+                                    <a href="#" data-format="json"><i class="fa-solid fa-code"></i> Raw JSON</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tabs" style="margin-bottom: 0; border-bottom: none;">
+                            <button class="tab active" data-target="tab-graph" style="padding: 10px 16px;">Graph
+                                Map</button>
+                            <button class="tab" data-target="tab-nodes" style="padding: 10px 16px;">Nodes (<span
+                                    id="count-nodes">0</span>)</button>
+                            <button class="tab" data-target="tab-edges" style="padding: 10px 16px;">Edges (<span
+                                    id="count-edges">0</span>)</button>
+                        </div>
                     </div>
                 </div>
 
@@ -401,7 +427,8 @@
                                 <div style="font-size: 0.75rem; color: var(--text-secondary);">Online / Total</div>
                                 <div
                                     style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-top: 4px;">
-                                    <span id="proxy-online-count">0</span> / <span id="proxy-total-count">0</span></div>
+                                    <span id="proxy-online-count">0</span> / <span id="proxy-total-count">0</span>
+                                </div>
                             </div>
                         </div>
 

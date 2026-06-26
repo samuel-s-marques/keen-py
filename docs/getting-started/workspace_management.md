@@ -99,22 +99,30 @@ INFO     | Set description for active workspace: 'New description for John Doe'.
 
 ### Exporting the active workspace
 
-To export the active workspace, use the `workspace export` command. The workspace can be exported in multiple formats, such as:
+You can export your workspaces to multiple formats for reporting and integration:
 
-- **HTML**: Exports the workspace to an HTML file.
-- **PDF**: Exports the workspace to a PDF file.
-- **JSON**: Exports the workspace to a JSON file.
-- **Markdown**: Exports the workspace to a Markdown file.
-- **STIX2**: Exports the workspace to a STIX2 file.
+- **PDF**: Renders a highly professional multi-page intelligence report containing executive statistics, categorized entity tables, and relationship maps.
+- **HTML**: Renders a gorgeous dark-mode interactive dashboard summary of the workspace.
+- **Markdown**: Generates a structured Markdown file detailing the workspace summary, all node categories in markdown tables, and relationships.
+- **STIX 2.1 JSON**: Produces a standardized STIX 2.1 Bundle containing cyber observable objects (SDOs) and relationship objects (SROs).
+- **JSON**: Produces a raw JSON backup of the workspace nodes, edges, positions, and metadata.
 
-Currently, not implemented.
+#### Using the Web UI
+1. Select an active workspace from the left sidebar.
+2. Click the **Export** button next to the workspace title in the center panel header.
+3. Select your desired format from the dropdown menu.
+4. The file will be generated on the server and downloaded automatically. Any errors during generation will be reported via notification snackbars.
 
+#### Using the CLI
+Use the `workspace export` command:
 ```
 keen > workspace export <type> <path>
 ```
 
+Where `<type>` is one of: `pdf`, `html`, `markdown`, `json`, `stix2`.
+
 Example:
 ```
-keen > workspace export html reports/john-doe.html
+keen[John Doe] > workspace export html reports/john-doe.html
 INFO     | Exported workspace: 'John Doe' to 'reports/john-doe.html'.
 ```

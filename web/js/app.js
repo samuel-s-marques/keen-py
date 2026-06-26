@@ -1247,6 +1247,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         nodesTbody.innerHTML = '';
                         edgesTbody.innerHTML = '';
                         if (network) network.destroy();
+                        const exportDropdown = document.getElementById('export-dropdown');
+                        if (exportDropdown) exportDropdown.style.display = 'none';
                     }
                     fetchWorkspaces();
                 }
@@ -1280,6 +1282,12 @@ document.addEventListener('DOMContentLoaded', () => {
     async function selectWorkspace(name) {
         activeWorkspace = name;
         activeWorkspaceTitle.textContent = name;
+
+        // Show export dropdown
+        const exportDropdown = document.getElementById('export-dropdown');
+        if (exportDropdown) {
+            exportDropdown.style.display = 'block';
+        }
 
         // Update UI active state
         document.querySelectorAll('.workspace-item').forEach(el => {
@@ -2558,4 +2566,76 @@ document.addEventListener('DOMContentLoaded', () => {
             selectWorkspace(activeWorkspace);
         }
     }, 2000);
+
+    // --- Export Workspace UI Controls ---
+    const btnExportWs = document.getElementById('btn-export-ws');
+    const exportMenu = document.getElementById('export-menu');
+    const exportDropdown = document.getElementById('export-dropdown');
+
+    if (btnExportWs && exportMenu) {
+        btnExportWs.addEventListener('click', (e) => {
+            e.stopPropagation();
+            exportMenu.classList.toggle('show');
+        });
+
+        // Close export menu when clicking outside
+        document.addEventListener('click', () => {
+            exportMenu.classList.remove('show');
+        });
+
+        // Export menu item actions
+        exportMenu.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                exportMenu.classList.remove('show');
+
+                if (!activeWorkspace) {
+                    alert('No active workspace to export.');
+                    return;
+                }
+
+                const format = link.dataset.format;
+                const displayName = `Export Workspace (${format.toUpperCase()})`;
+                const snackbarId = 'export-' + Date.now();
+
+                showSnackbar(displayName, 'Generating export file...', 'info', 0, snackbarId);
+
+                try {
+                    const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/export?format=${format}`);
+                    if (res.ok) {
+                        const blob = await res.blob();
+                        // Guess filename from headers or default to workspace name
+                        let filename = `${activeWorkspace}_export.${format === 'stix2' ? 'json' : format}`;
+                        const disposition = res.headers.get('Content-Disposition');
+                        if (disposition && disposition.indexOf('attachment') !== -1) {
+                            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                            const matches = filenameRegex.exec(disposition);
+                            if (matches != null && matches[1]) { 
+                                filename = matches[1].replace(/['"]/g, '');
+                            }
+                        }
+
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        a.remove();
+
+                        updateSnackbar(snackbarId, displayName, 'Export completed!', 'success', 3000);
+                    } else {
+                        const err = await res.json();
+                        updateSnackbar(snackbarId, displayName, `Export failed: ${err.error || 'Unknown error'}`, 'error', 5000);
+                    }
+                } catch (err) {
+                    console.error('Export error:', err);
+                    updateSnackbar(snackbarId, displayName, 'Export failed: network error.', 'error', 5000);
+                }
+            });
+        });
+    }
 });

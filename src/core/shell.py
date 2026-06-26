@@ -914,7 +914,6 @@ class Shell(Cmd):
             console = Console()
             console.print(table)
             return
-
         elif subcommand == "create":
             if len(args) < 2:
                 error("Usage: workspace create <name> [description]")
@@ -942,7 +941,6 @@ class Shell(Cmd):
             if desc:
                 info(f"Description: {desc}")
             return
-
         elif subcommand in ("select", "use"):
             if len(args) < 2:
                 error("Usage: workspace select <name>")
@@ -976,7 +974,6 @@ class Shell(Cmd):
             except Exception as e:
                 error(f"Failed to load workspace database at '{db_path}': {e}")
             return
-
         elif subcommand == "set-desc":
             if not self.workspace:
                 error("No active workspace selected. Select a workspace first.")
@@ -991,7 +988,6 @@ class Shell(Cmd):
             self.config.update_workspace_description(self.workspace.name, description)
             info(f"Description updated for workspace '{self.workspace.name}'.")
             return
-
         elif subcommand == "delete":
             if len(args) < 2:
                 error("Usage: workspace delete <name>")
@@ -1025,14 +1021,15 @@ class Shell(Cmd):
             self.config.rename_workspace(name, new_name)
             info(f"Renamed workspace '{name}' to '{new_name}'.")
             return
-
         elif subcommand == "export":
             if not self.workspace:
                 error("No active workspace selected. Select a workspace first.")
                 return
 
             if len(args) < 3:
-                error("Usage: workspace export <type> <path>")
+                error(
+                    "Usage: workspace export <type> <path>\nTypes: pdf, html, markdown, json, stix2"
+                )
                 return
 
             type = args[1]
