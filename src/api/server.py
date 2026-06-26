@@ -108,6 +108,18 @@ class EdgeUpdate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+class FeedbackSubmit(BaseModel):
+    status: str
+    feedback: Optional[str] = None
+
+
+class AITestRequest(BaseModel):
+    provider: str
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+
+
 class WebShellAdapter:
     def __init__(
         self, workspace: Optional[WorkspaceManager], config: ConfigManager
@@ -901,6 +913,301 @@ def update_node_positions(
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/workspaces/{name}/suggestions", response_model=None)
+def get_workspace_suggestions(
+    wm: WorkspaceManager = Depends(get_workspace_manager),
+) -> Union[List[Dict[str, Any]], JSONResponse]:
+    """Get all AI suggestions in a workspace.
+
+    Args:
+        wm (WorkspaceManager): The active workspace manager dependency.
+
+    Returns:
+        Union[List[Dict[str, Any]], JSONResponse]: List of suggestions.
+    """
+    try:
+        return wm.get_suggestions()
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/workspaces/{name}/suggestions/status", response_model=None)
+def get_workspace_suggestions_status(
+    name: str,
+) -> Dict[str, Any]:
+    """Get the current AI generation status and logs for a workspace.
+
+    Args:
+        name (str): Workspace name.
+
+    Returns:
+        Dict[str, Any]: Status and activity logs.
+    """
+    from src.core.thinking_partner import ThinkingPartnerEngine
+    task_info = ThinkingPartnerEngine.active_tasks.get(name)
+    if task_info:
+        return {
+            "is_generating": task_info.get("is_generating", False),
+            "logs": task_info.get("logs", [])
+        }
+    return {
+        "is_generating": False,
+        "logs": []
+    }
+
+
+@app.post("/api/workspaces/{name}/suggestions/generate", response_model=None)
+async def generate_workspace_suggestions(
+    name: str,
+) -> Union[List[Dict[str, Any]], JSONResponse]:
+    """Manually trigger AI suggestion engine for a workspace.
+
+    Args:
+        name (str): Workspace name.
+
+    Returns:
+        Union[List[Dict[str, Any]], JSONResponse]: List of generated suggestions.
+    """
+    try:
+        from src.core.thinking_partner import ThinkingPartnerEngine
+
+        # Check if the workspace exists first to avoid silent failures
+        engine = ThinkingPartnerEngine()
+        suggestions = await engine.generate_suggestions(name)
+        return suggestions
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post(
+    "/api/workspaces/{name}/suggestions/{suggestion_id}/feedback", response_model=None
+)
+def submit_suggestion_feedback(
+    suggestion_id: int,
+    req: FeedbackSubmit,
+    wm: WorkspaceManager = Depends(get_workspace_manager),
+) -> Union[Dict[str, Any], JSONResponse]:
+    """Submit user feedback for an AI suggestion.
+
+    Args:
+        suggestion_id (int): Suggestion ID.
+        req (FeedbackSubmit): Feedback data.
+        wm (WorkspaceManager): The active workspace manager dependency.
+
+    Returns:
+        Union[Dict[str, Any], JSONResponse]: Success status.
+    """
+    try:
+        updated = wm.update_suggestion_status(suggestion_id, req.status, req.feedback)
+        if not updated:
+            return JSONResponse(
+                status_code=404, content={"error": "Suggestion not found"}
+            )
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/config/ai/test")
+async def test_ai_connection(req: AITestRequest) -> Dict[str, Any]:
+    """Test connection to the LLM provider using temporary or saved config."""
+    provider = req.provider.lower()
+    model = req.model or "gpt-4o"
+    base_url = req.base_url or ""
+    api_key = req.api_key or ""
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if provider == "openai":
+                url = "https://api.openai.com/v1/chat/completions"
+                if base_url:
+                    url = base_url.rstrip("/") + "/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 5,
+                }
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    return {"success": True, "message": "Connection successful!"}
+                else:
+                    return {
+                        "success": False,
+                        "error": f"API returned status code {resp.status_code}: {resp.text}",
+                    }
+
+            elif provider == "anthropic":
+                url = "https://api.anthropic.com/v1/messages"
+                if base_url:
+                    url = base_url.rstrip("/") + "/messages"
+                headers = {
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                }
+                payload = {
+                    "model": model,
+                    "max_tokens": 5,
+                    "messages": [{"role": "user", "content": "ping"}],
+                }
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    return {"success": True, "message": "Connection successful!"}
+                else:
+                    return {
+                        "success": False,
+                        "error": f"API returned status code {resp.status_code}: {resp.text}",
+                    }
+
+            else:
+                # Local / Ollama / LM Studio / KoboldCpp / Custom OpenAI Compatible
+                url = "http://localhost:1234/v1/chat/completions"
+                if base_url:
+                    url = base_url.rstrip("/")
+                    if "/v1" not in url:
+                        url = url + "/v1"
+                    if not url.endswith("/chat/completions"):
+                        url = url + "/chat/completions"
+                headers = {"Content-Type": "application/json"}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                payload = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 5,
+                }
+
+                print("")
+                print(f"{url=}")
+                print(f"{headers=}")
+                print(f"{payload=}")
+                print("")
+
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    return {"success": True, "message": "Connection successful!"}
+                else:
+                    return {
+                        "success": False,
+                        "error": f"API returned status code {resp.status_code}: {resp.text}",
+                    }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/config/ai/detect-models")
+async def detect_ai_models(req: AITestRequest) -> Dict[str, Any]:
+    """Fetch available models from the provider endpoint."""
+    provider = req.provider.lower()
+    base_url = req.base_url or ""
+    api_key = req.api_key or ""
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if provider == "openai":
+                url = "https://api.openai.com/v1/models"
+                if base_url:
+                    url = base_url.rstrip("/") + "/models"
+                headers = {"Authorization": f"Bearer {api_key}"}
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    models_data = resp.json()
+                    model_ids = [m["id"] for m in models_data.get("data", [])]
+                    return {"success": True, "models": model_ids}
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Failed to fetch models: {resp.text}",
+                    }
+
+            elif provider == "anthropic":
+                # Anthropic doesn't have a public models list endpoint, return standard list
+                standard_models = [
+                    "claude-3-5-sonnet-20240620",
+                    "claude-3-opus-20240229",
+                    "claude-3-sonnet-20240229",
+                    "claude-3-haiku-20240307",
+                ]
+                return {
+                    "success": True,
+                    "models": standard_models,
+                    "note": "Anthropic does not expose a list endpoint. Showing standard models.",
+                }
+
+            elif provider == "ollama":
+                # Ollama standard models tags endpoint is /api/tags
+                url = "http://localhost:11434/api/tags"
+                if base_url:
+                    parsed_url = base_url.rstrip("/")
+                    if parsed_url.endswith("/v1"):
+                        url = parsed_url[:-3] + "/api/tags"
+                    else:
+                        url = parsed_url + "/api/tags"
+
+                try:
+                    resp = await client.get(url)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        model_ids = [m["name"] for m in data.get("models", [])]
+                        return {"success": True, "models": model_ids}
+                except Exception:
+                    pass
+
+                # Fallback to /v1/models
+                url = "http://localhost:11434/v1/models"
+                if base_url:
+                    url = base_url.rstrip("/")
+                    if not url.endswith("/models"):
+                        if url.endswith("/v1"):
+                            url = url + "/models"
+                        else:
+                            url = url + "/v1/models"
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    model_ids = [m["id"] for m in data.get("data", [])]
+                    return {"success": True, "models": model_ids}
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Failed to fetch models from Ollama: {resp.text}",
+                    }
+
+            else:
+                # LM Studio / KoboldCpp / Custom OpenAI Compatible
+                url = "http://localhost:1234/v1/models"
+                if base_url:
+                    url = base_url.rstrip("/")
+                    if not url.endswith("/models"):
+                        if url.endswith("/v1"):
+                            url = url + "/models"
+                        else:
+                            url = url + "/v1/models"
+                headers = {}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    model_ids = [m["id"] for m in data.get("data", [])]
+                    return {"success": True, "models": model_ids}
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Failed to fetch models: {resp.text}",
+                    }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @app.get("/api/modules")
