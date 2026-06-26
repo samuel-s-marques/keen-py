@@ -918,17 +918,22 @@ def update_node_positions(
 @app.get("/api/workspaces/{name}/suggestions", response_model=None)
 def get_workspace_suggestions(
     wm: WorkspaceManager = Depends(get_workspace_manager),
-) -> Union[List[Dict[str, Any]], JSONResponse]:
-    """Get all AI suggestions in a workspace.
+) -> Union[Dict[str, Any], JSONResponse]:
+    """Get all AI suggestions and thoughts in a workspace.
 
     Args:
         wm (WorkspaceManager): The active workspace manager dependency.
 
     Returns:
-        Union[List[Dict[str, Any]], JSONResponse]: List of suggestions.
+        Union[Dict[str, Any], JSONResponse]: Suggestions and thoughts.
     """
     try:
-        return wm.get_suggestions()
+        suggestions = wm.get_suggestions()
+        latest_analysis = wm.get_latest_analysis()
+        return {
+            "suggestions": suggestions,
+            "latest_analysis": latest_analysis
+        }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
