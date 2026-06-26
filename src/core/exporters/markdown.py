@@ -2,7 +2,7 @@ import json
 
 
 def export_to_markdown(
-    workspace_name: str, nodes: list, edges: list, path: str
+    workspace_name: str, nodes: list, edges: list, path: str, suggestions: list = []
 ) -> None:
     lines = []
     lines.append(f"# Keen Intelligence Report: {workspace_name}")
@@ -67,6 +67,27 @@ def export_to_markdown(
         lines.append("*No relationships documented in this workspace.*")
 
     lines.append("")
+
+    # Append AI Suggestions if present
+    if suggestions:
+        active_suggestions = [s for s in suggestions if s.get("status") != "dismissed"]
+        if active_suggestions:
+            lines.append("## AI Thinking Partner Insights")
+            lines.append("")
+            lines.append("| Suggestion | Type | Status | Feedback |")
+            lines.append("|------------|------|--------|----------|")
+            for s in active_suggestions:
+                text = (
+                    s.get("suggestion_text", "").replace("\n", " ").replace("|", "\\|")
+                )
+                pivot = s.get("pivot_type", "-")
+                if s.get("module_name"):
+                    pivot = f"{pivot} ({s['module_name'].split('/')[-1]})"
+                status = s.get("status", "pending").capitalize()
+                feedback = s.get("feedback", "-") or "-"
+                feedback = feedback.replace("\n", " ").replace("|", "\\|")
+                lines.append(f"| {text} | {pivot} | {status} | {feedback} |")
+            lines.append("")
 
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
