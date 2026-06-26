@@ -18,7 +18,7 @@ The **AI Thinking Partner** is an advanced analysis engine built into Keen. It o
 
 The AI Partner's interface is located under the **Partner** tab in the right-hand panel of the Web UI.
 
-![AI Partner Interface](../assets/images/ai_partner_dashboard.png) *(Note: Representative interface view)*
+![AI Partner Interface](../assets/images/ai_partner_tab.png)
 
 ### 1. AI Activity Logs
 Displays a live terminal-style log of what the AI is analyzing, keeping its reasoning transparent (e.g., loading graph structures, calling LLM APIs, parsing discovered entities).
@@ -33,6 +33,8 @@ Displays a comprehensive markdown-formatted summary of the active investigation,
 !!! tip "Full-Screen Reading (Expand Modal)"
 
     If the Case Analysis is long, click the **Expand** (diagonal arrows) button in the card header. This opens a dedicated, full-screen blur-overlay modal optimized for comfortable reading. The modal dynamically adapts to both Dark and Light themes.
+
+![AI Partner Expand Modal](../assets/images/ai_modal.png)
 
 ### 3. Suggestions List
 A list of specific, contextual recommendations based on the current state of the graph. Each suggestion displays:
@@ -72,6 +74,8 @@ To toggle this behavior, check the respective options in the **Settings** panel 
 ## Configuration Preferences
 
 To enable and configure the AI Thinking Partner, navigate to the **Settings & API Keys** modal in the Web UI, then select the **AI Partner** settings tab.
+
+![AI Partner Configuration](../assets/images/ai_settings.png)
 
 Alternatively, you can manage these preferences using the CLI `pref` command:
 
