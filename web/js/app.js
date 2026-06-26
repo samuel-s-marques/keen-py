@@ -27,6 +27,151 @@ document.addEventListener('DOMContentLoaded', () => {
         if (activeWorkspace) selectWorkspace(activeWorkspace); // Redraw graph to apply theme
     });
 
+    // --- Layout Resizing System ---
+    const sidebar = document.querySelector('.sidebar');
+    const rightPanel = document.querySelector('.right-panel');
+    const terminalContainer = document.querySelector('.terminal-container');
+    
+    const sidebarResizer = document.getElementById('sidebar-resizer');
+    const rightPanelResizer = document.getElementById('right-panel-resizer');
+    const terminalResizer = document.getElementById('terminal-resizer');
+
+    // Load persisted sizes
+    const savedSidebarWidth = localStorage.getItem('keen-sidebar-width');
+    const savedRightPanelWidth = localStorage.getItem('keen-right-panel-width');
+    const savedTerminalHeight = localStorage.getItem('keen-terminal-height');
+
+    if (savedSidebarWidth && sidebar) {
+        sidebar.style.width = `${savedSidebarWidth}px`;
+    }
+    if (savedRightPanelWidth && rightPanel) {
+        rightPanel.style.width = `${savedRightPanelWidth}px`;
+    }
+    if (savedTerminalHeight && terminalContainer) {
+        terminalContainer.style.height = `${savedTerminalHeight}px`;
+    }
+
+    function triggerNetworkResize() {
+        if (network) {
+            try {
+                network.setSize('100%', '100%');
+                network.redraw();
+            } catch (e) {
+                console.warn('Failed to resize network visualizer', e);
+            }
+        }
+    }
+
+    function makeResizable(resizer, resizeTarget, direction, minSize, maxSize, storageKey) {
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            resizer.classList.add('dragging');
+            document.body.classList.add('resizing-active');
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startWidth = resizeTarget.offsetWidth;
+            const startHeight = resizeTarget.offsetHeight;
+
+            function onMouseMove(moveEvent) {
+                if (direction === 'horizontal-left') {
+                    const deltaX = startX - moveEvent.clientX;
+                    const newWidth = Math.max(minSize, Math.min(maxSize, startWidth + deltaX));
+                    resizeTarget.style.width = `${newWidth}px`;
+                    triggerNetworkResize();
+                } else if (direction === 'horizontal-right') {
+                    const deltaX = moveEvent.clientX - startX;
+                    const newWidth = Math.max(minSize, Math.min(maxSize, startWidth + deltaX));
+                    resizeTarget.style.width = `${newWidth}px`;
+                    triggerNetworkResize();
+                } else if (direction === 'vertical-up') {
+                    const deltaY = startY - moveEvent.clientY;
+                    const newHeight = Math.max(minSize, Math.min(maxSize, startHeight + deltaY));
+                    resizeTarget.style.height = `${newHeight}px`;
+                }
+            }
+
+            function onMouseUp() {
+                resizer.classList.remove('dragging');
+                document.body.classList.remove('resizing-active');
+                
+                if (direction.startsWith('horizontal')) {
+                    localStorage.setItem(storageKey, resizeTarget.offsetWidth);
+                    triggerNetworkResize();
+                } else {
+                    localStorage.setItem(storageKey, resizeTarget.offsetHeight);
+                }
+
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+
+        // Touch support
+        resizer.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) return;
+            const touch = e.touches[0];
+            resizer.classList.add('dragging');
+            document.body.classList.add('resizing-active');
+
+            const startX = touch.clientX;
+            const startY = touch.clientY;
+            const startWidth = resizeTarget.offsetWidth;
+            const startHeight = resizeTarget.offsetHeight;
+
+            function onTouchMove(moveEvent) {
+                if (moveEvent.touches.length !== 1) return;
+                const currentTouch = moveEvent.touches[0];
+                if (direction === 'horizontal-left') {
+                    const deltaX = startX - currentTouch.clientX;
+                    const newWidth = Math.max(minSize, Math.min(maxSize, startWidth + deltaX));
+                    resizeTarget.style.width = `${newWidth}px`;
+                    triggerNetworkResize();
+                } else if (direction === 'horizontal-right') {
+                    const deltaX = currentTouch.clientX - startX;
+                    const newWidth = Math.max(minSize, Math.min(maxSize, startWidth + deltaX));
+                    resizeTarget.style.width = `${newWidth}px`;
+                    triggerNetworkResize();
+                } else if (direction === 'vertical-up') {
+                    const deltaY = startY - currentTouch.clientY;
+                    const newHeight = Math.max(minSize, Math.min(maxSize, startHeight + deltaY));
+                    resizeTarget.style.height = `${newHeight}px`;
+                }
+            }
+
+            function onTouchEnd() {
+                resizer.classList.remove('dragging');
+                document.body.classList.remove('resizing-active');
+                
+                if (direction.startsWith('horizontal')) {
+                    localStorage.setItem(storageKey, resizeTarget.offsetWidth);
+                    triggerNetworkResize();
+                } else {
+                    localStorage.setItem(storageKey, resizeTarget.offsetHeight);
+                }
+
+                document.removeEventListener('touchmove', onTouchMove);
+                document.removeEventListener('touchend', onTouchEnd);
+            }
+
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
+        });
+    }
+
+    if (sidebarResizer && sidebar) {
+        makeResizable(sidebarResizer, sidebar, 'horizontal-right', 220, 450, 'keen-sidebar-width');
+    }
+    if (rightPanelResizer && rightPanel) {
+        makeResizable(rightPanelResizer, rightPanel, 'horizontal-left', 300, 600, 'keen-right-panel-width');
+    }
+    if (terminalResizer && terminalContainer) {
+        makeResizable(terminalResizer, terminalContainer, 'vertical-up', 80, 500, 'keen-terminal-height');
+    }
+
     // State
     let activeWorkspace = null;
     let modulesData = {};
@@ -1909,48 +2054,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!infoEmpty || !infoContent) return;
 
-            if (totalSelected === 0) {
-                infoEmpty.style.display = 'flex';
-                infoContent.style.display = 'none';
-                moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
-                moduleDetails.classList.add('hidden');
-            } else if (selectedNodeIds.length === 1) {
+            if (selectedNodeIds.length === 1) {
                 const nodeId = selectedNodeIds[0];
-                const selectedNode = currentNodes.find(n => n.id === nodeId || n.value === nodeId);
+                const selectedNode = currentNodes.find(n => String(n.id) === String(nodeId) || n.value === nodeId);
                 if (selectedNode) {
                     handleNodeSelection(selectedNode);
                 }
-            } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 1) {
-                const edgeId = selectedEdgeIds[0];
-                const selectedEdge = currentEdges.find(e => e.id === edgeId);
-                if (selectedEdge) {
-                    populateNodeInfo(selectedEdge, true);
-                    moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
-                    moduleDetails.classList.add('hidden');
-                }
-            } else {
-                // Multi-select
+            } else if (selectedNodeIds.length > 1) {
+                // Multi-node select
                 infoEmpty.style.display = 'none';
                 infoContent.style.display = 'flex';
 
                 let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
-
-                if (selectedNodeIds.length > 0) {
-                    html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Nodes (${selectedNodeIds.length}):</strong></div>`;
-                    html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
-                    selectedNodeIds.forEach(id => {
-                        const node = currentNodes.find(n => n.id === id || n.value === id);
-                        const val = node ? (node.label || node.value) : id;
-                        html += `<span class="badge">${val}</span>`;
-                    });
-                    html += `</div>`;
-                }
+                html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Nodes (${selectedNodeIds.length}):</strong></div>`;
+                html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
+                selectedNodeIds.forEach(id => {
+                    const node = currentNodes.find(n => String(n.id) === String(id) || n.value === id);
+                    const val = node ? (node.label || node.value) : id;
+                    html += `<span class="badge">${val}</span>`;
+                });
+                html += `</div>`;
 
                 if (selectedEdgeIds.length > 0) {
                     html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
                     html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
                     selectedEdgeIds.forEach(id => {
-                        const edge = currentEdges.find(e => e.id === id);
+                        const edge = currentEdges.find(e => String(e.id) === String(id));
                         const rel = edge ? edge.relationship : id;
                         html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
                     });
@@ -1966,6 +2095,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (infoPanel) infoPanel.classList.add('active');
 
                 moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple nodes selected --</option>';
+                moduleDetails.classList.add('hidden');
+            } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 1) {
+                const edgeId = selectedEdgeIds[0];
+                const selectedEdge = currentEdges.find(e => String(e.id) === String(edgeId));
+                if (selectedEdge) {
+                    populateNodeInfo(selectedEdge, true);
+                    moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
+                    moduleDetails.classList.add('hidden');
+                }
+            } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length > 1) {
+                // Multi-edge select
+                infoEmpty.style.display = 'none';
+                infoContent.style.display = 'flex';
+
+                let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
+                html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
+                html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
+                selectedEdgeIds.forEach(id => {
+                    const edge = currentEdges.find(e => String(e.id) === String(id));
+                    const rel = edge ? edge.relationship : id;
+                    html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
+                });
+                html += `</div>`;
+
+                infoContent.innerHTML = html;
+
+                // Auto-switch to Info tab
+                const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
+                if (infoTab) infoTab.classList.add('active');
+                const infoPanel = document.getElementById('tab-node-info');
+                if (infoPanel) infoPanel.classList.add('active');
+
+                moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple edges selected --</option>';
+                moduleDetails.classList.add('hidden');
+            } else {
+                // totalSelected === 0
+                infoEmpty.style.display = 'flex';
+                infoContent.style.display = 'none';
+                moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
                 moduleDetails.classList.add('hidden');
             }
 
@@ -2938,6 +3106,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Analysis Modal ---
+    window.openAnalysisModal = function () {
+        const modal = document.getElementById('analysis-modal');
+        const modalBody = document.getElementById('analysis-modal-body');
+        const srcBody = document.getElementById('analysis-summary-body');
+        if (modal && modalBody && srcBody) {
+            modalBody.innerHTML = srcBody.innerHTML;
+            modal.style.display = 'flex';
+            document.addEventListener('keydown', _closeModalOnEsc);
+        }
+    };
+    window.closeAnalysisModal = function () {
+        const modal = document.getElementById('analysis-modal');
+        if (modal) modal.style.display = 'none';
+        document.removeEventListener('keydown', _closeModalOnEsc);
+    };
+    function _closeModalOnEsc(e) {
+        if (e.key === 'Escape') window.closeAnalysisModal();
+    }
+    // Close on backdrop click
+    document.getElementById('analysis-modal')?.addEventListener('click', function (e) {
+        if (e.target === this) window.closeAnalysisModal();
+    });
+
     // --- AI Thinking Partner Logic ---
     const prefAiProvider = document.getElementById('pref-ai-provider');
     const groupAiBaseUrl = document.getElementById('group-ai-base-url');
@@ -2977,6 +3169,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (prefAiExportEnabled) {
                     prefAiExportEnabled.checked = prefs.llm_export_suggestions_enabled === 'true';
                 }
+
+                const prefAiExportAnalysisEnabled = document.getElementById('pref-ai-export-analysis-enabled');
+                if (prefAiExportAnalysisEnabled) {
+                    prefAiExportAnalysisEnabled.checked = prefs.llm_export_analysis_enabled === 'true';
+                }
             }
 
             // Load API key if config is unlocked
@@ -3007,6 +3204,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const apiKey = prefAiApiKey.value.trim();
             const prefAiExportEnabled = document.getElementById('pref-ai-export-enabled');
             const exportEnabled = String(prefAiExportEnabled ? prefAiExportEnabled.checked : false);
+            const prefAiExportAnalysisEnabled = document.getElementById('pref-ai-export-analysis-enabled');
+            const exportAnalysisEnabled = String(prefAiExportAnalysisEnabled ? prefAiExportAnalysisEnabled.checked : false);
 
             btnSaveAiSettings.disabled = true;
             btnSaveAiSettings.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
@@ -3021,7 +3220,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         llm_provider: provider,
                         llm_model: model,
                         llm_base_url: baseUrl,
-                        llm_export_suggestions_enabled: exportEnabled
+                        llm_export_suggestions_enabled: exportEnabled,
+                        llm_export_analysis_enabled: exportAnalysisEnabled
                     })
                 });
 
@@ -3141,7 +3341,35 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/suggestions`);
             if (res.ok) {
-                const suggestions = await res.json();
+                const data = await res.json();
+                let suggestions = [];
+                let latestAnalysis = null;
+                if (Array.isArray(data)) {
+                    suggestions = data;
+                } else if (data && typeof data === 'object') {
+                    suggestions = data.suggestions || [];
+                    latestAnalysis = data.latest_analysis;
+                }
+
+                const analysisContainer = document.getElementById('analysis-summary-container');
+                const analysisBody = document.getElementById('analysis-summary-body');
+                const analysisModalBody = document.getElementById('analysis-modal-body');
+                if (analysisContainer && analysisBody) {
+                    if (latestAnalysis && latestAnalysis.analysis_text) {
+                        const mdHtml = (typeof marked !== 'undefined')
+                            ? marked.parse(latestAnalysis.analysis_text)
+                            : `<pre>${latestAnalysis.analysis_text}</pre>`;
+                        analysisBody.classList.add('md-prose');
+                        analysisBody.innerHTML = mdHtml;
+                        if (analysisModalBody) analysisModalBody.innerHTML = mdHtml;
+                        analysisContainer.style.display = 'block';
+                    } else {
+                        analysisBody.innerHTML = '';
+                        if (analysisModalBody) analysisModalBody.innerHTML = '';
+                        analysisContainer.style.display = 'none';
+                    }
+                }
+
                 renderSuggestions(suggestions);
             }
         } catch (err) {
@@ -3195,7 +3423,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 actionsHtml = `
                     <div style="font-size:0.72rem; color:var(--text-secondary); text-align:right; margin-top:6px; font-style:italic;">
-                        Status: ${s.status.toUpperCase()} ${s.feedback ? `(${s.feedback})` : ''}
+                        Status: ${(s.status || 'pending').toUpperCase()} ${s.feedback ? `(${s.feedback})` : ''}
                     </div>
                 `;
             }
