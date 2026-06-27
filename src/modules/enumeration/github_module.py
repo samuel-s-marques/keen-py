@@ -9,7 +9,7 @@ class GitHubModule(BaseModule):
         "name": "GitHub_Enumeration",
         "description": "Performs comprehensive enumeration of a GitHub user, including profile info, repositories, organizations, and potential email extraction from commits.",
         "author": "Samuel Marques",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "options": {
             "TARGET": ["", True, "The GitHub username to enumerate.", "username"],
             "GITHUB_TOKEN": [
@@ -82,10 +82,18 @@ class GitHubModule(BaseModule):
                 if stars > 0:
                     info(f"Total Stars: {stars}")
 
-            # Get Events and Extract Emails
-            emails = await self.loading(
-                "Searching for emails in public events...", self.extract_emails, target
+            # Get Events
+            events = await self.loading(
+                f"Fetching public events for {target}...",
+                self.get_public_events,
+                target,
             )
+
+            # Print Recent Activity
+            self.print_recent_activity(events)
+
+            # Extract Emails
+            emails = self.extract_emails_from_events(events)
             if emails:
                 success(f"Found {len(emails)} email(s) in commit history:")
                 for email in emails:
@@ -99,6 +107,7 @@ class GitHubModule(BaseModule):
                 "orgs": orgs or [],
                 "repos": repos or [],
                 "emails": list(emails or []),
+                "events": events or [],
             }
             await self._save_results(target, results)
         finally:
@@ -159,28 +168,94 @@ class GitHubModule(BaseModule):
         except Exception:
             return []
 
-    async def extract_emails(self, target: str) -> Set[str]:
-        emails: Set[str] = set()
+    async def get_public_events(self, target: str) -> List[Dict[str, Any]]:
         try:
             r = await self.client.get(
-                f"https://api.github.com/users/{target}/events/public"
+                f"https://api.github.com/users/{target}/events/public?per_page=100"
             )
             r.raise_for_status()
-            events = r.json()
-
-            for event in events:
-                if event.get("type") == "PushEvent":
-                    payload = event.get("payload", {})
-                    commits = payload.get("commits", [])
-                    for commit in commits:
-                        author = commit.get("author", {})
-                        email = author.get("email")
-                        # Filter out GitHub's noreply emails
-                        if email and "noreply.github.com" not in email:
-                            emails.add(email)
+            return r.json()
         except Exception as e:
-            warn(f"Error extracting emails: {e}")
+            warn(f"Error fetching public events: {e}")
+            return []
+
+    def extract_emails_from_events(self, events: List[Dict[str, Any]]) -> Set[str]:
+        emails: Set[str] = set()
+        for event in events:
+            if event.get("type") == "PushEvent":
+                payload = event.get("payload", {})
+                commits = payload.get("commits", [])
+                for commit in commits:
+                    author = commit.get("author", {})
+                    email = author.get("email")
+                    # Filter out GitHub's noreply emails
+                    if email and "noreply.github.com" not in email:
+                        emails.add(email)
         return emails
+
+    def print_recent_activity(self, events: List[Dict[str, Any]]) -> None:
+        if not events:
+            warn("No public events found.")
+            return
+
+        info(f"Recent Public Events Found: {len(events)}")
+        event_counts: Dict[str, int] = {}
+        for event in events:
+            evt_type = event.get("type", "UnknownEvent")
+            event_counts[evt_type] = event_counts.get(evt_type, 0) + 1
+
+        counts_str = ", ".join([f"{k}: {v}" for k, v in event_counts.items()])
+        info(f"Event Types: {counts_str}")
+
+        info("Recent Activity Details:")
+        for event in events[:10]:
+            evt_type = event.get("type")
+            repo_name = event.get("repo", {}).get("name")
+            created_at = event.get("created_at", "")
+            date_str = created_at.split("T")[0] if "T" in created_at else created_at
+
+            if evt_type == "PushEvent":
+                payload = event.get("payload", {})
+                ref = payload.get("ref", "")
+                branch = ref.replace("refs/heads/", "") if ref else "main"
+                commits = payload.get("commits", [])
+                commit_msg = (
+                    commits[0].get("message", "").split("\n")[0]
+                    if commits
+                    else "No commit message"
+                )
+                info(
+                    f"  [{date_str}] Pushed {len(commits)} commit(s) to {repo_name} ({branch}): '{commit_msg}'"
+                )
+            elif evt_type == "PullRequestEvent":
+                payload = event.get("payload", {})
+                action = payload.get("action", "")
+                pr = payload.get("pull_request", {})
+                pr_title = pr.get("title", "")
+                info(
+                    f"  [{date_str}] {action.capitalize()} PR in {repo_name}: '{pr_title}'"
+                )
+            elif evt_type == "IssuesEvent":
+                payload = event.get("payload", {})
+                action = payload.get("action", "")
+                issue = payload.get("issue", {})
+                issue_title = issue.get("title", "")
+                info(
+                    f"  [{date_str}] {action.capitalize()} issue in {repo_name}: '{issue_title}'"
+                )
+            elif evt_type == "IssueCommentEvent":
+                info(f"  [{date_str}] Commented on issue/PR in {repo_name}")
+            elif evt_type == "WatchEvent":
+                info(f"  [{date_str}] Starred {repo_name}")
+            elif evt_type == "ForkEvent":
+                info(f"  [{date_str}] Forked {repo_name}")
+            elif evt_type == "CreateEvent":
+                payload = event.get("payload", {})
+                ref_type = payload.get("ref_type", "")
+                info(f"  [{date_str}] Created {ref_type} in {repo_name}")
+            else:
+                clean_type = evt_type.replace("Event", "") if evt_type else "Activity"
+                info(f"  [{date_str}] {clean_type} in {repo_name}")
 
     async def _save_results(self, target: str, results: dict) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory
@@ -248,9 +323,11 @@ class GitHubModule(BaseModule):
                 builder.add_edge(account_val, org_login, "member-of-org")
 
         # Repositories
+        owned_repo_names = set()
         for repo in repos:
             repo_name = repo.get("full_name")
             if repo_name:
+                owned_repo_names.add(repo_name)
                 repo_url = repo.get("html_url") or f"https://github.com/{repo_name}"
                 builder.add_node(
                     NodeFactory.custom(
@@ -269,5 +346,41 @@ class GitHubModule(BaseModule):
                 repo_node = builder._nodes[-1]
                 repo_node["value"] = repo_name
                 builder.add_edge(account_val, repo_name, "owns-repository")
+
+        # Repository interactions from events
+        events = results.get("events", [])
+        interacted_repos = {}
+        for event in events:
+            repo_data = event.get("repo", {})
+            repo_name = repo_data.get("name")
+            if repo_name and repo_name not in owned_repo_names:
+                evt_type = event.get("type", "UnknownEvent")
+                if repo_name not in interacted_repos:
+                    interacted_repos[repo_name] = set()
+                interacted_repos[repo_name].add(evt_type)
+
+        for repo_name, event_types in interacted_repos.items():
+            repo_url = f"https://github.com/{repo_name}"
+            relationship = "interacted-with"
+            if "PushEvent" in event_types:
+                relationship = "pushed-to"
+            elif "PullRequestEvent" in event_types:
+                relationship = "contributed-to"
+            elif "IssuesEvent" in event_types:
+                relationship = "opened-issue-in"
+
+            builder.add_node(
+                NodeFactory.custom(
+                    "url",
+                    repo_url,
+                    node_type="repository",
+                    misp_type="link",
+                    misp_value=repo_url,
+                )
+            )
+            # Override value to be the repo name for graph display
+            if builder._nodes and builder._nodes[-1]["value"] == repo_url:
+                builder._nodes[-1]["value"] = repo_name
+            builder.add_edge(account_val, repo_name, relationship)
 
         await self.post_run(builder.build())
