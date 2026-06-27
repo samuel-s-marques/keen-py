@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebar = document.querySelector('.sidebar');
     const rightPanel = document.querySelector('.right-panel');
     const terminalContainer = document.querySelector('.terminal-container');
-    
+
     const sidebarResizer = document.getElementById('sidebar-resizer');
     const rightPanelResizer = document.getElementById('right-panel-resizer');
     const terminalResizer = document.getElementById('terminal-resizer');
@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
             function onMouseUp() {
                 resizer.classList.remove('dragging');
                 document.body.classList.remove('resizing-active');
-                
+
                 if (direction.startsWith('horizontal')) {
                     localStorage.setItem(storageKey, resizeTarget.offsetWidth);
                     triggerNetworkResize();
@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
             function onTouchEnd() {
                 resizer.classList.remove('dragging');
                 document.body.classList.remove('resizing-active');
-                
+
                 if (direction.startsWith('horizontal')) {
                     localStorage.setItem(storageKey, resizeTarget.offsetWidth);
                     triggerNetworkResize();
@@ -3402,7 +3402,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let badgesHtml = '';
             if (s.context_nodes && s.context_nodes.length) {
                 s.context_nodes.forEach(nodeVal => {
-                    badgesHtml += `<span class="suggestion-badge node-context"><i class="fa-solid fa-circle-nodes"></i> ${nodeVal}</span>`;
+                    let displayVal = nodeVal;
+                    if (nodeVal && typeof nodeVal === 'object') {
+                        displayVal = nodeVal.value || nodeVal.id || nodeVal.label || JSON.stringify(nodeVal);
+                    }
+                    badgesHtml += `<span class="suggestion-badge node-context"><i class="fa-solid fa-circle-nodes"></i> ${displayVal}</span>`;
                 });
             }
             if (s.pivot_type === 'run_module' && s.module_name) {
@@ -3416,7 +3420,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 actionsHtml = `
                     <div class="suggestion-actions">
                         <button class="suggestion-btn dismiss-btn" title="Dismiss"><i class="fa-solid fa-eye-slash"></i> Dismiss</button>
-                        <button class="suggestion-btn feedback-btn" title="Send Feedback"><i class="fa-solid fa-comment"></i> Feedback</button>
+                        <button class="suggestion-btn feedback-btn" title="Add Feedback Details"><i class="fa-solid fa-comment"></i> Feedback</button>
                         ${s.pivot_type === 'run_module' ? `<button class="suggestion-btn accept-btn" title="Accept and Pivot"><i class="fa-solid fa-circle-play"></i> Pivot</button>` : ''}
                     </div>
                 `;
@@ -3520,10 +3524,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ status, feedback: feedbackText })
             });
             if (res.ok) {
+                if (status === 'dismissed') {
+                    showSnackbar("AI Suggestions", "Suggestion dismissed.", "info", 2000);
+                } else {
+                    showSnackbar("AI Suggestions", `Suggestion marked as ${status.toUpperCase()}.`, "success", 3000);
+                }
                 loadSuggestions();
+            } else {
+                const err = await res.json();
+                showSnackbar("AI Suggestions", `Failed to submit feedback: ${err.error || 'Unknown error'}`, "error", 5000);
             }
         } catch (err) {
             console.error('Failed to submit feedback', err);
+            showSnackbar("AI Suggestions", "Failed to submit feedback. Network error.", "error", 5000);
         }
     }
 
@@ -3534,35 +3547,119 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            const queryInput = document.getElementById('input-partner-query');
+            const userQuery = queryInput ? queryInput.value.trim() : "";
+
+            // Gather selected nodes metadata
+            let selectedNodesPayload = [];
+            if (lastSelection && lastSelection.nodes && lastSelection.nodes.length > 0 && nodesDataSet) {
+                selectedNodesPayload = lastSelection.nodes.map(id => {
+                    const node = nodesDataSet.get(id);
+                    if (node) {
+                        return {
+                            id: node.id,
+                            type: node.group,
+                            value: node.fullLabel || node.id,
+                            metadata: node.metadata || {}
+                        };
+                    }
+                    return null;
+                }).filter(Boolean);
+            }
+
             btnAnalyzeGraph.disabled = true;
             btnAnalyzeGraph.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analyzing...';
             termPrint(`[AI Thinking Partner] Triggering manual graph analysis...`, 'sys-msg');
+
+            if (userQuery) {
+                termPrint(`[AI Thinking Partner] User Query: "${userQuery}"`, 'sys-msg');
+            }
+            if (selectedNodesPayload.length > 0) {
+                const nodeVals = selectedNodesPayload.map(n => n.value).join(', ');
+                termPrint(`[AI Thinking Partner] Context nodes: [${nodeVals}]`, 'sys-msg');
+            }
 
             // Start polling immediately to show pulsing dot and activity log container
             pollAISuggestionsStatus(activeWorkspace);
 
             try {
+                const payload = {};
+                if (userQuery) payload.user_query = userQuery;
+                if (selectedNodesPayload.length > 0) payload.selected_nodes = selectedNodesPayload;
+
                 const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/suggestions/generate`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
                 });
                 if (res.ok) {
                     const suggestions = await res.json();
                     termPrint(`[AI Thinking Partner] Completed. Generated ${suggestions.length} suggestions.`, 'success');
+                    if (queryInput) queryInput.value = '';
                     renderSuggestions(suggestions);
                 } else {
                     const err = await res.json();
                     termPrint(`[AI Thinking Partner] Error: ${err.error || 'Failed to generate'}`, 'error');
-                    alert(`Failed to analyze: ${err.error || 'Unknown error'}`);
+                    showSnackbar("AI Thinking Partner", err.error || "Failed to generate suggestions", "error", 6000);
                 }
             } catch (err) {
                 console.error('Failed to generate suggestions', err);
                 termPrint(`[AI Thinking Partner] Network error during analysis.`, 'error');
+                showSnackbar("AI Thinking Partner", "Network error during analysis. Check server logs.", "error", 6000);
             } finally {
                 btnAnalyzeGraph.disabled = false;
                 btnAnalyzeGraph.innerHTML = '<i class="fa-solid fa-sync"></i> Analyze';
             }
         });
     }
+
+    // Bind Quick Prompts
+    document.querySelectorAll('.btn-quick-prompt').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const promptType = btn.getAttribute('data-prompt');
+            const queryInput = document.getElementById('input-partner-query');
+            if (!queryInput) return;
+
+            if (promptType === 'Trace selected nodes') {
+                if (lastSelection && lastSelection.nodes && lastSelection.nodes.length > 0 && nodesDataSet) {
+                    const selected = lastSelection.nodes.map(id => nodesDataSet.get(id)).filter(Boolean);
+                    if (selected.length === 1) {
+                        const node = selected[0];
+                        const val = node.fullLabel || node.id;
+                        const type = node.group;
+                        if (type === 'email-addr') {
+                            queryInput.value = `What does this email "${val}" connect to across the evidence, including people, domains, and social profiles?`;
+                        } else if (type === 'domain-name') {
+                            queryInput.value = `What does this domain "${val}" connect to across the evidence, including emails, servers, and subdomains?`;
+                        } else if (type === 'phone-number') {
+                            queryInput.value = `What does this phone number "${val}" connect to across the evidence, including names, leaks, and geographic details?`;
+                        } else {
+                            queryInput.value = `What does this node "${val}" connect to across the evidence, including related accounts, domains, and profiles?`;
+                        }
+                    } else if (selected.length > 1) {
+                        const vals = selected.map(n => `"${n.fullLabel || n.id}"`).join(', ');
+                        queryInput.value = `What do these entities [${vals}] connect to across the evidence, including domains, emails, and profiles?`;
+                    }
+                    queryInput.focus();
+                } else {
+                    alert('Please select one or more nodes in the visualizer graph first to trace.');
+                }
+            } else if (promptType === 'Next best step') {
+                queryInput.value = 'What is the next best investigative step to take based on the current evidence?';
+                queryInput.focus();
+            } else if (promptType === 'Review phone intel') {
+                queryInput.value = 'Review all phone number nodes in the evidence and identify any related leaks, links, or carrier info.';
+                queryInput.focus();
+            } else if (promptType === 'Summarize strongest links') {
+                queryInput.value = 'Summarize the strongest correlation links and suspicious patterns found in this workspace.';
+                queryInput.focus();
+            } else {
+                queryInput.value = promptType;
+                queryInput.focus();
+            }
+        });
+    });
 
     const btnTestAiConn = document.getElementById('btn-test-ai-conn');
     const btnDetectAiModel = document.getElementById('btn-detect-ai-model');
@@ -3591,16 +3688,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (res.ok) {
                     const data = await res.json();
                     if (data.success) {
-                        alert('API Connection Successful!');
+                        showSnackbar('AI Configuration', 'API Connection Successful!', 'success', 3000);
                     } else {
-                        alert(`API Connection Failed:\n\n${data.error || 'Unknown error'}`);
+                        showSnackbar('AI Configuration', `API Connection Failed: ${data.error || 'Unknown error'}`, 'error', 6000);
                     }
                 } else {
-                    alert(`API Connection Failed: Server returned status ${res.status}`);
+                    showSnackbar('AI Configuration', `API Connection Failed: Server returned status ${res.status}`, 'error', 6000);
                 }
             } catch (err) {
                 console.error('Test connection error', err);
-                alert('API Connection Failed: Network error.');
+                showSnackbar('AI Configuration', 'API Connection Failed: Network error.', 'error', 6000);
             } finally {
                 btnTestAiConn.disabled = false;
                 btnTestAiConn.innerHTML = '<i class="fa-solid fa-vial"></i> Test API';
@@ -3632,7 +3729,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (data.success && data.models && data.models.length > 0) {
                         if (data.models.length === 1) {
                             prefAiModel.value = data.models[0];
-                            alert(`Auto-detected model: ${data.models[0]}`);
+                            showSnackbar('AI Configuration', `Auto-detected model: ${data.models[0]}`, 'success', 3000);
                         } else {
                             const modelList = data.models.map((m, idx) => `${idx + 1}. ${m}`).join('\n');
                             const choice = prompt(`Select a model number to use:\n\n${modelList}`, "1");
@@ -3640,19 +3737,19 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const selectedIdx = parseInt(choice, 10) - 1;
                                 if (selectedIdx >= 0 && selectedIdx < data.models.length) {
                                     prefAiModel.value = data.models[selectedIdx];
-                                    alert(`Set model to: ${data.models[selectedIdx]}`);
+                                    showSnackbar('AI Configuration', `Set model to: ${data.models[selectedIdx]}`, 'success', 3000);
                                 }
                             }
                         }
                     } else {
-                        alert(`Failed to detect models:\n\n${data.error || 'No models found'}`);
+                        showSnackbar('AI Configuration', `Failed to detect models: ${data.error || 'No models found'}`, 'error', 6000);
                     }
                 } else {
-                    alert(`Failed to detect models: Server returned status ${res.status}`);
+                    showSnackbar('AI Configuration', `Failed to detect models: Server returned status ${res.status}`, 'error', 6000);
                 }
             } catch (err) {
                 console.error('Detect models error', err);
-                alert('Failed to detect models: Network error.');
+                showSnackbar('AI Configuration', 'Failed to detect models: Network error.', 'error', 6000);
             } finally {
                 btnDetectAiModel.disabled = false;
                 btnDetectAiModel.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Detect Model';
