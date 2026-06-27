@@ -34,10 +34,19 @@ class ThinkingPartnerEngine:
     def __init__(self, config_path: str = "~/.keen/config.db") -> None:
         self.config_path = config_path
 
-    async def generate_suggestions(self, workspace_name: str) -> List[Dict[str, Any]]:
+    async def generate_suggestions(
+        self,
+        workspace_name: str,
+        user_query: Optional[str] = None,
+        selected_nodes: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
         """Scan the current workspace graph and generate investigative suggestions using configured LLM."""
         # Initialize logging state
         self.log_activity(workspace_name, "[AI] Initializing Thinking Partner scan...", is_generating=True)
+        if user_query:
+            self.log_activity(workspace_name, f"[AI] Investigator Query: '{user_query}'")
+        if selected_nodes:
+            self.log_activity(workspace_name, f"[AI] Focused on {len(selected_nodes)} selected nodes.")
         config = ConfigManager(self.config_path)
         workspace = None
         try:
@@ -152,6 +161,8 @@ class ThinkingPartnerEngine:
             system_prompt = (
                 "You are an expert OSINT investigator and proactive Thinking Partner. Your job is to analyze the current investigation graph, "
                 "identify matching patterns, correlations (e.g. matching usernames, emails, aliases across modules/sources), and formulate hypotheses.\n\n"
+                "If the user has provided an 'investigator_instruction' in the payload, you MUST prioritize answering/addressing it in your case analysis and suggestions.\n"
+                "If the user has provided 'selected_focus_nodes', prioritize generating pivot actions starting from or connecting to these specific nodes.\n\n"
                 "You must perform two tasks and return the results in a single JSON object:\n"
                 "1. Generate a high-level case analysis summary and synthesis (key findings, suspected patterns, overall hypotheses) formatted in clean Markdown.\n"
                 "2. Suggest high-value next steps (pivots) for the investigator, using ONLY the available OSINT modules in the system.\n\n"
@@ -177,6 +188,10 @@ class ThinkingPartnerEngine:
                 "workspace": workspace_name,
                 "current_graph": {"nodes": nodes, "edges": edges},
             }
+            if user_query:
+                user_prompt["investigator_instruction"] = user_query
+            if selected_nodes:
+                user_prompt["selected_focus_nodes"] = selected_nodes
             if feedback_history:
                 user_prompt["user_feedback_history"] = feedback_history
 
