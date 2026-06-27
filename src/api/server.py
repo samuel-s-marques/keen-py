@@ -120,6 +120,11 @@ class AITestRequest(BaseModel):
     api_key: Optional[str] = None
 
 
+class SuggestionGenerateRequest(BaseModel):
+    user_query: Optional[str] = None
+    selected_nodes: Optional[List[Dict[str, Any]]] = None
+
+
 class WebShellAdapter:
     def __init__(
         self, workspace: Optional[WorkspaceManager], config: ConfigManager
@@ -966,11 +971,13 @@ def get_workspace_suggestions_status(
 @app.post("/api/workspaces/{name}/suggestions/generate", response_model=None)
 async def generate_workspace_suggestions(
     name: str,
+    req: Optional[SuggestionGenerateRequest] = None,
 ) -> Union[List[Dict[str, Any]], JSONResponse]:
-    """Manually trigger AI suggestion engine for a workspace.
+    """Manually trigger AI suggestion engine for a workspace with optional user query and selected nodes.
 
     Args:
         name (str): Workspace name.
+        req (SuggestionGenerateRequest): Request body payload.
 
     Returns:
         Union[List[Dict[str, Any]], JSONResponse]: List of generated suggestions.
@@ -978,9 +985,14 @@ async def generate_workspace_suggestions(
     try:
         from src.core.thinking_partner import ThinkingPartnerEngine
 
+        user_query = req.user_query if req else None
+        selected_nodes = req.selected_nodes if req else None
+
         # Check if the workspace exists first to avoid silent failures
         engine = ThinkingPartnerEngine()
-        suggestions = await engine.generate_suggestions(name)
+        suggestions = await engine.generate_suggestions(
+            name, user_query=user_query, selected_nodes=selected_nodes
+        )
         return suggestions
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
