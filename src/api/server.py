@@ -28,6 +28,9 @@ from src.core.loader import load_modules
 
 app = FastAPI(title="Keen API Web Server")
 
+# Strong references to fire-and-forget background tasks
+_BACKGROUND_TASKS: set = set()
+
 PROXY_CREDENTIALS_RE = re.compile(r"^(https?|socks4|socks5)://([^/]+)@")
 PROXY_VALIDATION_RE = re.compile(
     r"^(?P<scheme>https?|socks4|socks4a|socks5|socks5h)://"
@@ -222,14 +225,17 @@ def get_workspaces(
 
     # Enrich with counts
     for w in workspaces:
+        wm = None
         try:
             wm = WorkspaceManager(w["path"], name=w["name"])
             w["node_count"] = wm.get_node_count()
             w["edge_count"] = wm.get_edge_count()
-            wm.close()
         except Exception:
             w["node_count"] = 0
             w["edge_count"] = 0
+        finally:
+            if wm is not None:
+                wm.close()
 
     return workspaces
 
@@ -261,7 +267,10 @@ def create_workspace(
     filename = get_valid_name(name)
 
     db_file = f"cases/{filename}.keen"
-    config.add_workspace(name, db_file, req.description or "")
+    try:
+        config.add_workspace(name, db_file, req.description or "")
+    except ValueError as e:
+        return JSONResponse(status_code=409, content={"error": str(e)})
     return {"success": True, "name": name, "path": db_file}
 
 
@@ -371,14 +380,31 @@ def unlock_config(
 def get_config_keys(
     config: ConfigManager = Depends(get_config),
 ) -> Union[List[Dict[str, Any]], JSONResponse]:
-    """Get all API keys.
+    """Get all API keys with their values masked.
+
+    The plaintext key value is never returned over HTTP: the unlock state is a
+    process-global flag, so once any client unlocks, this endpoint would
+    otherwise disclose decrypted keys to any origin/host that can reach the port.
+    Only masked values are exposed; modules read the real keys server-side.
 
     Returns:
-        List[Dict[str, Any]]: List of API keys.
+        List[Dict[str, Any]]: List of API key services with masked values.
     """
     if not config.is_unlocked():
         return JSONResponse(status_code=401, content={"error": "Config locked"})
-    return config.get_all_api_keys()
+
+    masked = []
+    for k in config.get_all_api_keys():
+        val = k.get("api_key", "") or ""
+        masked.append(
+            {
+                **k,
+                "api_key": (val[:4] + "*" * (len(val) - 4))
+                if len(val) > 4
+                else "*" * len(val),
+            }
+        )
+    return masked
 
 
 @app.post("/api/config/keys", response_model=None)
@@ -564,9 +590,7 @@ def load_proxies(
 
 
 @app.post("/api/proxies/test")
-async def test_proxies(
-    background_tasks: BackgroundTasks, config: ConfigManager = Depends(get_config)
-) -> Dict[str, str]:
+async def test_proxies(config: ConfigManager = Depends(get_config)) -> Dict[str, str]:
     """Trigger concurrent connectivity health checks in the background."""
 
     # Need to run connectivity checks asynchronously in a background task
@@ -606,10 +630,9 @@ async def test_proxies(
         bg_config.close()
 
     # Schedule the coroutine without blocking the request lifecycle/event loop
-    def _schedule() -> None:
-        asyncio.create_task(perform_async_checks())
-
-    background_tasks.add_task(_schedule)
+    task = asyncio.create_task(perform_async_checks())
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
     return {"status": "testing"}
 
 
@@ -654,11 +677,11 @@ def rename_workspace(
             },
         )
 
-    new_filename = get_valid_name(new_name)
-
+    # Pass the display name through; rename_workspace derives the .keen filename
+    # via get_valid_name internally.
     try:
-        config.rename_workspace(name, new_filename)
-        return {"success": True, "new_name": new_filename}
+        config.rename_workspace(name, new_name)
+        return {"success": True, "new_name": new_name}
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -935,10 +958,7 @@ def get_workspace_suggestions(
     try:
         suggestions = wm.get_suggestions()
         latest_analysis = wm.get_latest_analysis()
-        return {
-            "suggestions": suggestions,
-            "latest_analysis": latest_analysis
-        }
+        return {"suggestions": suggestions, "latest_analysis": latest_analysis}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -956,16 +976,14 @@ def get_workspace_suggestions_status(
         Dict[str, Any]: Status and activity logs.
     """
     from src.core.thinking_partner import ThinkingPartnerEngine
+
     task_info = ThinkingPartnerEngine.active_tasks.get(name)
     if task_info:
         return {
             "is_generating": task_info.get("is_generating", False),
-            "logs": task_info.get("logs", [])
+            "logs": task_info.get("logs", []),
         }
-    return {
-        "is_generating": False,
-        "logs": []
-    }
+    return {"is_generating": False, "logs": []}
 
 
 @app.post("/api/workspaces/{name}/suggestions/generate", response_model=None)
@@ -1101,12 +1119,6 @@ async def test_ai_connection(req: AITestRequest) -> Dict[str, Any]:
                     "messages": [{"role": "user", "content": "ping"}],
                     "max_tokens": 5,
                 }
-
-                print("")
-                print(f"{url=}")
-                print(f"{headers=}")
-                print(f"{payload=}")
-                print("")
 
                 resp = await client.post(url, headers=headers, json=payload)
                 if resp.status_code == 200:
@@ -1317,11 +1329,16 @@ async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
         log_queue = asyncio.Queue()
         queue_sink = QueueSink(log_queue)
 
-        # Add a custom sink to loguru for this connection
+        # Tag this run with a unique id and filter the sink to only records emitted
+        # within this run's context.
+        import uuid as _uuid
+
+        run_id = _uuid.uuid4().hex
         handler_id = logger.add(
             queue_sink.write,
             format="{time:HH:mm:ss} | {level} | {message}",
             level="DEBUG",
+            filter=lambda r: r["extra"].get("ws_run_id") == run_id,
         )
 
         stdout_redirector = QueueStdoutRedirector(log_queue)
@@ -1336,7 +1353,10 @@ async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
                     except Exception as e:
                         logger.error(f"Execution failed: {e}")
 
-        module_task = asyncio.create_task(run_module_task())
+        # Create the task inside contextualize so it inherits ws_run_id in its
+        # context, which the sink filter above keys on.
+        with logger.contextualize(ws_run_id=run_id):
+            module_task = asyncio.create_task(run_module_task())
 
         # Stream logs down to WS concurrently
         while not module_task.done() or not log_queue.empty():
@@ -1438,10 +1458,16 @@ async def websocket_run_magic(websocket: WebSocket) -> None:
         log_queue = asyncio.Queue()
         queue_sink = QueueSink(log_queue)
 
+        # Scope this connection's sink to its own run (see the module-run endpoint
+        # for details) so concurrent runs don't leak logs into each other.
+        import uuid as _uuid
+
+        run_id = _uuid.uuid4().hex
         handler_id = logger.add(
             queue_sink.write,
             format="{time:HH:mm:ss} | {level} | {message}",
             level="DEBUG",
+            filter=lambda r: r["extra"].get("ws_run_id") == run_id,
         )
 
         stdout_redirector = QueueStdoutRedirector(log_queue)
@@ -1454,7 +1480,8 @@ async def websocket_run_magic(websocket: WebSocket) -> None:
                     except Exception as e:
                         logger.error(f"Magic execution failed: {e}")
 
-        magic_task = asyncio.create_task(run_magic_task())
+        with logger.contextualize(ws_run_id=run_id):
+            magic_task = asyncio.create_task(run_magic_task())
         # Stream logs down to WS concurrently
         while not magic_task.done() or not log_queue.empty():
             try:
