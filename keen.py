@@ -24,9 +24,11 @@ def check_dependencies():
         "loguru": "loguru",
         "rich": "rich",
         "phonenumbers": "phonenumbers",
-        "whois": "python_whois",
+        "whois": "python-whois",
         "user_scanner": "user-scanner",
         "ddgs": "ddgs",
+        "pydantic": "pydantic",
+        "reportlab": "reportlab",
     }
 
     # Compute a hash representing the current required dependencies
