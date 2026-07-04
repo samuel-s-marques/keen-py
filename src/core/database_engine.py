@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import threading
 
 
 class DatabaseEngine:
@@ -17,6 +18,8 @@ class DatabaseEngine:
         db_dir = os.path.dirname(resolved_path)
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
+
+        self._db_lock = threading.RLock()
 
         self.conn = sqlite3.connect(resolved_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
