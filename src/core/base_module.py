@@ -9,6 +9,10 @@ from src.utils.validator import InputValidator
 from src.utils.print_utils import error
 
 
+# Strong references to fire-and-forget background tasks
+_BACKGROUND_TASKS: set = set()
+
+
 class BaseModule:
     """Base class for all modules.
 
@@ -177,14 +181,18 @@ class BaseModule:
 
         return True
 
+    # Option-name suffixes that mark a stored-credential option eligible for
+    # automatic loading from the config manager.
+    API_KEY_OPTION_SUFFIXES = ("_APIKEY", "_API_KEY", "_TOKEN")
+
     def load_api_keys(self, config_manager) -> None:
         """Automatically load matching API keys from the configuration manager."""
         for key in self.metadata.get("options", {}):
-            if key.endswith("_APIKEY") or key.endswith("_API_KEY"):
+            if key.upper().endswith(self.API_KEY_OPTION_SUFFIXES):
                 # If the option is not currently set or is empty/falsy, try to fetch it
                 if not self.options.get(key):
                     service_names = [key, key.lower()]
-                    for suffix in ["_apikey", "_api_key"]:
+                    for suffix in ["_apikey", "_api_key", "_token"]:
                         if key.lower().endswith(suffix):
                             short_name = key.lower()[: -len(suffix)]
                             service_names.append(short_name)
@@ -286,6 +294,7 @@ class BaseModule:
             should_close_config = False
             if not config:
                 from src.core.managers import ConfigManager
+
                 config = ConfigManager("~/.keen/config.db")
                 should_close_config = True
 
@@ -293,16 +302,30 @@ class BaseModule:
                 if config.get_preference("llm_thinking_partner_enabled") == "true":
                     import asyncio
                     from src.core.thinking_partner import ThinkingPartnerEngine
-                    
+
+                    ws_name = workspace.name
+
                     async def run_thinking_partner():
                         try:
                             engine = ThinkingPartnerEngine()
-                            await engine.generate_suggestions(workspace.name)
+                            await engine.generate_suggestions(ws_name)
                         except Exception as e_bg:
-                            self.logger.error(f"Error in background AI Thinking Partner task: {e_bg}")
-                            
-                    # Schedule task in background without blocking
-                    asyncio.create_task(run_thinking_partner())
+                            self.logger.error(
+                                f"Error in background AI Thinking Partner task: {e_bg}"
+                            )
+
+                    if getattr(self, "is_web_context", False):
+                        # Long-lived server loop: run in the background without
+                        # blocking, keeping a strong reference so the task isn't
+                        # garbage-collected before it finishes.
+                        task = asyncio.create_task(run_thinking_partner())
+                        _BACKGROUND_TASKS.add(task)
+                        task.add_done_callback(_BACKGROUND_TASKS.discard)
+                    else:
+                        # CLI: asyncio.run() tears the loop down as soon as run()
+                        # returns, which would destroy a fire-and-forget task
+                        # before it executed — so await it here instead.
+                        await run_thinking_partner()
             except Exception as e:
                 self.logger.error(f"Failed to trigger AI Thinking Partner: {e}")
             finally:
