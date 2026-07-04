@@ -139,17 +139,15 @@ class WhoisModule(BaseModule):
 
         # Registrar
         if registrar:
-            builder.add_node(NodeFactory.organization(registrar))
+            reg_node = builder.add_node(NodeFactory.organization(registrar))
             # Override MISP type
-            reg_node = builder._nodes[-1]
             reg_node["metadata"]["misp"] = {"type": "registrar", "value": registrar}
             builder.add_edge(target, registrar, "registered-by")
 
         # Registrant Organization
         if org and org != registrar:
-            builder.add_node(NodeFactory.organization(org))
+            org_node = builder.add_node(NodeFactory.organization(org))
             # Override MISP type
-            org_node = builder._nodes[-1]
             org_node["metadata"]["misp"] = {"type": "registrar", "value": org}
             builder.add_edge(target, org, "registrant")
 
