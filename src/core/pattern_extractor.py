@@ -44,6 +44,7 @@ class PatternExtractor:
         # Modes: 'merge', 'isolate', 'isolate_with_service'
         # Default to 'merge' to support searching by default
         extraction_mode = "merge"
+        config = None
         try:
             config = ConfigManager(os.path.expanduser("~/.keen/config.db"))
             pref = config.get_preference("extraction_mode")
@@ -52,6 +53,9 @@ class PatternExtractor:
         except Exception:
             # Fallback if config cannot be read
             pass
+        finally:
+            if config is not None:
+                config.close()
 
         for key, val in data.items():
             if not val:
