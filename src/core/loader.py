@@ -54,12 +54,55 @@ class LazyModuleProxy:
         return False
 
 
-def load_modules(root_dir: str = "src/modules") -> dict:
+# Cache of the scanned registry, keyed by (root_dir, fingerprint) where the
+# fingerprint is a tuple of (path, mtime) for every module file. The registry is
+# re-scanned only when a module file is added, removed, or modified, so repeated
+# callers (every MagicEngine and ThinkingPartnerEngine instantiation) no longer
+# re-walk and re-AST-parse the whole module tree.
+_REGISTRY_CACHE: dict = {}
+
+
+def _fingerprint(root_dir: str) -> tuple:
+    """Cheap signature of the module tree: (relpath, mtime) per .py file."""
+    entries = []
+    for root, _dirs, files in os.walk(root_dir):
+        for file in files:
+            if file.endswith(".py") and file != "__init__.py":
+                full_path = os.path.join(root, file)
+                try:
+                    entries.append((full_path, os.path.getmtime(full_path)))
+                except OSError:
+                    entries.append((full_path, -1.0))
+    return tuple(sorted(entries))
+
+
+def load_modules(root_dir: str = "src/modules", use_cache: bool = True) -> dict:
     """Scan and register modules from the 'src/modules' directory.
 
     Uses AST parsing to extract the 'metadata' dictionary without executing
     top-level imports in each module file, resulting in massive startup speedups.
+
+    The result is memoized per ``root_dir`` and invalidated automatically when any
+    module file's mtime changes (or files are added/removed). Pass
+    ``use_cache=False`` to force a fresh scan.
     """
+    if not use_cache:
+        return _scan_modules(root_dir)
+
+    fingerprint = _fingerprint(root_dir)
+    cached = _REGISTRY_CACHE.get(root_dir)
+    if cached is not None and cached[0] == fingerprint:
+        # Return a shallow copy so callers that mutate the dict (e.g. adding
+        # aliases) don't corrupt the shared cache.
+        return dict(cached[1])
+
+    found_modules = _scan_modules(root_dir)
+    _REGISTRY_CACHE[root_dir] = (fingerprint, found_modules)
+    return dict(found_modules)
+
+
+def _scan_modules(root_dir: str) -> dict:
+    """Walk ``root_dir`` and build the module registry (uncached)."""
     found_modules = {}
 
     for root, dirs, files in os.walk(root_dir):
