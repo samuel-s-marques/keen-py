@@ -134,17 +134,16 @@ class ConfigManager(DatabaseEngine):
             VALUES ('llm_thinking_partner_enabled', 'false')
         """)
 
-        # Handle migration for existing databases missing the description column
-        try:
-            cursor.execute(
-                "ALTER TABLE workspaces ADD COLUMN description TEXT DEFAULT ''"
-            )
-            self.conn.commit()
-        except sqlite3.OperationalError:
-            # Column already exists
-            pass
-
         self.conn.commit()
+
+        # Bring pre-existing config DBs up to date (fresh DBs already have every
+        # column from the CREATE statements above). Versioned via user_version.
+        self.run_migrations([self._migrate_config_v1])
+
+    @staticmethod
+    def _migrate_config_v1(db) -> None:
+        """v0 -> v1: workspaces.description for databases created before it existed."""
+        db.add_column_if_missing("workspaces", "description", "description TEXT DEFAULT ''")
 
     def add_proxy(self, url: str) -> bool:
         cursor = self.conn.cursor()
@@ -516,6 +515,15 @@ class WorkspaceManager(DatabaseEngine):
         self.name = name or os.path.splitext(os.path.basename(db_path))[0]
         self._initialize_schema()
 
+    @staticmethod
+    def _migrate_graph_v1(db) -> None:
+        """v0 -> v1: node layout columns + edge metadata/timestamp for old DBs."""
+        db.add_column_if_missing("nodes", "x", "x REAL")
+        db.add_column_if_missing("nodes", "y", "y REAL")
+        db.add_column_if_missing("edge", "metadata", "metadata TEXT")
+        # NOTE: no CURRENT_TIMESTAMP default — SQLite forbids it on ALTER ADD.
+        db.add_column_if_missing("edge", "timestamp", "timestamp DATETIME")
+
     def _initialize_schema(self) -> None:
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -524,7 +532,9 @@ class WorkspaceManager(DatabaseEngine):
                 type TEXT,
                 value TEXT UNIQUE,
                 metadata TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                x REAL,
+                y REAL
             )
         """)
         cursor.execute("""
@@ -540,26 +550,10 @@ class WorkspaceManager(DatabaseEngine):
             )
         """)
 
-        # Add positions columns if they don't exist
-        try:
-            cursor.execute("ALTER TABLE nodes ADD COLUMN x REAL")
-            cursor.execute("ALTER TABLE nodes ADD COLUMN y REAL")
-        except Exception:
-            pass
-
-        # Add metadata column for edges if it doesn't exist
-        try:
-            cursor.execute("ALTER TABLE edge ADD COLUMN metadata TEXT")
-        except Exception:
-            pass
-
-        # Add timestamp column for edges if it doesn't exist
-        try:
-            cursor.execute(
-                "ALTER TABLE edge ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP"
-            )
-        except Exception:
-            pass
+        # Bring pre-existing databases (created before these columns were part of
+        # the CREATE statements) up to date. Fresh DBs already have the columns,
+        # so these are no-ops on them. Versioned so they run at most once.
+        self.run_migrations([self._migrate_graph_v1])
 
         # Create AI suggestions table if it doesn't exist
         cursor.execute("""
