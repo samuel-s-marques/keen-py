@@ -93,6 +93,14 @@ def export_to_stix(workspace_name: str, nodes: list, edges: list, path: str) -> 
                 stix_obj["name"] = node_val
 
         if stix_obj:
+            # A stix2 blob carried in node metadata is not guaranteed to be well
+            # formed; synthesize the required fields rather than KeyError-ing out
+            # and aborting the whole bundle export.
+            stix_obj.setdefault("type", "x-keen-node")
+            stix_obj.setdefault("spec_version", "2.1")
+            if not stix_obj.get("id"):
+                obj_uuid = uuid.uuid5(STIXNamespaces.URL, str(node_val))
+                stix_obj["id"] = f"{stix_obj['type']}--{obj_uuid}"
             node_id_to_stix_id[node_id] = stix_obj["id"]
             stix_objects.append(stix_obj)
 
