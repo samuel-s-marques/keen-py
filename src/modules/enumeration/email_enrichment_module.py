@@ -31,6 +31,14 @@ class EmailEnrichmentModule(BaseModule):
         person = await self.check_hunter_io(email)
         if person:
             await self._save_results(email, person)
+        else:
+            # Even with no enrichment data (e.g. no API key), persist the target
+            # node so it appears in the workspace and magic chaining can proceed.
+            from src.core.result_builder import ResultBuilder, NodeFactory
+
+            builder = ResultBuilder()
+            builder.add_node(NodeFactory.email(email))
+            await self.post_run(builder.build())
 
     async def check_hunter_io(self, email: str) -> dict | None:
         api_key = self.options.get("HUNTER_IO_APIKEY")

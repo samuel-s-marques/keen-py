@@ -37,7 +37,11 @@ class PhoneVerificationModule(BaseModule):
             return
 
         target: str = str(self.options.get("TARGET")).strip()
-        timeout: int = int(self.options.get("TIMEOUT", 15))
+        try:
+            timeout: int = int(self.options.get("TIMEOUT", 15))
+        except (ValueError, TypeError):
+            error("TIMEOUT must be an integer number of seconds.")
+            return
 
         await self.loading(
             f"Verifying phone number {target}...", self.execute, target, timeout

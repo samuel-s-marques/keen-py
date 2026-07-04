@@ -138,7 +138,9 @@ class UserScannerModule(BaseModule):
             builder.add_edge(target, account_id_str, "owns-account")
             builder.add_edge(account_id_str, site_name, "registered-on")
 
-            # Extract patterns from extra_info
-            PatternExtractor.extract_and_link(builder, account_id_str, extra)
+            # Extract patterns from the structured result dict. (Passing the
+            # free-text `extra` string here was a no-op: extract_and_link only
+            # operates on a dict of fields.)
+            PatternExtractor.extract_and_link(builder, account_id_str, item)
 
         await self.post_run(builder.build())

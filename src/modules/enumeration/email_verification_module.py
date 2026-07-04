@@ -92,7 +92,11 @@ class EmailVerificationModule(BaseModule):
             return
 
         target: str = str(self.options.get("TARGET")).lower()
-        timeout: int = int(self.options.get("TIMEOUT", 10))
+        try:
+            timeout: int = int(self.options.get("TIMEOUT", 10))
+        except (ValueError, TypeError):
+            error("TIMEOUT must be an integer number of seconds.")
+            return
 
         res = await self.loading(
             f"Verifying email {target}...", self.execute, target, timeout
@@ -162,6 +166,8 @@ class EmailVerificationModule(BaseModule):
         )
 
         results = {
+            "local_part": local_part,
+            "domain": domain,
             "is_role": is_role,
             "is_disposable": is_disposable,
             "mx_records": mx_records,

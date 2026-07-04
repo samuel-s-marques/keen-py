@@ -37,9 +37,12 @@ class GitHubModule(BaseModule):
 
         self.client = self.get_http_client(headers=headers, follow_redirects=True)
 
-        await self.execute(target)
-
-        await self.client.aclose()
+        try:
+            await self.execute(target)
+        finally:
+            # Close in a finally so an exception out of execute() (e.g. from
+            # _save_results/post_run) can't leak the client's connection pool.
+            await self.client.aclose()
 
     async def execute(self, target: str) -> None:
         if not hasattr(self, "client"):

@@ -36,6 +36,12 @@ class EmailFinderModule(BaseModule):
         domain: str = self.options.get("DOMAIN", "").strip().lower()
         verify: bool = get_bool(self.options.get("VERIFY", ""))
 
+        # Required options can pass check_required_options while being
+        # whitespace-only, which strips to "" and breaks first_name[0] indexing.
+        if not first_name or not last_name or not domain:
+            error("FNAME, LNAME and DOMAIN must all be non-empty.")
+            return
+
         # Try Hunter.io first
         hunter_data = await self.check_hunter_io(first_name, last_name, domain)
 
