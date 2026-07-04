@@ -63,23 +63,15 @@ class UserScannerModule(BaseModule):
         await self._save_results(target, registered_results)
 
     def display_results(self, target: str, results: list) -> None:
-        from rich.console import Console
-        from rich.table import Table
-        from rich import box
-
-        console = Console()
-        table = Table(
+        table = self.results_table(
             title=f"User Scanner Results: [bold cyan]{target}[/bold cyan]",
-            box=box.ROUNDED,
-            expand=True,
-            show_lines=True,
-            header_style="bold blue",
+            columns=[
+                "Site Name",
+                "Category",
+                ("URL", "green underline"),
+                "Details",
+            ],
         )
-
-        table.add_column("Site Name", style="cyan bold", width=20)
-        table.add_column("Category", style="magenta")
-        table.add_column("URL", style="green underline")
-        table.add_column("Details", style="white", overflow="fold")
 
         for item in results:
             site_name = item.get("site_name", "Unknown")
@@ -89,8 +81,7 @@ class UserScannerModule(BaseModule):
 
             table.add_row(site_name, category, url, extra)
 
-        if not getattr(self, "is_web_context", False):
-            console.print(table)
+        self.render(table)
 
     async def _save_results(self, target: str, results: list) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory

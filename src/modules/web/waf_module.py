@@ -2,8 +2,6 @@ from src.utils.user_agents import UserAgents
 import dns.resolver
 import asyncio
 import re
-from rich.table import Table
-from rich.console import Console
 
 from src.utils.print_utils import error, info, success
 from src.core.base_module import BaseModule
@@ -140,24 +138,15 @@ class WafModule(BaseModule):
                         unique_results.append(res)
                         seen.add(tuple_res)
 
-                table = Table(
-                    show_header=True,
-                    header_style="bold blue",
+                table = self.results_table(
                     title=f"CDN/WAF Detection for {target}",
-                    title_style="bold cyan",
-                    show_lines=True,
-                    expand=True,
+                    columns=["Provider", "Detection Method", "Evidence"],
                 )
-                table.add_column("Provider", style="cyan")
-                table.add_column("Detection Method", style="magenta")
-                table.add_column("Evidence", style="white")
 
                 for provider, method, evidence in unique_results:
                     table.add_row(provider, method, evidence)
 
-                console = Console()
-                if not getattr(self, "is_web_context", False):
-                    console.print(table)
+                self.render(table)
                 success(f"Detected CDN/WAF infrastructure for {target}.")
 
                 # Save results to workspace

@@ -42,17 +42,9 @@ class WhoisModule(BaseModule):
             error(f"RDAP lookup failed: {str(e)}")
 
     def display_whois_results(self, target: str, data: dict[str, Any]) -> None:
-        from rich.console import Console
-        from rich.table import Table
-        from rich.panel import Panel
-        from rich import box
         from datetime import datetime
 
-        console = Console()
-
-        table = Table(box=box.HORIZONTALS, expand=True, show_header=False)
-        table.add_column("Property", style="cyan", width=25)
-        table.add_column("Details", style="white")
+        table = self.kv_table()
 
         def clean_val(v) -> str:
             if not v:
@@ -82,15 +74,13 @@ class WhoisModule(BaseModule):
         table.add_row("Contact Emails", emails)
         table.add_row("Domain Status", status)
 
-        if not getattr(self, "is_web_context", False):
-            console.print(
-                Panel(
-                    table,
-                    title=f"[bold cyan]RDAP Information: {target}[/bold cyan]",
-                    border_style="cyan",
-                    box=box.HEAVY,
-                )
+        self.render(
+            self.result_panel(
+                table,
+                title=f"[bold cyan]RDAP Information: {target}[/bold cyan]",
+                kind="info",
             )
+        )
 
     async def _save_results(self, target: str, results: dict) -> None:
         from datetime import datetime

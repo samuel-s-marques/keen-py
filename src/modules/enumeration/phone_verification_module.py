@@ -1,8 +1,6 @@
 from src.utils.user_agents import UserAgents
 import phonenumbers
 from phonenumbers import geocoder, carrier, timezone
-from rich.table import Table
-from rich.console import Console
 
 from src.utils.print_utils import error, success, warn
 from src.core.base_module import BaseModule
@@ -119,17 +117,10 @@ class PhoneVerificationModule(BaseModule):
         local = results["local"]
         api = results["api"]
 
-        table = Table(
-            show_header=True,
-            header_style="bold blue",
+        table = self.results_table(
             title=f"Phone Verification: [bold white]{phone}[/bold white]",
-            title_style="bold cyan",
-            show_lines=True,
-            expand=True,
+            columns=["Property", "Details"],
         )
-
-        table.add_column("Property", justify="left", style="cyan", no_wrap=True)
-        table.add_column("Details", justify="left", style="white")
 
         # Local Analysis Section
         if not local.get("error"):
@@ -161,9 +152,7 @@ class PhoneVerificationModule(BaseModule):
                 "[green]Yes[/green]" if api.get("valid") else "[red]No[/red]",
             )
 
-        console = Console()
-        if not getattr(self, "is_web_context", False):
-            console.print(table)
+        self.render(table)
 
         if local.get("valid"):
             success(f"Phone number {phone} appears to be valid.")

@@ -3,8 +3,6 @@ import asyncio
 import smtplib
 import socket
 import dns.resolver
-from rich.table import Table
-from rich.console import Console
 
 from src.utils.print_utils import error, success, warn
 from src.core.base_module import BaseModule
@@ -347,17 +345,10 @@ class EmailVerificationModule(BaseModule):
         catch_all: bool,
         score: int,
     ) -> None:
-        table = Table(
-            show_header=True,
-            header_style="bold blue",
+        table = self.results_table(
             title=f"Email Verification: [bold white]{email}[/bold white]",
-            title_style="bold cyan",
-            show_lines=True,
-            expand=True,
+            columns=["Property", "Status"],
         )
-
-        table.add_column("Property", justify="left", style="cyan", no_wrap=True)
-        table.add_column("Status", justify="left", style="white")
 
         table.add_row("Email", email)
         table.add_row("User (Local Part)", local_part)
@@ -385,9 +376,7 @@ class EmailVerificationModule(BaseModule):
         )
         table.add_row("MX Records", mx_str)
 
-        console = Console()
-        if not getattr(self, "is_web_context", False):
-            console.print(table)
+        self.render(table)
 
         if score >= 70:
             success(f"{email} looks highly legitimate.")

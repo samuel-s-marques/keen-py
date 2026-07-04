@@ -1,8 +1,3 @@
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich import box
-
 from src.utils.print_utils import error, warn, success
 from src.core.base_module import BaseModule
 
@@ -82,8 +77,6 @@ class DomainEnrichmentModule(BaseModule):
         if getattr(self, "is_web_context", False):
             return
 
-        console = Console()
-
         name = company.get("name") or company.get("legalName") or "Unknown"
         description = company.get("description") or "No description available."
         location = company.get("location") or "Unknown"
@@ -101,19 +94,16 @@ class DomainEnrichmentModule(BaseModule):
             f"[bold cyan]Type:[/bold cyan]         {company_type}\n"
             f"[bold cyan]Description:[/bold cyan]  {description}"
         )
-        console.print(
-            Panel(
+        self.render(
+            self.result_panel(
                 info_text,
                 title="[bold green]Hunter.io Domain Enrichment[/bold green]",
-                border_style="green",
-                box=box.ROUNDED,
+                kind="success",
             )
         )
 
         # Details Table
-        details_table = Table(box=box.SIMPLE, show_header=False, expand=True)
-        details_table.add_column("Key", style="cyan", width=20)
-        details_table.add_column("Value", style="white")
+        details_table = self.kv_table()
 
         details_table.add_row("Email Provider", email_provider)
         details_table.add_row("Phone", phone)
@@ -147,11 +137,11 @@ class DomainEnrichmentModule(BaseModule):
         if tags:
             details_table.add_row("Tags", ", ".join(tags))
 
-        console.print(
-            Panel(
+        self.render(
+            self.result_panel(
                 details_table,
                 title="[bold blue]Company Details[/bold blue]",
-                border_style="blue",
+                kind="info",
             )
         )
 
@@ -159,12 +149,11 @@ class DomainEnrichmentModule(BaseModule):
         tech_list = company.get("tech", [])
         if tech_list:
             tech_str = ", ".join(tech_list)
-            console.print(
-                Panel(
+            self.render(
+                self.result_panel(
                     tech_str,
                     title="[bold yellow]Technologies Tracked[/bold yellow]",
-                    border_style="yellow",
-                    box=box.ROUNDED,
+                    kind="warn",
                 )
             )
 
@@ -176,12 +165,11 @@ class DomainEnrichmentModule(BaseModule):
                 social_rows.append(f"[bold]{platform.capitalize()}:[/bold] {handle}")
 
         if social_rows:
-            console.print(
-                Panel(
+            self.render(
+                self.result_panel(
                     "\n".join(social_rows),
                     title="[bold magenta]Social Presence[/bold magenta]",
-                    border_style="magenta",
-                    box=box.ROUNDED,
+                    kind="info",
                 )
             )
 
@@ -191,20 +179,18 @@ class DomainEnrichmentModule(BaseModule):
         phones = site_info.get("phoneNumbers", [])
 
         if emails or phones:
-            contact_table = Table(box=box.SIMPLE, expand=True)
-            contact_table.add_column("Type", style="cyan", width=15)
-            contact_table.add_column("Value", style="white")
+            contact_table = self.results_table(columns=["Type", "Value"])
 
             for p in phones:
                 contact_table.add_row("Phone", p)
             for e in emails:
                 contact_table.add_row("Email", e)
 
-            console.print(
-                Panel(
+            self.render(
+                self.result_panel(
                     contact_table,
                     title="[bold cyan]Associated Contacts[/bold cyan]",
-                    border_style="cyan",
+                    kind="info",
                 )
             )
 

@@ -4,14 +4,31 @@ import dns.resolver
 import random
 import string
 import ipaddress
-from rich.table import Table
-from rich.console import Console
 
 from src.utils.print_utils import info, success, warn
 from src.core.base_module import BaseModule
 
 
 class DnsModule(BaseModule):
+    # Meaningful DNS record types for recon (obsolete/experimental types dropped).
+    RECORD_TYPES = [
+        "A",
+        "AAAA",
+        "NS",
+        "MX",
+        "TXT",
+        "CNAME",
+        "SOA",
+        "CAA",
+        "SRV",
+        "PTR",
+        "NAPTR",
+        "SPF",
+        "DNSKEY",
+        "DS",
+        "TLSA",
+    ]
+
     metadata = {
         "name": "DNS_Enum",
         "description": "Discovers DNS records of a target domain.",
@@ -40,77 +57,8 @@ class DnsModule(BaseModule):
     async def execute(self, target: str) -> None:
         await self.get_wildcard_records(target)
         await self.check_dnssec(target)
-        records: list[str] = [
-            "NONE",
-            "A",
-            "NS",
-            "MD",
-            "MF",
-            "CNAME",
-            "SOA",
-            "MB",
-            "MG",
-            "MR",
-            "NULL",
-            "WKS",
-            "PTR",
-            "HINFO",
-            "MINFO",
-            "MX",
-            "TXT",
-            "RP",
-            "AFSDB",
-            "X25",
-            "ISDN",
-            "RT",
-            "NSAP",
-            "NSAP-PTR",
-            "SIG",
-            "KEY",
-            "PX",
-            "GPOS",
-            "AAAA",
-            "LOC",
-            "NXT",
-            "SRV",
-            "NAPTR",
-            "KX",
-            "CERT",
-            "A6",
-            "DNAME",
-            "OPT",
-            "APL",
-            "DS",
-            "SSHFP",
-            "IPSECKEY",
-            "RRSIG",
-            "NSEC",
-            "DNSKEY",
-            "DHCID",
-            "NSEC3",
-            "NSEC3PARAM",
-            "TLSA",
-            "HIP",
-            "CDS",
-            "CDNSKEY",
-            "CSYNC",
-            "SPF",
-            "UNSPEC",
-            "EUI48",
-            "EUI64",
-            "TKEY",
-            "TSIG",
-            "IXFR",
-            "AXFR",
-            "MAILB",
-            "MAILA",
-            "ANY",
-            "URI",
-            "CAA",
-            "TA",
-            "DLV",
-        ]
 
+        records: list[str] = self.RECORD_TYPES
         results = []
 
         async def resolve_record(record_type: str):
@@ -141,24 +89,15 @@ class DnsModule(BaseModule):
 
         # Display results in a table
         if results:
-            table = Table(
-                show_header=True,
-                header_style="bold blue",
+            table = self.results_table(
                 title=f"DNS Records for {target}",
-                title_style="bold cyan",
-                show_lines=True,
-                expand=True,
+                columns=["Type", "Data"],
             )
-
-            table.add_column("Type", justify="left", style="cyan", no_wrap=True)
-            table.add_column("Data", justify="left", style="white")
 
             for record_type, data in results:
                 table.add_row(record_type, "\n".join(data))
 
-            console = Console()
-            if not getattr(self, "is_web_context", False):
-                console.print(table)
+            self.render(table)
             success(f"Discovered {len(results)} record types for {target}.")
 
             # ASN Intelligence
@@ -176,19 +115,16 @@ class DnsModule(BaseModule):
                         asn_results.append(asn_data)
 
                 if asn_results:
-                    asn_table = Table(
-                        show_header=True,
-                        header_style="bold blue",
+                    asn_table = self.results_table(
                         title=f"ASN Intelligence for {target}",
-                        title_style="bold cyan",
-                        show_lines=True,
-                        expand=True,
+                        columns=[
+                            "IP Address",
+                            "ASN",
+                            "BGP Prefix",
+                            "Provider",
+                            "Country",
+                        ],
                     )
-                    asn_table.add_column("IP Address", style="cyan")
-                    asn_table.add_column("ASN", style="magenta")
-                    asn_table.add_column("BGP Prefix", style="white")
-                    asn_table.add_column("Provider", style="green")
-                    asn_table.add_column("Country", style="white")
 
                     for res in asn_results:
                         asn_table.add_row(
@@ -198,8 +134,7 @@ class DnsModule(BaseModule):
                             res["provider"],
                             res["country"],
                         )
-                    if not getattr(self, "is_web_context", False):
-                        console.print(asn_table)
+                    self.render(asn_table)
         else:
             info(f"No DNS records found for {target}.")
             asn_results = []
@@ -282,24 +217,15 @@ class DnsModule(BaseModule):
             pass
 
         if results:
-            table = Table(
-                show_header=True,
-                header_style="bold blue",
+            table = self.results_table(
                 title=f"DNSSEC Analysis for {target}",
-                title_style="bold cyan",
-                show_lines=True,
-                expand=True,
+                columns=["Record", "Details"],
             )
-
-            table.add_column("Record", justify="left", style="cyan", no_wrap=True)
-            table.add_column("Details", justify="left", style="white")
 
             for record_type, details in results:
                 table.add_row(record_type, details)
 
-            console = Console()
-            if not getattr(self, "is_web_context", False):
-                console.print(table)
+            self.render(table)
             success(f"DNSSEC is enabled for {target}.")
         else:
             info(f"DNSSEC is not enabled for {target}.")

@@ -1,8 +1,3 @@
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich import box
-
 from src.utils.print_utils import error, warn, success
 from src.core.base_module import BaseModule
 
@@ -82,8 +77,6 @@ class EmailEnrichmentModule(BaseModule):
             return None
 
     def display_hunter_results(self, email: str, person: dict) -> None:
-        console = Console()
-
         name_data = person.get("name", {})
         full_name = name_data.get("fullName", "Unknown")
         location = person.get("location", "Unknown")
@@ -93,22 +86,18 @@ class EmailEnrichmentModule(BaseModule):
         provider = person.get("emailProvider", "Unknown")
 
         # Main Info Panel
-        if not getattr(self, "is_web_context", False):
-            console.print(
-                Panel(
-                    f"[bold cyan]Target:[/bold cyan] [bold white]{email}[/bold white]\n"
-                    f"[bold cyan]Name:[/bold cyan]   {full_name}\n"
-                    f"[bold cyan]Location:[/bold cyan] {location}",
-                    title="[bold green]Hunter.io Enrichment[/bold green]",
-                    border_style="green",
-                    box=box.ROUNDED,
-                )
+        self.render(
+            self.result_panel(
+                f"[bold cyan]Target:[/bold cyan] [bold white]{email}[/bold white]\n"
+                f"[bold cyan]Name:[/bold cyan]   {full_name}\n"
+                f"[bold cyan]Location:[/bold cyan] {location}",
+                title="[bold green]Hunter.io Enrichment[/bold green]",
+                kind="success",
             )
+        )
 
         # Personal Details Table
-        details_table = Table(box=box.SIMPLE, show_header=False, expand=True)
-        details_table.add_column("Key", style="cyan", width=15)
-        details_table.add_column("Value", style="white")
+        details_table = self.kv_table()
 
         if bio:
             details_table.add_row("Bio", bio)
@@ -119,23 +108,20 @@ class EmailEnrichmentModule(BaseModule):
         details_table.add_row("Provider", provider)
 
         if details_table.row_count > 0:
-            if not getattr(self, "is_web_context", False):
-                console.print(
-                    Panel(
-                        details_table,
-                        title="[bold blue]Personal Details[/bold blue]",
-                        border_style="blue",
-                    )
+            self.render(
+                self.result_panel(
+                    details_table,
+                    title="[bold blue]Personal Details[/bold blue]",
+                    kind="info",
                 )
+            )
 
         # Employment Information
         employment = person.get("employment", {})
         if employment and any(employment.values()):
-            emp_table = Table(box=box.HORIZONTALS, expand=True)
-            emp_table.add_column("Company", style="yellow")
-            emp_table.add_column("Title", style="white")
-            emp_table.add_column("Role", style="magenta")
-            emp_table.add_column("Seniority", style="cyan")
+            emp_table = self.results_table(
+                columns=["Company", "Title", "Role", "Seniority"],
+            )
 
             emp_table.add_row(
                 employment.get("name") or "N/A",
@@ -143,14 +129,13 @@ class EmailEnrichmentModule(BaseModule):
                 employment.get("role") or "N/A",
                 employment.get("seniority") or "N/A",
             )
-            if not getattr(self, "is_web_context", False):
-                console.print(
-                    Panel(
-                        emp_table,
-                        title="[bold yellow]Employment[/bold yellow]",
-                        border_style="yellow",
-                    )
+            self.render(
+                self.result_panel(
+                    emp_table,
+                    title="[bold yellow]Employment[/bold yellow]",
+                    kind="warn",
                 )
+            )
 
         # Social Media Presence
         social_types = [
@@ -168,15 +153,13 @@ class EmailEnrichmentModule(BaseModule):
                 social_rows.append(f"[bold]{s_type.capitalize()}:[/bold] {handle}")
 
         if social_rows:
-            if not getattr(self, "is_web_context", False):
-                console.print(
-                    Panel(
-                        "\n".join(social_rows),
-                        title="[bold magenta]Social Presence[/bold magenta]",
-                        border_style="magenta",
-                        box=box.ROUNDED,
-                    )
+            self.render(
+                self.result_panel(
+                    "\n".join(social_rows),
+                    title="[bold magenta]Social Presence[/bold magenta]",
+                    kind="info",
                 )
+            )
 
         success(f"Enrichment completed for {email}")
 

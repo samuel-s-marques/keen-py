@@ -85,29 +85,20 @@ class SherlockModule(BaseModule):
         return accounts
 
     def display_results(self, target: str, results: dict[str, str]) -> None:
-        from rich.console import Console
-        from rich.table import Table
-        from rich.panel import Panel
-        from rich import box
-
-        console = Console()
-
-        table = Table(box=box.MINIMAL_DOUBLE_HEAD, expand=True)
-        table.add_column("Platform", style="cyan bold", width=30)
-        table.add_column("Profile URL", style="green underline")
+        table = self.results_table(
+            columns=["Platform", ("Profile URL", "green underline")],
+        )
 
         for platform, url in sorted(results.items()):
             table.add_row(platform, url)
 
-        if not getattr(self, "is_web_context", False):
-            console.print(
-                Panel(
-                    table,
-                    title=f"[bold green]Sherlock Profile Footprint: {target}[/bold green]",
-                    border_style="green",
-                    box=box.HEAVY,
-                )
+        self.render(
+            self.result_panel(
+                table,
+                title=f"[bold green]Sherlock Profile Footprint: {target}[/bold green]",
+                kind="success",
             )
+        )
 
     async def _save_results(self, target: str, results: dict[str, str]) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory

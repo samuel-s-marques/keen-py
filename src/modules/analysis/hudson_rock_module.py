@@ -1,8 +1,3 @@
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich import box
-
 from src.utils.user_agents import UserAgents
 from src.utils.print_utils import error, success
 from src.core.base_module import BaseModule
@@ -50,8 +45,6 @@ class HudsonRockModule(BaseModule):
             error(f"Error checking Hudson Rock: {e}")
 
     def display_hudson_rock_results(self, email: str, data: dict) -> None:
-        console = Console()
-
         message = data.get("message")
         stealers = data.get("stealers", [])
 
@@ -60,21 +53,17 @@ class HudsonRockModule(BaseModule):
             return
 
         # Main Warning Panel
-        if not getattr(self, "is_web_context", False):
-            console.print(
-                Panel(
-                    f"[bold red]WARNING: Information Stealer Infection Detected![/bold red]\n\n"
-                    f"[white]{message}[/white]",
-                    title=f"[bold red]Hudson Rock: {email}[/bold red]",
-                    border_style="red",
-                    box=box.HEAVY,
-                )
+        self.render(
+            self.result_panel(
+                f"[bold red]WARNING: Information Stealer Infection Detected![/bold red]\n\n"
+                f"[white]{message}[/white]",
+                title=f"[bold red]Hudson Rock: {email}[/bold red]",
+                kind="error",
             )
+        )
 
         # Summary Table
-        summary_table = Table(box=box.SIMPLE, show_header=False, expand=True)
-        summary_table.add_column("Key", style="cyan", width=30)
-        summary_table.add_column("Value", style="white")
+        summary_table = self.kv_table()
 
         summary_table.add_row("Total Stealers Found", str(len(stealers)))
         summary_table.add_row(
@@ -85,20 +74,19 @@ class HudsonRockModule(BaseModule):
             "Total User Services Affected", str(data.get("total_user_services", 0))
         )
 
-        if not getattr(self, "is_web_context", False):
-            console.print(
-                Panel(
-                    summary_table,
-                    title="[bold blue]Overall Summary[/bold blue]",
-                    border_style="blue",
-                )
+        self.render(
+            self.result_panel(
+                summary_table,
+                title="[bold blue]Overall Summary[/bold blue]",
+                kind="info",
             )
+        )
 
         # Detail Stealers
         for index, stealer in enumerate(stealers, start=1):
-            stealer_table = Table(box=box.HORIZONTALS, expand=True)
-            stealer_table.add_column("Property", style="cyan", width=25)
-            stealer_table.add_column("Details", style="white")
+            stealer_table = self.results_table(
+                columns=["Property", "Details"],
+            )
 
             stealer_table.add_row(
                 "Date Compromised", stealer.get("date_compromised", "Unknown")
@@ -125,14 +113,13 @@ class HudsonRockModule(BaseModule):
             stealer_table.add_row("Top Passwords (Masked)", top_passwords)
             stealer_table.add_row("Top Logins", top_logins)
 
-            if not getattr(self, "is_web_context", False):
-                console.print(
-                    Panel(
-                        stealer_table,
-                        title=f"[bold yellow]Infection #{index}[/bold yellow]",
-                        border_style="yellow",
-                    )
+            self.render(
+                self.result_panel(
+                    stealer_table,
+                    title=f"[bold yellow]Infection #{index}[/bold yellow]",
+                    kind="warn",
                 )
+            )
 
     async def _save_results(self, target: str, results: dict) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces

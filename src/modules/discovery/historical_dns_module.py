@@ -1,8 +1,6 @@
 import asyncio
 import dns.resolver
 from bs4 import BeautifulSoup
-from rich.table import Table
-from rich.console import Console
 
 from src.utils.print_utils import info, success, warn
 from src.utils.user_agents import UserAgents
@@ -86,17 +84,10 @@ class HistoricalDnsModule(BaseModule):
         if ip_history_data:
             # Sort by date if possible (very basic sort)
             ip_history_data.sort(key=lambda x: x.get("date", ""), reverse=True)
-            table = Table(
-                show_header=True,
-                header_style="bold blue",
+            table = self.results_table(
                 title=f"Historical IP Records for {target}",
-                title_style="bold cyan",
-                show_lines=True,
-                expand=True,
+                columns=["Date", "IP Address", "Source"],
             )
-            table.add_column("Date", justify="left", style="cyan", no_wrap=True)
-            table.add_column("IP Address", justify="left", style="white")
-            table.add_column("Source", justify="left", style="magenta")
 
             # Avoid duplicates in display
             seen = set()
@@ -110,9 +101,7 @@ class HistoricalDnsModule(BaseModule):
                     )
                     seen.add(key)
 
-            console = Console()
-            if not getattr(self, "is_web_context", False):
-                console.print(table)
+            self.render(table)
             success(f"Discovered {len(historical_ips)} unique historical IP addresses.")
         else:
             warn("No historical IP records found.")
@@ -294,17 +283,13 @@ class HistoricalDnsModule(BaseModule):
 
         if len(providers) > 1:
             warn(f"Multiple infrastructure providers detected: {', '.join(providers)}")
-            table = Table(
-                show_header=True,
-                header_style="bold blue",
+            table = self.results_table(
                 title="Infrastructure Migrations",
+                columns=["Historical IP", "ASN", "Provider"],
             )
-            table.add_column("Historical IP", style="cyan")
-            table.add_column("ASN", style="magenta")
-            table.add_column("Provider", style="green")
             for res in asn_results:
                 table.add_row(res["ip"], res["asn"], res["provider"])
-            Console().print(table)
+            self.render(table)
         elif len(providers) == 1:
             info(f"Historically consistently hosted on: {list(providers)[0]}")
 
@@ -381,22 +366,15 @@ class HistoricalDnsModule(BaseModule):
                         vulnerable.append(res)
 
         if vulnerable:
-            table = Table(
-                show_header=True,
-                header_style="bold blue",
+            table = self.results_table(
                 title="Potentially Abandoned / Vulnerable Subdomains",
-                title_style="bold red",
-                show_lines=True,
-                expand=True,
+                columns=["Subdomain", "Status", "IPs"],
             )
-            table.add_column("Subdomain", style="red")
-            table.add_column("Status", style="yellow")
-            table.add_column("IPs", style="white")
 
             for sub, status, ips in vulnerable:
                 table.add_row(sub, status, ", ".join(ips))
 
-            Console().print(table)
+            self.render(table)
             warn(
                 f"Found {len(vulnerable)} potentially abandoned/vulnerable subdomains!"
             )

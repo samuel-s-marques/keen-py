@@ -1,10 +1,6 @@
 from src.utils.print_utils import error, warn, info
 from src.core.base_module import BaseModule
 from src.utils.utils import get_bool
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich import box
 
 
 class EmailFinderModule(BaseModule):
@@ -134,8 +130,6 @@ class EmailFinderModule(BaseModule):
             return None
 
     async def display_hunter_results(self, data: dict) -> None:
-        console = Console()
-
         email = data.get("email")
         score = data.get("score")
         company = data.get("company")
@@ -149,15 +143,13 @@ class EmailFinderModule(BaseModule):
         if position:
             content += f"[bold cyan]Position:[/bold cyan] {position}\n"
 
-        if not getattr(self, "is_web_context", False):
-            console.print(
-                Panel(
-                    content.strip(),
-                    title="[bold green]Hunter.io Results[/bold green]",
-                    border_style="green",
-                    box=box.ROUNDED,
-                )
+        self.render(
+            self.result_panel(
+                content.strip(),
+                title="[bold green]Hunter.io Results[/bold green]",
+                kind="success",
             )
+        )
 
     async def save_hunter_results(self, data: dict) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory
@@ -230,14 +222,14 @@ class EmailFinderModule(BaseModule):
     async def display_emails(
         self, emails: dict[str, int], with_probability: bool = True
     ) -> None:
-        console = Console()
-        table = Table(
-            title="[bold green]Generated Emails[/bold green]", box=box.ROUNDED
-        )
-
-        table.add_column("Email", style="cyan")
+        columns = ["Email"]
         if with_probability:
-            table.add_column("Probability", style="magenta")
+            columns.append("Probability")
+
+        table = self.results_table(
+            title="[bold green]Generated Emails[/bold green]",
+            columns=columns,
+        )
 
         if with_probability:
             sorted_emails = sorted(emails.items(), key=lambda x: x[1], reverse=True)
@@ -247,8 +239,7 @@ class EmailFinderModule(BaseModule):
             for email in emails:
                 table.add_row(email)
 
-        if not getattr(self, "is_web_context", False):
-            console.print(table)
+        self.render(table)
 
     async def verify_emails(self, emails: list[str]) -> dict[str, int]:
         """Verifies email addresses using EmailVerification module.
