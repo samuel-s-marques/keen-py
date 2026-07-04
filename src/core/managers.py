@@ -17,6 +17,8 @@ from src.core.exporters import export_workspace
 class ConfigManager(DatabaseEngine):
     _global_unlocked = {}
     _global_fernet = {}
+    # In-memory round-robin cursor per db path
+    _rr_last_id = {}
     _lock = threading.Lock()
 
     def __init__(self, db_path: str) -> None:
@@ -223,8 +225,11 @@ class ConfigManager(DatabaseEngine):
 
     def get_next_proxy(self) -> dict | None:
         """Retrieves the next configured proxy according to the global preferences."""
-        enabled = self.get_preference("proxy_enabled")
-        if enabled != "true":
+        # Batch the preference reads into one query instead of 2-3 round-trips.
+        prefs = self.get_preferences(
+            ["proxy_enabled", "proxy_rotation_mode", "proxy_sticky_index"]
+        )
+        if prefs.get("proxy_enabled") != "true":
             return None
 
         cursor = self.conn.cursor()
@@ -241,14 +246,14 @@ class ConfigManager(DatabaseEngine):
         if not proxies:
             return None
 
-        mode = self.get_preference("proxy_rotation_mode") or "round-robin"
+        mode = prefs.get("proxy_rotation_mode") or "round-robin"
         if mode == "random":
             import random
 
             return random.choice(proxies)
         elif mode == "sticky":
             try:
-                sticky_index = int(self.get_preference("proxy_sticky_index") or 0)
+                sticky_index = int(prefs.get("proxy_sticky_index") or 0)
             except (ValueError, TypeError):
                 sticky_index = 0
                 self.set_preference("proxy_sticky_index", "0")
@@ -259,22 +264,13 @@ class ConfigManager(DatabaseEngine):
 
             return proxies[sticky_index]
         else:  # round-robin
-            # Rotate by the last-returned proxy *id* (not a positional index) so
-            # rotation stays stable even as the online/enabled set changes size,
-            # and guard the read-modify-write with the shared lock to avoid a race
-            # when many modules call this concurrently (e.g. magic's asyncio.gather).
+            # Rotate by the last-returned proxy *id*
             with ConfigManager._lock:
-                try:
-                    last_id = int(self.get_preference("proxy_rr_last_id") or 0)
-                except (ValueError, TypeError):
-                    last_id = 0
-
+                last_id = ConfigManager._rr_last_id.get(self.path, 0)
                 # proxies are ordered by id ASC; pick the first with a greater id,
                 # otherwise wrap around to the first proxy.
-                selected = next(
-                    (p for p in proxies if p["id"] > last_id), proxies[0]
-                )
-                self.set_preference("proxy_rr_last_id", str(selected["id"]))
+                selected = next((p for p in proxies if p["id"] > last_id), proxies[0])
+                ConfigManager._rr_last_id[self.path] = selected["id"]
                 return selected
 
     def _get_or_create_salt(self) -> bytes:
@@ -488,6 +484,23 @@ class ConfigManager(DatabaseEngine):
         result = cursor.fetchone()
         return result["value"] if result else None
 
+    def get_preferences(self, keys: list[str]) -> dict:
+        """Fetch several preferences in a single query.
+
+        Returns a dict mapping every requested key to its value (or ``None`` if
+        unset), avoiding one round-trip per key on hot paths like proxy selection.
+        """
+        if not keys:
+            return {}
+        placeholders = ",".join("?" for _ in keys)
+        cursor = self.conn.cursor()
+        cursor.execute(
+            f"SELECT key, value FROM preferences WHERE key IN ({placeholders})",
+            tuple(keys),
+        )
+        found = {row["key"]: row["value"] for row in cursor.fetchall()}
+        return {k: found.get(k) for k in keys}
+
     def set_preference(self, key: str, value: str) -> None:
         cursor = self.conn.cursor()
         cursor.execute(
@@ -571,6 +584,14 @@ class WorkspaceManager(DatabaseEngine):
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Indexes for the graph hot paths: edge traversal by endpoint
+        # (delete_node's OR-filter, add_edge dedup, AI-scan edge load) and
+        # node lookups/filtering by type. These are full-scans without indexes
+        # and grow linearly with the graph.
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_edge_source ON edge(source_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_edge_target ON edge(target_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(type)")
 
         self.conn.commit()
 
@@ -724,7 +745,7 @@ class WorkspaceManager(DatabaseEngine):
             "html": ".html",
             "markdown": ".md",
             "json": ".json",
-            "stix2": ".json"
+            "stix2": ".json",
         }
         expected_ext = ext_map.get(type, f".{type}")
 
@@ -750,9 +771,7 @@ class WorkspaceManager(DatabaseEngine):
         export_suggestions = (
             config.get_preference("llm_export_suggestions_enabled") == "true"
         )
-        export_analysis = (
-            config.get_preference("llm_export_analysis_enabled") == "true"
-        )
+        export_analysis = config.get_preference("llm_export_analysis_enabled") == "true"
         config.close()
 
         suggestions = []
@@ -787,7 +806,9 @@ class WorkspaceManager(DatabaseEngine):
     def get_analysis_history(self) -> list[dict]:
         """Retrieve all historical AI thoughts/analysis entries."""
         cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM ai_analysis_history ORDER BY created_at DESC, id DESC")
+        cursor.execute(
+            "SELECT * FROM ai_analysis_history ORDER BY created_at DESC, id DESC"
+        )
         return [dict(row) for row in cursor.fetchall()]
 
     def add_analysis(self, analysis_text: str) -> int | None:
