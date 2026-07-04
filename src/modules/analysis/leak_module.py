@@ -586,9 +586,13 @@ class LeakModule(BaseModule):
             case "phone":
                 builder.add_node(NodeFactory.phone(target, leaks_count=len(leaks)))
             case _:
+                # Store the bare username as a plain user-account value (no
+                # "username:" prefix) so it dedups with the same identity created
+                # by other modules (e.g. Email_To_Username). Site-scoped accounts
+                # use the "<site>:<username>" form; a bare identity does not.
                 builder.add_node(
                     NodeFactory.user_account(
-                        f"username:{target}",
+                        target,
                         leaks_count=len(leaks),
                     )
                 )
@@ -598,9 +602,7 @@ class LeakModule(BaseModule):
                 primary["metadata"]["stix2"]["account_type"] = "username"
                 primary["metadata"]["misp"] = {"type": "text", "value": target}
 
-        source_val = (
-            target if target_type in ["email", "phone"] else f"username:{target}"
-        )
+        source_val = target
 
         # Breach nodes + edges
         for leak in leaks:
