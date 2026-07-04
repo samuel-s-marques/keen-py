@@ -211,13 +211,16 @@ class DomainEnrichmentModule(BaseModule):
         success(f"Enrichment completed for {target}")
 
     async def _save_results(self, target: str) -> None:
-        if not self.results:
-            return
-
         from src.core.result_builder import ResultBuilder, NodeFactory
 
         builder = ResultBuilder()
         builder.add_node(NodeFactory.domain(target))
+
+        if not self.results:
+            # No enrichment data (e.g. no API key): still persist the target
+            # domain node so it lands in the workspace and magic chaining fires.
+            await self.post_run(builder.build())
+            return
 
         company = self.results
         name = company.get("name") or company.get("legalName")
