@@ -208,16 +208,27 @@ class ResultBuilder:
         self._node_values: set[str] = set()
         self._edges: list[dict[str, Any]] = []
 
-    def add_node(self, node: dict[str, Any]) -> "ResultBuilder":
+    def add_node(self, node: dict[str, Any]) -> dict[str, Any]:
         """Add a node to the result, deduplicating by value.
 
-        Returns self for chaining.
+        Returns the stored node dict — either the one just added, or the
+        pre-existing node if a node with the same value was already present.
+        Callers should annotate this returned dict rather than reaching into
+        ``builder._nodes[-1]`` (which is fragile: dedup can leave ``[-1]``
+        pointing at an unrelated node).
         """
         value: str | None = node.get("value")
-        if value is not None and value not in self._node_values:
+        if value is None:
+            return node
+        if value not in self._node_values:
             self._nodes.append(node)
             self._node_values.add(value)
-        return self
+            return node
+        # Already present — return the existing node so annotations land on it.
+        for existing in reversed(self._nodes):
+            if existing.get("value") == value:
+                return existing
+        return node
 
     def add_edge(
         self,
@@ -255,7 +266,21 @@ def _build_node(
     misp: dict,
     extra_metadata: dict,
 ) -> dict[str, Any]:
-    """Internal helper to build a node dict with standard structure."""
+    """Internal helper to build a node dict with standard structure.
+
+    Two reserved keys may appear in ``extra_metadata`` (accepted by every
+    NodeFactory method via ``**extra_metadata``) so callers can customize the
+    embedded STIX2/MISP objects without post-mutating the built node:
+      - ``stix2_extra``: dict merged into the STIX2 object.
+      - ``misp_override``: dict that fully replaces the default MISP object.
+    All other keys are merged into the node metadata at the top level.
+    """
+    stix2_extra = extra_metadata.pop("stix2_extra", None)
+    misp_override = extra_metadata.pop("misp_override", None)
+    if stix2_extra:
+        stix2.update(stix2_extra)
+    if misp_override is not None:
+        misp = misp_override
     metadata: dict[str, Any] = {
         "stix2": stix2,
         "misp": misp,
