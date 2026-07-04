@@ -15,11 +15,12 @@ class InputValidator:
             bool: True if domain is valid, False otherwise.
         """
 
-        # Strip "http://", "https://", and "www." from domain
-        if "http" in domain:
-            domain = domain.split("//")[1]
-        if "www." in domain:
-            domain = domain.split("www.")[1]
+        # Strip scheme and "www." prefixes. Guard the split so a bare value that
+        # merely contains "http" (e.g. "http.example.com") can't IndexError.
+        if "://" in domain:
+            domain = domain.split("://", 1)[1]
+        if domain.startswith("www."):
+            domain = domain[len("www.") :]
 
         pattern = r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$"
         return re.match(pattern, domain.lower()) is not None
