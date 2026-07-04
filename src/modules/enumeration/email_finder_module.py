@@ -166,15 +166,13 @@ class EmailFinderModule(BaseModule):
         sources = data.get("sources")
 
         # Add email node
-        builder.add_node(
+        email_node = builder.add_node(
             NodeFactory.email(
                 email,
                 first_name=first_name,
                 last_name=last_name,
             )
         )
-
-        email_node = builder._nodes[-1]
         if score:
             email_node["metadata"]["score"] = score
         if sources:
