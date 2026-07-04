@@ -1,6 +1,13 @@
 import datetime
 import json
 import re
+import html as _html_lib
+
+
+def _esc(value) -> str:
+    """HTML-escape a raw value before interpolating it into the exported report,
+    preventing stored-XSS from attacker-controlled node/edge/metadata values."""
+    return _html_lib.escape(str(value), quote=True)
 
 
 def md_to_html(md_text: str) -> str:
@@ -64,16 +71,16 @@ def export_to_html(
                     if k in ["stix2", "misp"]:
                         continue
                     meta_details += (
-                        f"<span class='meta-tag'><strong>{k}:</strong> {v}</span> "
+                        f"<span class='meta-tag'><strong>{_esc(k)}:</strong> {_esc(v)}</span> "
                     )
             if not meta_details:
                 meta_details = "<span class='meta-tag-empty'>No metadata</span>"
 
             table_rows += f"""
             <tr>
-                <td><span class='node-val'>{n["value"]}</span></td>
-                <td><span class='badge'>{n_type}</span></td>
-                <td>{n.get("timestamp", "-")}</td>
+                <td><span class='node-val'>{_esc(n["value"])}</span></td>
+                <td><span class='badge'>{_esc(n_type)}</span></td>
+                <td>{_esc(n.get("timestamp", "-"))}</td>
                 <td>{meta_details}</td>
             </tr>
             """
@@ -111,9 +118,9 @@ def export_to_html(
 
         edges_rows += f"""
         <tr>
-            <td><span class='node-val'>{src_val}</span> <span class='badge-small'>{src_type}</span></td>
-            <td><span class='rel-badge'>{rel}</span></td>
-            <td><span class='node-val'>{tgt_val}</span> <span class='badge-small'>{tgt_type}</span></td>
+            <td><span class='node-val'>{_esc(src_val)}</span> <span class='badge-small'>{_esc(src_type)}</span></td>
+            <td><span class='rel-badge'>{_esc(rel)}</span></td>
+            <td><span class='node-val'>{_esc(tgt_val)}</span> <span class='badge-small'>{_esc(tgt_type)}</span></td>
         </tr>
         """
 
@@ -148,12 +155,12 @@ def export_to_html(
         if active_suggestions:
             rows_html = ""
             for s in active_suggestions:
-                text = s.get("suggestion_text", "")
-                pivot = s.get("pivot_type", "-")
+                text = _esc(s.get("suggestion_text", ""))
+                pivot = _esc(s.get("pivot_type", "-"))
                 if s.get("module_name"):
-                    pivot = f"{pivot} ({s['module_name'].split('/')[-1]})"
-                status = s.get("status", "pending").upper()
-                feedback = s.get("feedback", "-") or "-"
+                    pivot = f"{pivot} ({_esc(s['module_name'].split('/')[-1])})"
+                status = _esc(s.get("status", "pending").upper())
+                feedback = _esc(s.get("feedback", "-") or "-")
 
                 status_color = "var(--accent-cyan)"
                 if status == "ACCEPTED":
@@ -214,7 +221,7 @@ def export_to_html(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Keen Report - {workspace_name}</title>
+    <title>Keen Report - {_esc(workspace_name)}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
@@ -473,7 +480,7 @@ def export_to_html(
     <div class="container">
         <header>
             <div class="header-title">
-                <h1>{workspace_name}</h1>
+                <h1>{_esc(workspace_name)}</h1>
                 <p>OSINT & Intelligence Gathering Workspace Report</p>
             </div>
             <div class="meta-info">

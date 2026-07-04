@@ -1,18 +1,17 @@
 from typing import Any
 import json
 import datetime
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    Table,
-    TableStyle,
-    PageBreak,
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
+
+
+def _esc(value: Any) -> str:
+    """Escape text so it is safe inside a reportlab ``Paragraph`` (which parses a
+    mini-HTML markup dialect). Prevents crashes on literal ``&``/``<``/``>``."""
+    return (
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
 
 
 def md_to_pdf_html(md_text: str) -> str:
@@ -48,6 +47,22 @@ def export_to_pdf(
     suggestions: list = [],
     analysis: str | None = None,
 ) -> None:
+    # reportlab is imported lazily so that importing this module (which happens
+    # transitively when importing the shell or the API server) does not require
+    # reportlab to be installed unless a PDF export is actually requested.
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Paragraph,
+        Spacer,
+        Table,
+        TableStyle,
+        PageBreak,
+    )
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+
     doc = SimpleDocTemplate(
         path,
         pagesize=letter,
@@ -230,14 +245,14 @@ def export_to_pdf(
                 for k, v in meta.items():
                     if k in ["stix2", "misp"]:
                         continue
-                    meta_details.append(f"<b>{k}:</b> {v}")
+                    meta_details.append(f"<b>{_esc(k)}:</b> {_esc(v)}")
 
             meta_text = ", ".join(meta_details) if meta_details else "-"
 
             table_data.append(
                 [
-                    Paragraph(n["value"], code_style),
-                    Paragraph(n.get("timestamp", "-"), body_secondary_style),
+                    Paragraph(_esc(n["value"]), code_style),
+                    Paragraph(_esc(n.get("timestamp", "-")), body_secondary_style),
                     Paragraph(meta_text, body_style),
                 ]
             )
@@ -295,17 +310,17 @@ def export_to_pdf(
             edge_table_data.append(
                 [
                     Paragraph(
-                        f"{src_val}<br/><font color='#64748b' size='8'>({src_type})</font>",
+                        f"{_esc(src_val)}<br/><font color='#64748b' size='8'>({_esc(src_type)})</font>",
                         body_style,
                     ),
                     Paragraph(
-                        f"<b>{rel}</b>",
+                        f"<b>{_esc(rel)}</b>",
                         ParagraphStyle(
                             "rel", parent=body_style, textColor=accent_color
                         ),
                     ),
                     Paragraph(
-                        f"{tgt_val}<br/><font color='#64748b' size='8'>({tgt_type})</font>",
+                        f"{_esc(tgt_val)}<br/><font color='#64748b' size='8'>({_esc(tgt_type)})</font>",
                         body_style,
                     ),
                 ]
@@ -367,13 +382,13 @@ def export_to_pdf(
             ]
 
             for s in active_suggestions:
-                text = s.get("suggestion_text", "")
-                pivot = s.get("pivot_type", "-")
+                text = _esc(s.get("suggestion_text", ""))
+                pivot = _esc(s.get("pivot_type", "-"))
                 if s.get("module_name"):
-                    pivot = f"{pivot}<br/><font color='#64748b' size='8'>({s['module_name'].split('/')[-1]})</font>"
+                    pivot = f"{pivot}<br/><font color='#64748b' size='8'>({_esc(s['module_name'].split('/')[-1])})</font>"
 
                 status = s.get("status", "pending").upper()
-                feedback = s.get("feedback", "")
+                feedback = _esc(s.get("feedback", ""))
 
                 status_color = "#00b0ff"  # Cyan
                 if status == "ACCEPTED":
