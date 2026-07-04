@@ -8,6 +8,7 @@ class EmailEnrichmentModule(BaseModule):
         "description": "Enriches an email address with additional information using Hunter.io and other sources.",
         "author": "Samuel Marques",
         "version": "1.0.0",
+        "magic_consumes": ["email-addr"],
         "options": {
             "TARGET": ["", True, "The email address to lookup.", "email"],
             "HUNTER_IO_APIKEY": ["", False, "API Key for Hunter.io API.", ""],
@@ -193,7 +194,7 @@ class EmailEnrichmentModule(BaseModule):
         employment = results.get("employment", {})
         company_name = employment.get("name")
         if company_name and company_name.strip():
-            builder.add_node(
+            org_node = builder.add_node(
                 NodeFactory.organization(
                     company_name,
                     title=employment.get("title"),
@@ -202,7 +203,6 @@ class EmailEnrichmentModule(BaseModule):
                 )
             )
             # Override MISP type
-            org_node = builder._nodes[-1]
             org_node["metadata"]["misp"] = {"type": "target-org", "value": company_name}
             builder.add_edge(email, company_name, "employed-by")
 
@@ -218,9 +218,8 @@ class EmailEnrichmentModule(BaseModule):
 
         # Website
         if site:
-            builder.add_node(NodeFactory.url(site))
+            url_node = builder.add_node(NodeFactory.url(site))
             # Override MISP type to url
-            url_node = builder._nodes[-1]
             url_node["metadata"]["misp"] = {"type": "url", "value": site}
             builder.add_edge(email, site, "associated-website")
 
@@ -237,7 +236,7 @@ class EmailEnrichmentModule(BaseModule):
             handle = results.get(s_type, {}).get("handle")
             if handle:
                 acc_val = f"{s_type}:{handle}"
-                builder.add_node(
+                acc_node = builder.add_node(
                     NodeFactory.user_account(
                         acc_val,
                         platform=s_type,
@@ -245,7 +244,6 @@ class EmailEnrichmentModule(BaseModule):
                     )
                 )
                 # Override stix2/misp specifics
-                acc_node = builder._nodes[-1]
                 acc_node["metadata"]["stix2"]["account_login"] = handle
                 acc_node["metadata"]["stix2"]["account_type"] = s_type
                 acc_node["metadata"]["misp"] = {"type": misp_type, "value": handle}
