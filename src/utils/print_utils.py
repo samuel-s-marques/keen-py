@@ -10,7 +10,7 @@ def info(message: str) -> None:
 
 
 def error(message: str) -> None:
-    logger.opt(depth=2).error(message)
+    logger.opt(depth=1).error(message)
 
 
 def warn(message: str) -> None:
