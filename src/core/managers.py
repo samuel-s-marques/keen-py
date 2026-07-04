@@ -249,7 +249,7 @@ class ConfigManager(DatabaseEngine):
         elif mode == "sticky":
             try:
                 sticky_index = int(self.get_preference("proxy_sticky_index") or 0)
-            except ValueError:
+            except (ValueError, TypeError):
                 sticky_index = 0
                 self.set_preference("proxy_sticky_index", "0")
 
@@ -259,18 +259,23 @@ class ConfigManager(DatabaseEngine):
 
             return proxies[sticky_index]
         else:  # round-robin
-            try:
-                current_idx = int(self.get_preference("proxy_sticky_index") or 0)
-            except ValueError:
-                current_idx = 0
+            # Rotate by the last-returned proxy *id* (not a positional index) so
+            # rotation stays stable even as the online/enabled set changes size,
+            # and guard the read-modify-write with the shared lock to avoid a race
+            # when many modules call this concurrently (e.g. magic's asyncio.gather).
+            with ConfigManager._lock:
+                try:
+                    last_id = int(self.get_preference("proxy_rr_last_id") or 0)
+                except (ValueError, TypeError):
+                    last_id = 0
 
-            if current_idx >= len(proxies):
-                current_idx = 0
-
-            selected = proxies[current_idx]
-            next_idx = (current_idx + 1) % len(proxies)
-            self.set_preference("proxy_sticky_index", str(next_idx))
-            return selected
+                # proxies are ordered by id ASC; pick the first with a greater id,
+                # otherwise wrap around to the first proxy.
+                selected = next(
+                    (p for p in proxies if p["id"] > last_id), proxies[0]
+                )
+                self.set_preference("proxy_rr_last_id", str(selected["id"]))
+                return selected
 
     def _get_or_create_salt(self) -> bytes:
         salt_b64 = self.get_preference("api_keys_salt")
@@ -388,6 +393,21 @@ class ConfigManager(DatabaseEngine):
         cursor = self.conn.cursor()
         # Normalize path representation to forward slashes for cross-platform safety
         normalized_path = os.path.normpath(path).replace("\\", "/")
+
+        # Guard against two distinct display names slugifying to the same .keen
+        # file: reject if this path is already registered under a different name,
+        # which would otherwise silently merge two "separate" workspaces.
+        cursor.execute(
+            "SELECT name FROM workspaces WHERE path = ? AND name != ?",
+            (normalized_path, name),
+        )
+        clash = cursor.fetchone()
+        if clash:
+            raise ValueError(
+                f"Workspace path '{normalized_path}' is already used by workspace "
+                f"'{clash['name']}'. Choose a more distinct name."
+            )
+
         cursor.execute("SELECT id FROM workspaces WHERE name = ?", (name,))
         result = cursor.fetchone()
         if result:
@@ -557,23 +577,31 @@ class WorkspaceManager(DatabaseEngine):
     def get_or_add_node(
         self, node_type: str, value: str, metadata: dict | None = None
     ) -> int | None:
-        cursor = self.conn.cursor()
+        # Serialize the SELECT-then-INSERT so a concurrent insert of the same
+        # value can't make INSERT OR IGNORE no-op and return a bogus lastrowid.
+        with self._db_lock:
+            cursor = self.conn.cursor()
 
-        # Fix SQL tuple binding bug (value,) instead of (value)
-        cursor.execute("SELECT id FROM nodes WHERE value = ?", (value,))
-        result = cursor.fetchone()
+            cursor.execute("SELECT id FROM nodes WHERE value = ?", (value,))
+            result = cursor.fetchone()
+            if result:
+                return result["id"]
 
-        if result:
-            return result["id"]
+            meta_json = json.dumps(metadata or {})
+            cursor.execute(
+                "INSERT OR IGNORE INTO nodes (type, value, metadata) VALUES (?, ?, ?)",
+                (node_type, value, meta_json),
+            )
+            self.conn.commit()
 
-        meta_json = json.dumps(metadata or {})
-        cursor.execute(
-            "INSERT OR IGNORE INTO nodes (type, value, metadata) VALUES (?, ?, ?)",
-            (node_type, value, meta_json),
-        )
+            if cursor.rowcount and cursor.lastrowid:
+                return cursor.lastrowid
 
-        self.conn.commit()
-        return cursor.lastrowid
+            # The row already existed (IGNORE fired due to a concurrent insert);
+            # re-fetch its id rather than returning a stale lastrowid.
+            cursor.execute("SELECT id FROM nodes WHERE value = ?", (value,))
+            row = cursor.fetchone()
+            return row["id"] if row else None
 
     def add_edge(
         self,
