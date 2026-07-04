@@ -1,4 +1,5 @@
 from src.core.managers import WorkspaceManager
+from contextlib import contextmanager
 from typing import Any
 from typing import Callable
 from typing import Literal
@@ -208,10 +209,49 @@ class BaseModule:
 
     async def loading(self, title: str, task: Callable, *args, **kwargs) -> Any:
         """Show loading animation."""
+        if getattr(self, "is_web_context", False):
+            # No spinner (and no shared-stdout writes) in the web context.
+            return await task(*args, **kwargs)
         with Console().status(f"[bold green]{title}") as status:
             result: Any = await task(*args, **kwargs)
             status.update(f"[bold green]{title}")
             return result
+
+    # ------------------------------------------------------------------ #
+    # Standardized result rendering (see src/utils/render.py).
+    # Modules build tables/panels with these helpers and print them via
+    # self.render(), which centralizes the house style and the web-context
+    # no-op that was previously duplicated in every display method.
+    # ------------------------------------------------------------------ #
+    @property
+    def console(self) -> Console:
+        if getattr(self, "_console", None) is None:
+            self._console = Console()
+        return self._console
+
+    def render(self, renderable) -> None:
+        """Print a Rich renderable to the terminal, unless in web context."""
+        if getattr(self, "is_web_context", False):
+            return
+        self.console.print(renderable)
+
+    def results_table(self, title=None, columns=()):
+        """Build a house-style results table (see render.results_table)."""
+        from src.utils.render import results_table
+
+        return results_table(title, columns)
+
+    def kv_table(self, title=None):
+        """Build a house-style key/value detail table."""
+        from src.utils.render import kv_table
+
+        return kv_table(title)
+
+    def result_panel(self, content, title=None, kind: str = "info"):
+        """Build a house-style status/summary panel."""
+        from src.utils.render import result_panel
+
+        return result_panel(content, title=title, kind=kind)
 
     @property
     def workspace(self) -> WorkspaceManager | None:
@@ -219,6 +259,29 @@ class BaseModule:
         if not self.shell:
             return None
         return self.shell.workspace
+
+    @contextmanager
+    def _config_ctx(self):
+        """Yield a ConfigManager, reusing the shell's if present.
+
+        Centralizes the "use self.shell.config if available, else open a
+        throwaway ConfigManager and remember to close it" pattern that was
+        duplicated across post_run and get_http_client.
+        """
+        from src.core.managers import ConfigManager
+
+        config = None
+        should_close = False
+        if self.shell and getattr(self.shell, "config", None):
+            config = self.shell.config
+        else:
+            config = ConfigManager("~/.keen/config.db")
+            should_close = True
+        try:
+            yield config
+        finally:
+            if should_close and config:
+                config.close()
 
     async def post_run(self, results: dict) -> None:
         """
@@ -261,15 +324,7 @@ class BaseModule:
 
         # Check if magic chaining is enabled and not already running
         if self.shell and getattr(self.shell, "_magic_running", False) is not True:
-            config = getattr(self.shell, "config", None)
-            should_close_config = False
-            if not config:
-                from src.core.managers import ConfigManager
-
-                config = ConfigManager("~/.keen/config.db")
-                should_close_config = True
-
-            try:
+            with self._config_ctx() as config:
                 if config.get_preference("magic_enabled") == "true":
                     from src.core.magic import MagicEngine
 
@@ -284,53 +339,40 @@ class BaseModule:
                                 await engine.run_chain(val, initial_type=t, force=False)
                     finally:
                         self.shell._magic_running = False
-            finally:
-                if should_close_config:
-                    config.close()
 
         # Trigger AI Thinking Partner suggestion engine in background if enabled
         if workspace:
-            config = getattr(self.shell, "config", None)
-            should_close_config = False
-            if not config:
-                from src.core.managers import ConfigManager
-
-                config = ConfigManager("~/.keen/config.db")
-                should_close_config = True
-
             try:
-                if config.get_preference("llm_thinking_partner_enabled") == "true":
-                    import asyncio
-                    from src.core.thinking_partner import ThinkingPartnerEngine
+                with self._config_ctx() as config:
+                    if config.get_preference("llm_thinking_partner_enabled") == "true":
+                        import asyncio
+                        from src.core.thinking_partner import ThinkingPartnerEngine
 
-                    ws_name = workspace.name
+                        ws_name = workspace.name
 
-                    async def run_thinking_partner():
-                        try:
-                            engine = ThinkingPartnerEngine()
-                            await engine.generate_suggestions(ws_name)
-                        except Exception as e_bg:
-                            self.logger.error(
-                                f"Error in background AI Thinking Partner task: {e_bg}"
-                            )
+                        async def run_thinking_partner():
+                            try:
+                                engine = ThinkingPartnerEngine()
+                                await engine.generate_suggestions(ws_name)
+                            except Exception as e_bg:
+                                self.logger.error(
+                                    f"Error in background AI Thinking Partner task: {e_bg}"
+                                )
 
-                    if getattr(self, "is_web_context", False):
-                        # Long-lived server loop: run in the background without
-                        # blocking, keeping a strong reference so the task isn't
-                        # garbage-collected before it finishes.
-                        task = asyncio.create_task(run_thinking_partner())
-                        _BACKGROUND_TASKS.add(task)
-                        task.add_done_callback(_BACKGROUND_TASKS.discard)
-                    else:
-                        # CLI: asyncio.run() tears the loop down as soon as run()
-                        # returns, which would destroy a fire-and-forget task
-                        # before it executed — so await it here instead.
-                        await run_thinking_partner()
+                        if getattr(self, "is_web_context", False):
+                            # Long-lived server loop: run in the background without
+                            # blocking, keeping a strong reference so the task isn't
+                            # garbage-collected before it finishes.
+                            task = asyncio.create_task(run_thinking_partner())
+                            _BACKGROUND_TASKS.add(task)
+                            task.add_done_callback(_BACKGROUND_TASKS.discard)
+                        else:
+                            # CLI: asyncio.run() tears the loop down as soon as run()
+                            # returns, which would destroy a fire-and-forget task
+                            # before it executed — so await it here instead.
+                            await run_thinking_partner()
             except Exception as e:
                 self.logger.error(f"Failed to trigger AI Thinking Partner: {e}")
-            finally:
-                if should_close_config:
-                    config.close()
 
     def register_process(self, process) -> None:
         """Register a subprocess for cleanup on cancellation."""
@@ -393,24 +435,70 @@ class BaseModule:
             self.active_processes.clear()
 
     def get_http_client(self, **kwargs):
-        """Returns an httpx.AsyncClient configured with active proxy settings if enabled."""
+        """Returns an httpx.AsyncClient configured with active proxy settings if enabled.
+
+        The client is given a sensible default timeout and a transport that
+        transparently retries transient *connection* failures (``http_retries``
+        preference, default 2). For status-code-aware retries (429/5xx with
+        ``Retry-After``), use ``await self.request(client, ...)``.
+        """
         import httpx
-        from src.core.managers import ConfigManager
 
-        config = None
-        should_close_config = False
-        if self.shell and getattr(self.shell, "config", None):
-            config = self.shell.config
-        else:
-            config = ConfigManager("~/.keen/config.db")
-            should_close_config = True
-
-        try:
+        proxy_url = kwargs.pop("proxy", None)
+        retries = 2
+        with self._config_ctx() as config:
             proxy = config.get_next_proxy()
-            if proxy:
-                kwargs.setdefault("proxy", proxy["url"])
-        finally:
-            if should_close_config and config:
-                config.close()
+            if proxy and not proxy_url:
+                proxy_url = proxy["url"]
+            try:
+                retries = int(config.get_preference("http_retries") or 2)
+            except (ValueError, TypeError):
+                retries = 2
+
+        # Sensible default timeout so a hung host can't stall a module forever.
+        kwargs.setdefault("timeout", 15.0)
+        # Build a transport that retries transient connection errors, carrying
+        # the proxy if one is active. Respect a caller-supplied transport.
+        if "transport" not in kwargs:
+            kwargs["transport"] = httpx.AsyncHTTPTransport(
+                retries=max(0, retries), proxy=proxy_url
+            )
 
         return httpx.AsyncClient(**kwargs)
+
+    async def request(
+        self,
+        client,
+        method: str,
+        url: str,
+        *,
+        retries: int = 3,
+        backoff: float = 0.5,
+        retry_statuses: tuple = (429, 500, 502, 503, 504),
+        **kwargs,
+    ):
+        """Perform an HTTP request with exponential backoff on transient statuses.
+
+        Retries on ``retry_statuses`` (default 429 + 5xx), honoring the server's
+        ``Retry-After`` header when present, otherwise using exponential backoff
+        (``backoff * 2**attempt``). Returns the final ``httpx.Response``.
+        """
+        import asyncio
+
+        response = None
+        for attempt in range(retries + 1):
+            response = await client.request(method, url, **kwargs)
+            if response.status_code not in retry_statuses or attempt >= retries:
+                return response
+
+            retry_after = response.headers.get("Retry-After", "")
+            if retry_after.isdigit():
+                delay = float(retry_after)
+            else:
+                delay = backoff * (2**attempt)
+            self.logger.debug(
+                f"{method} {url} -> {response.status_code}; retrying in {delay:.1f}s "
+                f"(attempt {attempt + 1}/{retries})"
+            )
+            await asyncio.sleep(delay)
+        return response
