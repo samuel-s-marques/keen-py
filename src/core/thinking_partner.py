@@ -6,6 +6,7 @@ from loguru import logger
 
 from src.core.managers import ConfigManager, WorkspaceManager
 from src.core.loader import load_modules
+from src.core.options import as_option
 
 
 class ThinkingPartnerEngine:
@@ -134,11 +135,11 @@ class ThinkingPartnerEngine:
                     metadata = getattr(cls, "metadata", {})
                     options = {}
                     for opt_key, opt_val in metadata.get("options", {}).items():
-                        # opt_val = [default, required, description, validator]
+                        opt = as_option(opt_val)
                         options[opt_key] = {
-                            "default": opt_val[0],
-                            "required": opt_val[1],
-                            "description": opt_val[2],
+                            "default": opt.default,
+                            "required": opt.required,
+                            "description": opt.description,
                         }
                     modules_summary.append(
                         {
@@ -285,86 +286,20 @@ class ThinkingPartnerEngine:
         system_prompt: str,
         user_prompt: str,
     ) -> Optional[str]:
-        """Perform HTTP request to the selected LLM provider."""
-        headers = {}
-        payload = {}
+        """Perform HTTP request to the selected LLM provider via its adapter."""
+        from src.core.llm_providers import get_provider
 
-        provider = provider.lower()
+        adapter = get_provider(provider)
         timeout = httpx.Timeout(45.0, connect=10.0)
 
         async with httpx.AsyncClient(timeout=timeout) as client:
             try:
-                if provider == "openai":
-                    url = "https://api.openai.com/v1/chat/completions"
-                    if base_url:
-                        url = base_url.rstrip("/") + "/chat/completions"
-
-                    headers = {
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {api_key}",
-                    }
-                    payload = {
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        "temperature": 0.2,
-                    }
-                    resp = await client.post(url, headers=headers, json=payload)
-                    resp.raise_for_status()
-                    return resp.json()["choices"][0]["message"]["content"]
-
-                elif provider == "anthropic":
-                    url = "https://api.anthropic.com/v1/messages"
-                    if base_url:
-                        url = base_url.rstrip("/") + "/messages"
-
-                    headers = {
-                        "content-type": "application/json",
-                        "x-api-key": api_key,
-                        "anthropic-version": "2023-06-01",
-                    }
-                    payload = {
-                        "model": model,
-                        "max_tokens": 4096,
-                        "system": system_prompt,
-                        "messages": [{"role": "user", "content": user_prompt}],
-                        "temperature": 0.2,
-                    }
-                    resp = await client.post(url, headers=headers, json=payload)
-                    resp.raise_for_status()
-                    return resp.json()["content"][0]["text"]
-
-                else:
-                    # Generic local/custom provider (Ollama, LM Studio, KoboldCpp, etc.)
-                    # Most support OpenAI chat completions API format
-                    url = (
-                        "http://localhost:1234/v1/chat/completions"  # Default LM Studio
-                    )
-                    if base_url:
-                        url = base_url.rstrip("/")
-                        if "/v1" not in url:
-                            url = url + "/v1"
-                        if not url.endswith("/chat/completions"):
-                            url = url + "/chat/completions"
-
-                    headers = {"Content-Type": "application/json"}
-                    if api_key:
-                        headers["Authorization"] = f"Bearer {api_key}"
-
-                    payload = {
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        "temperature": 0.2,
-                    }
-                    resp = await client.post(url, headers=headers, json=payload)
-                    resp.raise_for_status()
-                    return resp.json()["choices"][0]["message"]["content"]
-
+                url, headers, payload = adapter.build_request(
+                    model, api_key, base_url, system_prompt, user_prompt
+                )
+                resp = await client.post(url, headers=headers, json=payload)
+                resp.raise_for_status()
+                return adapter.parse_response(resp.json())
             except Exception as e:
                 logger.error(f"HTTP error calling LLM provider '{provider}': {e}")
                 return None
