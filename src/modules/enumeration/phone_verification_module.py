@@ -13,6 +13,7 @@ class PhoneVerificationModule(BaseModule):
         "description": "Verifies phone number validity through local analysis and external APIs.",
         "author": "Samuel Marques",
         "version": "1.0.0",
+        "magic_consumes": ["x-phone-number"],
         "options": {
             "TARGET": [
                 "",
