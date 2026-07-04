@@ -59,6 +59,7 @@ class EmailVerificationModule(BaseModule):
         "description": "Verifies email address validity, reachability, MX records, and categorizes it.",
         "author": "Samuel Marques",
         "version": "1.0.0",
+        "magic_consumes": ["email-addr"],
         "options": {
             "TARGET": [
                 "",
@@ -413,7 +414,7 @@ class EmailVerificationModule(BaseModule):
         mx_records = results.get("mx_records", [])
         for pref, mx_host in mx_records:
             mx_cleaned = mx_host.rstrip(".")
-            builder.add_node(NodeFactory.domain(mx_cleaned))
+            mx_node = builder.add_node(NodeFactory.domain(mx_cleaned))
             builder.add_edge(
                 domain,
                 mx_cleaned,
@@ -423,7 +424,6 @@ class EmailVerificationModule(BaseModule):
                 },
             )
             # Override MISP to mx type
-            mx_node = builder._nodes[-1]
             mx_node["metadata"]["misp"] = {
                 "type": "mx",
                 "value": f"{pref} {mx_cleaned}",
