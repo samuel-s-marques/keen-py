@@ -8,6 +8,7 @@ class DomainEnrichmentModule(BaseModule):
         "description": "Enriches a domain with company information from Hunter.io.",
         "author": "Samuel Marques",
         "version": "1.0.0",
+        "magic_consumes": ["domain-name"],
         "options": {
             "TARGET": ["", True, "The domain to enrich.", "domain"],
             "HUNTER_IO_APIKEY": ["", False, "API Key for Hunter.io API.", ""],
@@ -259,14 +260,13 @@ class DomainEnrichmentModule(BaseModule):
             handle = company.get(s_type, {}).get("handle")
             if handle:
                 acc_val = f"{s_type}:{handle}"
-                builder.add_node(
+                acc_node = builder.add_node(
                     NodeFactory.user_account(
                         acc_val,
                         platform=s_type,
                         handle=handle,
                     )
                 )
-                acc_node = builder._nodes[-1]
                 acc_node["metadata"]["stix2"]["account_login"] = handle
                 acc_node["metadata"]["stix2"]["account_type"] = s_type
                 acc_node["metadata"]["misp"] = {"type": misp_type, "value": handle}
