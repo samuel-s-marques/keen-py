@@ -590,14 +590,13 @@ class LeakModule(BaseModule):
                 # "username:" prefix) so it dedups with the same identity created
                 # by other modules (e.g. Email_To_Username). Site-scoped accounts
                 # use the "<site>:<username>" form; a bare identity does not.
-                builder.add_node(
+                primary = builder.add_node(
                     NodeFactory.user_account(
                         target,
                         leaks_count=len(leaks),
                     )
                 )
                 # Override stix2 specifics for username
-                primary = builder._nodes[-1]
                 primary["metadata"]["stix2"]["account_login"] = target
                 primary["metadata"]["stix2"]["account_type"] = "username"
                 primary["metadata"]["misp"] = {"type": "text", "value": target}
