@@ -8,6 +8,7 @@ class SherlockModule(BaseModule):
         "description": "Searches for a username on the internet, using the Sherlock tool.",
         "author": "Samuel Marques",
         "version": "1.0.0",
+        "magic_consumes": ["user-account"],
         "options": {
             "TARGET": [
                 "",
@@ -120,7 +121,7 @@ class SherlockModule(BaseModule):
 
             # Social profile account node
             profile_id_str = f"{platform_cleaned}:{target}"
-            builder.add_node(
+            profile_node = builder.add_node(
                 NodeFactory.user_account(
                     profile_id_str,
                     platform=platform_cleaned,
@@ -128,7 +129,6 @@ class SherlockModule(BaseModule):
                 )
             )
             # Override the stix2 fields for social-media specifics
-            profile_node = builder._nodes[-1]
             profile_node["metadata"]["stix2"]["display_name"] = (
                 f"{target} on {platform_cleaned}"
             )
