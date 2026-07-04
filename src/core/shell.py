@@ -10,6 +10,7 @@ import os
 import asyncio
 
 from src.core.loader import load_modules
+from src.core.base_module import BaseModule
 from src.utils.print_utils import error, info, success
 from src.utils.logger import set_debug_mode
 
@@ -660,7 +661,7 @@ class Shell(Cmd):
 
             # Check if this module uses API keys
             has_api_key_opts = any(
-                k.endswith("_APIKEY") or k.endswith("_API_KEY")
+                k.upper().endswith(BaseModule.API_KEY_OPTION_SUFFIXES)
                 for k in getattr(module_class, "metadata", {}).get("options", {})
             )
             if has_api_key_opts and self.config.has_api_keys():
@@ -927,9 +928,15 @@ class Shell(Cmd):
                 )
                 return
 
-            filename = name.replace(" ", "_")
+            from src.utils.config_util import get_valid_name
+
+            filename = get_valid_name(name)
             db_file = f"cases/{filename}.keen"
-            self.config.add_workspace(name, db_file, desc)
+            try:
+                self.config.add_workspace(name, db_file, desc)
+            except ValueError as e:
+                error(str(e))
+                return
 
             self.workspace = WorkspaceManager(db_file, name=name)
             self.config.set_preference("last_workspace", name)
@@ -1051,12 +1058,18 @@ class Shell(Cmd):
                     f"Switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
                 )
             else:
-                filename = name.replace(" ", "_")
+                from src.utils.config_util import get_valid_name
+
+                filename = get_valid_name(name)
                 db_file = f"cases/{filename}.keen"
                 if os.path.exists(db_file):
-                    self.config.add_workspace(
-                        name, db_file, "Auto-discovered workspace"
-                    )
+                    try:
+                        self.config.add_workspace(
+                            name, db_file, "Auto-discovered workspace"
+                        )
+                    except ValueError as e:
+                        error(str(e))
+                        return
                     self.workspace = WorkspaceManager(db_file, name=name)
                     self.config.set_preference("last_workspace", name)
                     self._update_prompt()
@@ -1069,7 +1082,11 @@ class Shell(Cmd):
                             "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."
                         )
                         return
-                    self.config.add_workspace(name, db_file, f"Workspace for {name}")
+                    try:
+                        self.config.add_workspace(name, db_file, f"Workspace for {name}")
+                    except ValueError as e:
+                        error(str(e))
+                        return
                     self.workspace = WorkspaceManager(db_file, name=name)
                     self.config.set_preference("last_workspace", name)
                     self._update_prompt()
