@@ -110,6 +110,18 @@ def load_modules(root_dir: str = "src/modules") -> dict:
                                     if category != ".":
                                         category_name = f"{category}/{friendly_name}"
                                         found_modules[category_name] = proxy
+                                    # Warn on name collision: two modules sharing
+                                    # a metadata["name"] silently overwrite each
+                                    # other in the short-name registry.
+                                    if (
+                                        friendly_name in found_modules
+                                        and found_modules[friendly_name] != proxy
+                                    ):
+                                        logger.warning(
+                                            f"Module name collision: '{friendly_name}' "
+                                            f"is defined by multiple modules; "
+                                            f"'{module_path}' overrides the earlier one."
+                                        )
                                     found_modules[friendly_name] = proxy
                                 found_modules[module_path] = proxy
                 except Exception as e_ast:
