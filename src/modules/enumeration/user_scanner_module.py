@@ -13,6 +13,7 @@ class UserScannerModule(BaseModule):
         "description": "Checks for usernames and emails on various platforms.",
         "author": "Samuel Marques",
         "version": "1.1.0",
+        "magic_consumes": ["email-addr", "user-account"],
         "options": {
             "TARGET": [
                 "",
@@ -107,7 +108,7 @@ class UserScannerModule(BaseModule):
 
             # User account node on that site
             account_id_str = f"{site_name}:{target}"
-            builder.add_node(
+            account_node = builder.add_node(
                 NodeFactory.user_account(
                     account_id_str,
                     site=site_name,
@@ -116,7 +117,6 @@ class UserScannerModule(BaseModule):
                 )
             )
             # Override stix2 specifics
-            account_node = builder._nodes[-1]
             account_node["metadata"]["stix2"]["display_name"] = (
                 f"{target} on {site_name}"
             )
