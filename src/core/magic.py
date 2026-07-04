@@ -52,10 +52,15 @@ class MagicEngine:
             "enumeration/email_verification",
             "enumeration/user_scanner",
         ],
-        "domain-name": ["enumeration/domain_enrichment", "enumeration/email_finder"],
+        # Email_Finder is intentionally NOT chained from a domain: it requires a
+        # person's FNAME/LNAME that magic cannot supply from a bare domain, so
+        # pre_run would always fail. Run it manually instead.
+        "domain-name": ["enumeration/domain_enrichment"],
         "user-account": [
             "enumeration/sherlock",
-            "enumeration/github",
+            # Registered key is category/<metadata-name-lowercased>; the GitHub
+            # module's metadata name is "GitHub_Enumeration".
+            "enumeration/github_enumeration",
             "enumeration/user_scanner",
         ],
         "x-phone-number": ["enumeration/phone_verification"],
@@ -125,9 +130,25 @@ class MagicEngine:
             if not enabled:
                 return
 
+        # Suppress re-entrant chaining: while this chain runs, any module it
+        # executes will reach post_run and must NOT spawn its own MagicEngine
+        # (which would re-chain the same nodes with a fresh executed_pairs set).
+        prev_running = getattr(self.shell, "_magic_running", False)
+        if self.shell is not None:
+            self.shell._magic_running = True
+
+        try:
+            await self._run_chain_inner(initial_value, initial_type)
+        finally:
+            if self.shell is not None:
+                self.shell._magic_running = prev_running
+
+    async def _run_chain_inner(
+        self, initial_value: str, initial_type: str | None = None
+    ):
         try:
             max_depth = int(self.config.get_preference("magic_max_depth") or "2")
-        except ValueError:
+        except (ValueError, TypeError):
             max_depth = 2
         interactive = self.config.get_preference("magic_interactive") == "true"
         exclude_str = self.config.get_preference("magic_exclude_modules") or ""
