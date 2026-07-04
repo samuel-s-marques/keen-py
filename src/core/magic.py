@@ -4,6 +4,7 @@ import re
 import asyncio
 from collections import deque
 from src.core.loader import load_modules
+from src.core.options import as_option
 from src.utils.validator import InputValidator
 
 # Precompiled once instead of on every detect_type() call.
@@ -51,20 +52,23 @@ class MagicEngine:
         "press",
     }
 
+    # Fallback map from node type -> module keys to chain. This is now derived
+    # automatically from each module's metadata ``magic_consumes`` declaration
+    # (see _build_type_map); the hardcoded map is kept only as a safety net for
+    # any node type no installed module declares, and as documentation.
+    #
+    # Email_Finder is intentionally NOT chained from a domain: it requires a
+    # person's FNAME/LNAME that magic cannot supply from a bare domain, so
+    # pre_run would always fail. Run it manually instead.
     TYPE_TO_MODULE_MAP = {
         "email-addr": [
             "enumeration/email_enrichment",
             "enumeration/email_verification",
             "enumeration/user_scanner",
         ],
-        # Email_Finder is intentionally NOT chained from a domain: it requires a
-        # person's FNAME/LNAME that magic cannot supply from a bare domain, so
-        # pre_run would always fail. Run it manually instead.
         "domain-name": ["enumeration/domain_enrichment"],
         "user-account": [
             "enumeration/sherlock",
-            # Registered key is category/<metadata-name-lowercased>; the GitHub
-            # module's metadata name is "GitHub_Enumeration".
             "enumeration/github_enumeration",
             "enumeration/user_scanner",
         ],
@@ -83,7 +87,40 @@ class MagicEngine:
             self.config = ConfigManager("~/.keen/config.db")
 
         self.modules = load_modules()
+        self.type_to_modules = self._build_type_map()
         self.executed_pairs = set()
+
+    def _build_type_map(self) -> dict:
+        """Build node-type -> [module keys] from module metadata declarations.
+
+        A module opts into magic chaining by declaring ``"magic_consumes":
+        [<node-type>, ...]`` in its ``metadata``. This removes the need to edit
+        the engine when adding a module. The hardcoded ``TYPE_TO_MODULE_MAP`` is
+        merged in as a fallback for any type no module declares, so behavior is
+        never *reduced* relative to the static map.
+        """
+        discovered: dict = {}
+        seen: set = set()
+        for cls in self.modules.values():
+            meta = getattr(cls, "metadata", {}) or {}
+            consumes = meta.get("magic_consumes") or []
+            if not consumes:
+                continue
+            category = meta.get("category", "")
+            name = (meta.get("name") or "").lower()
+            if not name:
+                continue
+            canonical = f"{category}/{name}" if category and category != "." else name
+            if canonical in seen:
+                continue  # loader registers each module under several keys
+            seen.add(canonical)
+            for node_type in consumes:
+                discovered.setdefault(node_type, []).append(canonical)
+
+        # Merge the static fallback for any node type not covered by metadata.
+        for node_type, mods in self.TYPE_TO_MODULE_MAP.items():
+            discovered.setdefault(node_type, list(mods))
+        return discovered
 
     @staticmethod
     def detect_type(value: str) -> str | None:
@@ -184,7 +221,7 @@ class MagicEngine:
                 continue
 
             # Get modules matching this node type
-            target_modules = self.TYPE_TO_MODULE_MAP.get(node_type, [])
+            target_modules = self.type_to_modules.get(node_type, [])
             if not target_modules:
                 continue
 
@@ -272,8 +309,7 @@ class MagicEngine:
         for opt_key, opt_val in (
             getattr(mod_class, "metadata", {}).get("options", {}).items()
         ):
-            validator = opt_val[3]
-            if validator:
+            if as_option(opt_val).validator:
                 target_option = opt_key
                 break
         if not target_option:
