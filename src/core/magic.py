@@ -2,8 +2,13 @@ from src.utils.print_utils import warn, info, error
 from src.utils.utils import clean_node_value
 import re
 import asyncio
+from collections import deque
 from src.core.loader import load_modules
 from src.utils.validator import InputValidator
+
+# Precompiled once instead of on every detect_type() call.
+_HASH_RE = re.compile(r"^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$")
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9_.-]{3,30}$")
 
 
 class MagicEngine:
@@ -108,15 +113,11 @@ class MagicEngine:
             return "x-phone-number"
 
         # Hashes (MD5, SHA-1, SHA-256)
-        if re.match(r"^[a-fA-F0-9]{32}$", value):
-            return "x-hash"
-        if re.match(r"^[a-fA-F0-9]{40}$", value):
-            return "x-hash"
-        if re.match(r"^[a-fA-F0-9]{64}$", value):
+        if _HASH_RE.match(value):
             return "x-hash"
 
         # Username / Account Target
-        if re.match(r"^[a-zA-Z0-9_.-]{3,30}$", value):
+        if _USERNAME_RE.match(value):
             return "user-account"
 
         return None
@@ -156,7 +157,7 @@ class MagicEngine:
             m.strip().lower() for m in exclude_str.split(",") if m.strip()
         ]
 
-        queue = []
+        queue = deque()
         detected = initial_type or self.detect_type(initial_value)
         if not detected:
             msg = f"Could not automatically detect type for value: {initial_value}"
@@ -167,7 +168,7 @@ class MagicEngine:
         queue.append((initial_value, detected, 0))
 
         while queue:
-            value, node_type, depth = queue.pop(0)
+            value, node_type, depth = queue.popleft()
 
             # Yield to event loop to keep the FastAPI server responsive
             await asyncio.sleep(0.01)
