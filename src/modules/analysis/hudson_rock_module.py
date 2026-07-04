@@ -148,7 +148,7 @@ class HudsonRockModule(BaseModule):
 
             device_val = f"infected-device:{comp_name}:{date_comp}"
 
-            builder.add_node(
+            device_node = builder.add_node(
                 NodeFactory.custom(
                     "x-infected-device",
                     device_val,
@@ -168,7 +168,6 @@ class HudsonRockModule(BaseModule):
                 )
             )
             # Override MISP with structured attributes
-            device_node = builder._nodes[-1]
             device_node["metadata"]["misp"] = {
                 "type": "stealer-infection",
                 "attributes": [
@@ -207,9 +206,8 @@ class HudsonRockModule(BaseModule):
 
             # IP node if present
             if ip_val and ip_val != "Unknown":
-                builder.add_node(NodeFactory.ip(ip_val))
+                ip_node = builder.add_node(NodeFactory.ip(ip_val))
                 # Override MISP type to ip-src
-                ip_node = builder._nodes[-1]
                 ip_node["metadata"]["misp"] = {"type": "ip-src", "value": ip_val}
 
                 builder.add_edge(device_val, ip_val, "had-ip")
