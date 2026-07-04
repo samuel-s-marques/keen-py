@@ -1,4 +1,5 @@
 from src.core.managers import WorkspaceManager
+from src.core.options import as_option
 from contextlib import contextmanager
 from typing import Any
 from typing import Callable
@@ -22,7 +23,7 @@ class BaseModule:
         options (dict): Dictionary containing module options.
     """
 
-    metadata = {
+    metadata: dict[str, Any] = {
         "name": "Base",
         "description": "Base Module",
         "author": "Samuel Marques",
@@ -51,7 +52,7 @@ class BaseModule:
         if not isinstance(options_data, dict):
             options_data = {}
 
-        self.options = {k: v[0] for k, v in options_data.items()}
+        self.options = {k: as_option(v).default for k, v in options_data.items()}
         self.logger = logger.bind(module=self.metadata["name"])
         self.shell = None
         self.is_web_context = False
@@ -68,7 +69,7 @@ class BaseModule:
                     # If this option has a validator (i.e. it's a target option),
                     # strip any platform prefix (e.g. "github:username" -> "username")
                     opt_meta = self.metadata["options"].get(opt_key)
-                    if opt_meta and opt_meta[3]:
+                    if opt_meta and as_option(opt_meta).validator:
                         from src.utils.utils import clean_node_value
 
                         value = clean_node_value(value)
@@ -116,10 +117,10 @@ class BaseModule:
         table.add_column("Description", justify="left", style="white")
 
         for key, value in self.metadata["options"].items():
-            # value = [default, required, description, validator]
-            required: Literal["Yes", "No"] = "Yes" if value[1] else "No"
-            current_value = self.options.get(key, value[0])
-            table.add_row(key, str(current_value), required, str(value[2]))
+            opt = as_option(value)
+            required: Literal["Yes", "No"] = "Yes" if opt.required else "No"
+            current_value = self.options.get(key, opt.default)
+            table.add_row(key, str(current_value), required, str(opt.description))
 
         console: Console = Console()
         console.print(table)
@@ -133,7 +134,7 @@ class BaseModule:
     def check_required_options(self) -> bool:
         """Check if all required options are set."""
         for key, value in self.metadata["options"].items():
-            if value[1] and not self.options.get(key, None):
+            if as_option(value).required and not self.options.get(key, None):
                 error(f"Required option '{key}' is not set.")
                 return False
         return True
@@ -141,7 +142,7 @@ class BaseModule:
     def validate_options(self) -> bool:
         """Check if the module options are valid."""
         for key, value in self.metadata["options"].items():
-            validator = value[3]
+            validator = as_option(value).validator
             option_value: str = str(self.options.get(key, None))
 
             if validator:
@@ -284,9 +285,14 @@ class BaseModule:
                 config.close()
 
     async def post_run(self, results: dict) -> None:
-        """
-        Ingestion engine. Automatically save nodes and edges
-        to the active workspace after a module finishes.
+        """Post-processing pipeline run after a module finishes.
+
+        Three focused stages, each isolated in its own method for clarity and
+        testability:
+          1. :meth:`_ingest_results` — persist nodes/edges to the workspace.
+          2. :meth:`_run_magic_chaining` — auto-chain follow-up modules.
+          3. :meth:`_trigger_thinking_partner` — schedule AI pivot suggestions.
+        Stages 2 and 3 are best-effort and never abort ingestion.
         """
         workspace = self.workspace
         if not workspace:
@@ -295,6 +301,12 @@ class BaseModule:
             )
             return
 
+        self._ingest_results(workspace, results)
+        await self._run_magic_chaining(results)
+        await self._trigger_thinking_partner(workspace)
+
+    def _ingest_results(self, workspace, results: dict) -> None:
+        """Stage 1: deduplicate and persist nodes and edges into the workspace."""
         node_map = {}
         for node in results.get("nodes", []):
             node_id = workspace.get_or_add_node(
@@ -305,14 +317,12 @@ class BaseModule:
             node_map[node["value"]] = node_id
 
         for edge in results.get("edges", []):
-            source_id = node_map.get(edge["source"])
-            target_id = node_map.get(edge["target"])
-
-            if not source_id:
-                source_id = workspace.get_node_id(edge["source"])
-
-            if not target_id:
-                target_id = workspace.get_node_id(edge["target"])
+            source_id = node_map.get(edge["source"]) or workspace.get_node_id(
+                edge["source"]
+            )
+            target_id = node_map.get(edge["target"]) or workspace.get_node_id(
+                edge["target"]
+            )
 
             if source_id and target_id:
                 workspace.add_edge(
@@ -322,57 +332,66 @@ class BaseModule:
                     metadata=edge.get("metadata", {}),
                 )
 
-        # Check if magic chaining is enabled and not already running
-        if self.shell and getattr(self.shell, "_magic_running", False) is not True:
-            with self._config_ctx() as config:
-                if config.get_preference("magic_enabled") == "true":
-                    from src.core.magic import MagicEngine
+    async def _run_magic_chaining(self, results: dict) -> None:
+        """Stage 2: auto-chain modules on discovered nodes, if enabled.
 
-                    self.shell._magic_running = True
-                    try:
-                        engine = MagicEngine(self.shell, config=config)
-                        # Run on all nodes returned by this module
-                        for node in results.get("nodes", []):
-                            val = node.get("value")
-                            t = node.get("type")
-                            if val:
-                                await engine.run_chain(val, initial_type=t, force=False)
-                    finally:
-                        self.shell._magic_running = False
+        Guarded by ``shell._magic_running`` so a chain triggered from within a
+        chain doesn't recurse into a second engine.
+        """
+        if not self.shell or getattr(self.shell, "_magic_running", False) is True:
+            return
 
-        # Trigger AI Thinking Partner suggestion engine in background if enabled
-        if workspace:
+        with self._config_ctx() as config:
+            if config.get_preference("magic_enabled") != "true":
+                return
+            from src.core.magic import MagicEngine
+
+            self.shell._magic_running = True
             try:
-                with self._config_ctx() as config:
-                    if config.get_preference("llm_thinking_partner_enabled") == "true":
-                        import asyncio
-                        from src.core.thinking_partner import ThinkingPartnerEngine
+                engine = MagicEngine(self.shell, config=config)
+                for node in results.get("nodes", []):
+                    val = node.get("value")
+                    if val:
+                        await engine.run_chain(
+                            val, initial_type=node.get("type"), force=False
+                        )
+            finally:
+                self.shell._magic_running = False
 
-                        ws_name = workspace.name
+    async def _trigger_thinking_partner(self, workspace) -> None:
+        """Stage 3: run/schedule the AI Thinking Partner suggestion engine, if enabled."""
+        try:
+            with self._config_ctx() as config:
+                if config.get_preference("llm_thinking_partner_enabled") != "true":
+                    return
+                import asyncio
+                from src.core.thinking_partner import ThinkingPartnerEngine
 
-                        async def run_thinking_partner():
-                            try:
-                                engine = ThinkingPartnerEngine()
-                                await engine.generate_suggestions(ws_name)
-                            except Exception as e_bg:
-                                self.logger.error(
-                                    f"Error in background AI Thinking Partner task: {e_bg}"
-                                )
+                ws_name = workspace.name
 
-                        if getattr(self, "is_web_context", False):
-                            # Long-lived server loop: run in the background without
-                            # blocking, keeping a strong reference so the task isn't
-                            # garbage-collected before it finishes.
-                            task = asyncio.create_task(run_thinking_partner())
-                            _BACKGROUND_TASKS.add(task)
-                            task.add_done_callback(_BACKGROUND_TASKS.discard)
-                        else:
-                            # CLI: asyncio.run() tears the loop down as soon as run()
-                            # returns, which would destroy a fire-and-forget task
-                            # before it executed — so await it here instead.
-                            await run_thinking_partner()
-            except Exception as e:
-                self.logger.error(f"Failed to trigger AI Thinking Partner: {e}")
+                async def run_thinking_partner():
+                    try:
+                        engine = ThinkingPartnerEngine()
+                        await engine.generate_suggestions(ws_name)
+                    except Exception as e_bg:
+                        self.logger.error(
+                            f"Error in background AI Thinking Partner task: {e_bg}"
+                        )
+
+                if getattr(self, "is_web_context", False):
+                    # Long-lived server loop: run in the background without
+                    # blocking, keeping a strong reference so the task isn't
+                    # garbage-collected before it finishes.
+                    task = asyncio.create_task(run_thinking_partner())
+                    _BACKGROUND_TASKS.add(task)
+                    task.add_done_callback(_BACKGROUND_TASKS.discard)
+                else:
+                    # CLI: asyncio.run() tears the loop down as soon as run()
+                    # returns, which would destroy a fire-and-forget task before
+                    # it executed — so await it to completion here instead.
+                    await run_thinking_partner()
+        except Exception as e:
+            self.logger.error(f"Failed to trigger AI Thinking Partner: {e}")
 
     def register_process(self, process) -> None:
         """Register a subprocess for cleanup on cancellation."""
