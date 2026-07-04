@@ -10,6 +10,7 @@ class GitHubModule(BaseModule):
         "description": "Performs comprehensive enumeration of a GitHub user, including profile info, repositories, organizations, and potential email extraction from commits.",
         "author": "Samuel Marques",
         "version": "1.2.0",
+        "magic_consumes": ["user-account"],
         "options": {
             "TARGET": ["", True, "The GitHub username to enumerate.", "username"],
             "GITHUB_TOKEN": [
@@ -311,14 +312,13 @@ class GitHubModule(BaseModule):
         for org in orgs:
             org_login = org.get("login")
             if org_login:
-                builder.add_node(
+                org_node = builder.add_node(
                     NodeFactory.organization(
                         org_login,
                         description=org.get("description"),
                     )
                 )
                 # Override MISP to target-org
-                org_node = builder._nodes[-1]
                 org_node["metadata"]["misp"] = {
                     "type": "target-org",
                     "value": org_login,
@@ -332,7 +332,7 @@ class GitHubModule(BaseModule):
             if repo_name:
                 owned_repo_names.add(repo_name)
                 repo_url = repo.get("html_url") or f"https://github.com/{repo_name}"
-                builder.add_node(
+                repo_node = builder.add_node(
                     NodeFactory.custom(
                         "url",
                         repo_url,
@@ -346,7 +346,6 @@ class GitHubModule(BaseModule):
                     )
                 )
                 # Override value to be the repo name for graph display
-                repo_node = builder._nodes[-1]
                 repo_node["value"] = repo_name
                 builder.add_edge(account_val, repo_name, "owns-repository")
 
@@ -372,7 +371,7 @@ class GitHubModule(BaseModule):
             elif "IssuesEvent" in event_types:
                 relationship = "opened-issue-in"
 
-            builder.add_node(
+            repo_node = builder.add_node(
                 NodeFactory.custom(
                     "url",
                     repo_url,
@@ -382,8 +381,8 @@ class GitHubModule(BaseModule):
                 )
             )
             # Override value to be the repo name for graph display
-            if builder._nodes and builder._nodes[-1]["value"] == repo_url:
-                builder._nodes[-1]["value"] = repo_name
+            if repo_node.get("value") == repo_url:
+                repo_node["value"] = repo_name
             builder.add_edge(account_val, repo_name, relationship)
 
         await self.post_run(builder.build())
