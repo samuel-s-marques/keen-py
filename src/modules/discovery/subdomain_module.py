@@ -1,7 +1,6 @@
 import asyncio
 from src.utils.user_agents import UserAgents
 import re
-import concurrent.futures
 import socket
 import os
 import dns.resolver
@@ -13,6 +12,24 @@ from src.core.base_module import BaseModule
 
 
 class SubdomainModule(BaseModule):
+    # Common SRV service prefixes probed during DNS discovery.
+    SRV_RECORDS = [
+        "_sip._tcp",
+        "_sip._udp",
+        "_sip._tls",
+        "_autodiscover._tcp",
+        "_xmpp-server._tcp",
+        "_xmpp-client._tcp",
+        "_ldap._tcp",
+        "_gc._msdcs",
+        "_kerberos._tcp",
+        "_kpasswd._tcp",
+        "_vlmcs._tcp",
+        "_jabber._tcp",
+        "_h323ls._udp",
+        "_h323cs._tcp",
+    ]
+
     metadata = {
         "name": "Subdomain_Enum",
         "description": "Discovers subdomains of a target domain.",
@@ -57,14 +74,15 @@ class SubdomainModule(BaseModule):
 
         try:
             if method == "all":
-                # Run DNS and Bruteforce in threads, Passive as async
-                dns_task = asyncio.to_thread(self._find_by_dns, target)
-                brute_task = asyncio.to_thread(self._find_by_bruteforce, target)
-                passive_task = self._find_by_passive(target)
-
-                results = await asyncio.gather(dns_task, brute_task, passive_task)
+                # All three discovery strategies run concurrently (async).
+                results = await asyncio.gather(
+                    self._find_by_dns(target),
+                    self._find_by_bruteforce(target),
+                    self._find_by_passive(target),
+                    return_exceptions=True,
+                )
                 for result in results:
-                    if result:
+                    if isinstance(result, set):
                         subdomains |= result
             elif method == "dns":
                 subdomains = await self.loading(
@@ -125,17 +143,32 @@ class SubdomainModule(BaseModule):
 
         return subdomains
 
-    def _find_by_dns(self, target: str) -> set[str]:
+    async def _find_by_dns(self, target: str) -> set[str]:
         """Find subdomains using DNS techniques (AXFR, SRV)."""
         subdomains: set[str] = set()
 
-        # Zone Transfer (AXFR)
+        # Zone Transfer (AXFR) — blocking, so offload to a worker thread.
+        subdomains |= await asyncio.to_thread(self._axfr_transfer, target)
+
+        # Common SRV records, resolved with bounded concurrency.
+        srv_results = await self.gather_bounded(
+            [self._check_srv(f"{srv}.{target}") for srv in self.SRV_RECORDS],
+            limit=20,
+        )
+        for result in srv_results:
+            if isinstance(result, set):
+                subdomains |= result
+
+        return subdomains
+
+    def _axfr_transfer(self, target: str) -> set[str]:
+        """Attempt DNS zone transfers (AXFR) against the target's nameservers."""
+        subdomains: set[str] = set()
         try:
             ns_answers = dns.resolver.resolve(target, "NS")
             for ns in ns_answers:
                 ns_str = str(ns.target).rstrip(".")
                 try:
-                    # Attempt AXFR
                     xfr = dns.query.xfr(ns_str, target, timeout=10)
                     zone = dns.zone.from_xfr(xfr)
                     if zone:
@@ -148,45 +181,13 @@ class SubdomainModule(BaseModule):
                     pass
         except Exception:
             pass
-
-        # Common SRV records
-        srv_records = [
-            "_sip._tcp",
-            "_sip._udp",
-            "_sip._tls",
-            "_autodiscover._tcp",
-            "_xmpp-server._tcp",
-            "_xmpp-client._tcp",
-            "_ldap._tcp",
-            "_gc._msdcs",
-            "_kerberos._tcp",
-            "_kpasswd._tcp",
-            "_vlmcs._tcp",
-            "_jabber._tcp",
-            "_h323ls._udp",
-            "_h323cs._tcp",
-        ]
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-            futures = {
-                executor.submit(self._check_srv, f"{srv}.{target}"): srv
-                for srv in srv_records
-            }
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    result = future.result()
-                    if result:
-                        subdomains |= result
-                except Exception:
-                    pass
-
         return subdomains
 
-    def _check_srv(self, srv_target: str) -> set:
+    async def _check_srv(self, srv_target: str) -> set:
         """Helper to check a specific SRV record."""
         found = set()
         try:
-            answers = dns.resolver.resolve(srv_target, "SRV")
+            answers = await asyncio.to_thread(dns.resolver.resolve, srv_target, "SRV")
             for rdata in answers:
                 hostname = str(rdata.target).rstrip(".")
                 found.add(hostname)
@@ -194,7 +195,7 @@ class SubdomainModule(BaseModule):
             pass
         return found
 
-    def _find_by_bruteforce(self, target: str) -> set:
+    async def _find_by_bruteforce(self, target: str) -> set:
         """Get values from wordlist and check if the subdomain exists."""
         wordlist_path = self.options.get("WORDLIST")
 
@@ -208,46 +209,33 @@ class SubdomainModule(BaseModule):
 
         try:
             with open(wordlist_path, "r", encoding="utf-8", errors="ignore") as f:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
-                    batch_size = 1000
-                    batch = []
-
-                    for line in f:
-                        sub = line.strip()
-                        if sub:
-                            batch.append(f"{sub}.{target}")
-
-                        if len(batch) >= batch_size:
-                            self._process_batch(executor, batch, subdomains)
-                            batch = []
-
-                    if batch:
-                        self._process_batch(executor, batch, subdomains)
-
+                candidates = [
+                    f"{sub}.{target}" for sub in (line.strip() for line in f) if sub
+                ]
         except Exception as e:
             error(f"Error during bruteforce: {str(e)}")
+            return subdomains
+
+        # Resolve in chunks so a huge wordlist stays memory-bounded, each chunk
+        # with capped concurrency instead of a fixed 50-thread pool.
+        chunk_size = 1000
+        for i in range(0, len(candidates), chunk_size):
+            chunk = candidates[i : i + chunk_size]
+            results = await self.gather_bounded(
+                [self._check_subdomain(domain) for domain in chunk], limit=50
+            )
+            for res in results:
+                if res and not isinstance(res, Exception):
+                    subdomains.add(res)
 
         return subdomains
 
-    def _process_batch(self, executor, batch: list, subdomains: set) -> None:
-        """Helper to process a batch of subdomains."""
-        futures = {
-            executor.submit(self._check_subdomain, domain): domain for domain in batch
-        }
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                res = future.result()
-                if res:
-                    subdomains.add(res)
-            except Exception:
-                pass
-
-    def _check_subdomain(self, subdomain: str) -> str | None:
-        """Check if a subdomain exists using DNS resolution."""
+    async def _check_subdomain(self, subdomain: str) -> str | None:
+        """Check if a subdomain exists using DNS resolution (off the event loop)."""
         try:
-            socket.gethostbyname(subdomain)
+            await asyncio.to_thread(socket.gethostbyname, subdomain)
             return subdomain
-        except socket.gaierror:
+        except (socket.gaierror, OSError):
             return None
 
     async def _find_by_passive(self, target: str) -> set:

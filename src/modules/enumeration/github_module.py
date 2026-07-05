@@ -19,6 +19,12 @@ class GitHubModule(BaseModule):
                 "Optional GitHub Personal Access Token for higher rate limits.",
                 "",
             ],
+            "MAX_PAGES": [
+                "3",
+                False,
+                "Max pages (100 items each) to fetch for repos/events/orgs.",
+                "",
+            ],
         },
     }
 
@@ -153,35 +159,54 @@ class GitHubModule(BaseModule):
         info(f"Followers: {followers} | Following: {following}")
         info(f"Public Repos: {public_repos} | Public Gists: {public_gists}")
 
-    async def get_orgs(self, target: str) -> List[Dict[str, Any]]:
+    def _max_pages(self) -> int:
+        """Configured page cap (>=1) for paginated GitHub endpoints."""
         try:
-            r = await self.client.get(f"https://api.github.com/users/{target}/orgs")
-            r.raise_for_status()
-            return r.json()
+            return max(1, int(self.options.get("MAX_PAGES") or 3))
+        except (ValueError, TypeError):
+            return 3
+
+    async def _get_paginated(self, url: str) -> List[Dict[str, Any]]:
+        """Fetch a GitHub list endpoint following ``Link`` rel="next" pagination.
+
+        Bounded by the ``MAX_PAGES`` option so a prolific user can't trigger an
+        unbounded crawl. Returns the accumulated items (empty list on error).
+        """
+        items: List[Dict[str, Any]] = []
+        sep = "&" if "?" in url else "?"
+        next_url = f"{url}{sep}per_page=100"
+        pages = 0
+        max_pages = self._max_pages()
+        try:
+            while next_url and pages < max_pages:
+                r = await self.client.get(next_url)
+                r.raise_for_status()
+                page = r.json()
+                if isinstance(page, list):
+                    items.extend(page)
+                pages += 1
+                # httpx parses the Link header into response.links.
+                next_link = r.links.get("next")
+                next_url = next_link.get("url") if next_link else None
         except Exception:
-            return []
+            pass
+        return items
+
+    async def get_orgs(self, target: str) -> List[Dict[str, Any]]:
+        return await self._get_paginated(
+            f"https://api.github.com/users/{target}/orgs"
+        )
 
     async def get_repos(self, target: str) -> List[Dict[str, Any]]:
-        try:
-            # We fetch up to 100 repos, which is usually enough for a quick OSINT check
-            r = await self.client.get(
-                f"https://api.github.com/users/{target}/repos?per_page=100"
-            )
-            r.raise_for_status()
-            return r.json()
-        except Exception:
-            return []
+        return await self._get_paginated(
+            f"https://api.github.com/users/{target}/repos"
+        )
 
     async def get_public_events(self, target: str) -> List[Dict[str, Any]]:
-        try:
-            r = await self.client.get(
-                f"https://api.github.com/users/{target}/events/public?per_page=100"
-            )
-            r.raise_for_status()
-            return r.json()
-        except Exception as e:
-            warn(f"Error fetching public events: {e}")
-            return []
+        events = await self._get_paginated(
+            f"https://api.github.com/users/{target}/events/public"
+        )
+        return events
 
     def extract_emails_from_events(self, events: List[Dict[str, Any]]) -> Set[str]:
         emails: Set[str] = set()
