@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import threading
+from contextlib import contextmanager
 
 
 class DatabaseEngine:
@@ -20,6 +21,9 @@ class DatabaseEngine:
             os.makedirs(db_dir, exist_ok=True)
 
         self._db_lock = threading.RLock()
+        # When True, write methods skip their per-call commit so a batch can be
+        # committed once (see batch()).
+        self._defer_commit = False
 
         self.conn = sqlite3.connect(resolved_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
@@ -72,6 +76,28 @@ class DatabaseEngine:
                 migrations[version](self)
                 self._set_user_version(version + 1)
             self.conn.commit()
+
+    def _commit(self) -> None:
+        """Commit unless inside a deferred batch (see :meth:`batch`)."""
+        if not self._defer_commit:
+            self.conn.commit()
+
+    @contextmanager
+    def batch(self):
+        """Group many writes into a single commit.
+
+        Write methods that call :meth:`_commit` (e.g. ``get_or_add_node``,
+        ``add_edge``) skip their per-row commit while inside this block; a single
+        commit is issued on exit. Turns O(nodes+edges) commits into one.
+        """
+        with self._db_lock:
+            previous = self._defer_commit
+            self._defer_commit = True
+            try:
+                yield
+                self.conn.commit()
+            finally:
+                self._defer_commit = previous
 
     def close(self) -> None:
         if hasattr(self, "conn") and self.conn:
