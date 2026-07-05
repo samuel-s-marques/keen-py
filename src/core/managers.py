@@ -83,6 +83,14 @@ class ConfigManager(DatabaseEngine):
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Generic key/value TTL cache for cross-run reuse of expensive lookups.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cache (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                expires_at REAL
+            )
+        """)
 
         # Preferences
         cursor.execute("""
@@ -508,6 +516,33 @@ class ConfigManager(DatabaseEngine):
         )
         self.conn.commit()
 
+    def cache_get(self, key: str) -> str | None:
+        """Return a cached value for ``key``, or ``None`` if absent/expired."""
+        import time
+
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT value, expires_at FROM cache WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        if row["expires_at"] is not None and row["expires_at"] < time.time():
+            cursor.execute("DELETE FROM cache WHERE key = ?", (key,))
+            self._commit()
+            return None
+        return row["value"]
+
+    def cache_set(self, key: str, value: str, ttl: float | None = 3600) -> None:
+        """Store ``value`` under ``key`` for ``ttl`` seconds (None = no expiry)."""
+        import time
+
+        expires_at = (time.time() + ttl) if ttl else None
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?, ?, ?)",
+            (key, value, expires_at),
+        )
+        self._commit()
+
 
 class WorkspaceManager(DatabaseEngine):
     def __init__(self, db_path: str, name: str | None = None) -> None:
@@ -607,7 +642,7 @@ class WorkspaceManager(DatabaseEngine):
                 "INSERT OR IGNORE INTO nodes (type, value, metadata) VALUES (?, ?, ?)",
                 (node_type, value, meta_json),
             )
-            self.conn.commit()
+            self._commit()
 
             if cursor.rowcount and cursor.lastrowid:
                 return cursor.lastrowid
@@ -639,7 +674,7 @@ class WorkspaceManager(DatabaseEngine):
             "INSERT INTO edge (source_id, target_id, relationship, metadata) VALUES (?, ?, ?, ?)",
             (source_id, target_id, relationship, meta_json),
         )
-        self.conn.commit()
+        self._commit()
 
     def get_node_count(self) -> int:
         cursor = self.conn.cursor()
