@@ -27,6 +27,12 @@ class HistoricalDnsModule(BaseModule):
                 "API Key for SecurityTrails to get more comprehensive historical data.",
                 "",
             ],
+            "MIGRATION_MAX_IPS": [
+                "10",
+                False,
+                "Max historical IPs to analyze for infrastructure migrations.",
+                "",
+            ],
         },
     }
 
@@ -236,48 +242,22 @@ class HistoricalDnsModule(BaseModule):
             return
 
         asn_results = []
-        # Get ASN info for up to 10 historical IPs to identify infrastructure changes
-        ips_to_check = list(historical_ips)[:10]
+        # Get ASN info for a bounded number of historical IPs to identify changes.
+        try:
+            migration_max = max(1, int(self.options.get("MIGRATION_MAX_IPS") or 10))
+        except (ValueError, TypeError):
+            migration_max = 10
+        ips_to_check = list(historical_ips)[:migration_max]
 
-        async def fetch_asn(ip):
-            try:
-                # Basic reverse DNS or Team Cymru approach
-                import ipaddress
+        from src.utils.asn import lookup_asn
 
-                addr = ipaddress.ip_address(ip)
-                if addr.version == 4:
-                    reversed_ip = ".".join(reversed(ip.split(".")))
-                    query = f"{reversed_ip}.origin.asn.cymru.com"
-                else:
-                    return None
-
-                answers = await asyncio.to_thread(dns.resolver.resolve, query, "TXT")
-                data = str(answers[0]).strip('"').split(" | ")
-                if len(data) >= 3:
-                    asn = data[0].strip()
-                    # Get provider name
-                    name_query = f"AS{asn}.asn.cymru.com"
-                    try:
-                        name_answers = await asyncio.to_thread(
-                            dns.resolver.resolve, name_query, "TXT"
-                        )
-                        name_data = str(name_answers[0]).strip('"').split(" | ")
-                        provider = (
-                            name_data[4].strip() if len(name_data) > 4 else "Unknown"
-                        )
-                        return {"ip": ip, "asn": asn, "provider": provider}
-                    except Exception:
-                        return {"ip": ip, "asn": asn, "provider": "Unknown"}
-            except Exception:
-                return None
-            return None
-
-        tasks = [fetch_asn(ip) for ip in ips_to_check]
-        results = await asyncio.gather(*tasks)
+        results = await self.gather_bounded(
+            [lookup_asn(ip) for ip in ips_to_check], limit=10
+        )
 
         providers = set()
         for res in results:
-            if res:
+            if res and not isinstance(res, Exception):
                 asn_results.append(res)
                 providers.add(res["provider"])
 
@@ -351,19 +331,14 @@ class HistoricalDnsModule(BaseModule):
                 pass
             return None
 
-        # Check in batches
+        # Check with bounded concurrency to avoid flooding.
         async with self.get_http_client() as client:
-            tasks = [check_sub(client, sub) for sub in subdomains]
-
-            # Limit concurrency to avoid flooding
-            # Doing this manually with chunks
-            chunk_size = 20
-            for i in range(0, len(tasks), chunk_size):
-                chunk = tasks[i : i + chunk_size]
-                results = await asyncio.gather(*chunk)
-                for res in results:
-                    if res:
-                        vulnerable.append(res)
+            results = await self.gather_bounded(
+                [check_sub(client, sub) for sub in subdomains], limit=20
+            )
+            for res in results:
+                if res and not isinstance(res, Exception):
+                    vulnerable.append(res)
 
         if vulnerable:
             table = self.results_table(
