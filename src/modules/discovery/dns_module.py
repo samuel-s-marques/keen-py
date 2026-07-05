@@ -3,7 +3,6 @@ from typing import Any
 import dns.resolver
 import random
 import string
-import ipaddress
 
 from src.utils.print_utils import info, success, warn
 from src.core.base_module import BaseModule
@@ -40,7 +39,13 @@ class DnsModule(BaseModule):
                 True,
                 "The domain name to enumerate (e.g. google.com).",
                 "domain",
-            ]
+            ],
+            "ASN_MAX_IPS": [
+                "5",
+                False,
+                "Max resolved IPs to look up ASN/BGP intelligence for.",
+                "",
+            ],
         },
     }
 
@@ -109,7 +114,11 @@ class DnsModule(BaseModule):
             unique_ips = list(set(ips))
             asn_results = []
             if unique_ips:
-                for ip in unique_ips[:5]:  # Limit to avoid excessive queries
+                try:
+                    asn_max = max(1, int(self.options.get("ASN_MAX_IPS") or 5))
+                except (ValueError, TypeError):
+                    asn_max = 5
+                for ip in unique_ips[:asn_max]:  # Limit to avoid excessive queries
                     asn_data = await self.get_asn_info(ip)
                     if asn_data:
                         asn_results.append(asn_data)
@@ -231,46 +240,10 @@ class DnsModule(BaseModule):
             info(f"DNSSEC is not enabled for {target}.")
 
     async def get_asn_info(self, ip: str) -> dict | None:
-        """Retrieve ASN intelligence for an IP using Team Cymru DNS service."""
-        try:
-            addr = ipaddress.ip_address(ip)
-            if addr.version == 4:
-                reversed_ip = ".".join(reversed(ip.split(".")))
-                query = f"{reversed_ip}.origin.asn.cymru.com"
-            else:  # IPv6
-                # Expanded nibbles for IPv6 origin6 lookup
-                nibbles = addr.exploded.replace(":", "")
-                reversed_nibbles = ".".join(reversed(nibbles))
-                query = f"{reversed_nibbles}.origin6.asn.cymru.com"
+        """Retrieve ASN intelligence for an IP (shared, cached Team Cymru lookup)."""
+        from src.utils.asn import lookup_asn
 
-            answers = await asyncio.to_thread(dns.resolver.resolve, query, "TXT")
-            # Format: "15169 | 8.8.8.0/24 | US | arin | 2001-01-24"
-            data = str(answers[0]).strip('"').split(" | ")
-            if len(data) < 3:
-                return None
-
-            asn = data[0].strip()
-            prefix = data[1].strip()
-            country = data[2].strip()
-
-            # Get ASN Name/Description
-            name_query = f"AS{asn}.asn.cymru.com"
-            name_answers = await asyncio.to_thread(
-                dns.resolver.resolve, name_query, "TXT"
-            )
-            # Format: "15169 | US | arin | 2001-01-24 | GOOGLE, US"
-            name_data = str(name_answers[0]).strip('"').split(" | ")
-            provider = name_data[4].strip() if len(name_data) > 4 else "Unknown"
-
-            return {
-                "ip": ip,
-                "asn": asn,
-                "prefix": prefix,
-                "country": country,
-                "provider": provider,
-            }
-        except Exception:
-            return None
+        return await lookup_asn(ip)
 
     async def _save_results(self, target: str, results: dict) -> None:
         from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces
