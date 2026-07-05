@@ -218,6 +218,28 @@ class BaseModule:
             status.update(f"[bold green]{title}")
             return result
 
+    async def gather_bounded(
+        self, coros, limit: int = 20, return_exceptions: bool = True
+    ) -> list:
+        """Await many coroutines with at most ``limit`` running concurrently.
+
+        A single bounded-concurrency primitive to replace ad-hoc thread pools
+        and manual chunking across modules. Results preserve input order; by
+        default exceptions are returned in place (recon code usually wants to
+        keep partial results rather than abort the whole batch).
+        """
+        import asyncio
+
+        semaphore = asyncio.Semaphore(max(1, limit))
+
+        async def _run(coro):
+            async with semaphore:
+                return await coro
+
+        return await asyncio.gather(
+            *(_run(c) for c in coros), return_exceptions=return_exceptions
+        )
+
     # ------------------------------------------------------------------ #
     # Standardized result rendering (see src/utils/render.py).
     # Modules build tables/panels with these helpers and print them via
@@ -306,31 +328,36 @@ class BaseModule:
         await self._trigger_thinking_partner(workspace)
 
     def _ingest_results(self, workspace, results: dict) -> None:
-        """Stage 1: deduplicate and persist nodes and edges into the workspace."""
-        node_map = {}
-        for node in results.get("nodes", []):
-            node_id = workspace.get_or_add_node(
-                node_type=node["type"],
-                value=node["value"],
-                metadata=node.get("metadata", {}),
-            )
-            node_map[node["value"]] = node_id
+        """Stage 1: deduplicate and persist nodes and edges into the workspace.
 
-        for edge in results.get("edges", []):
-            source_id = node_map.get(edge["source"]) or workspace.get_node_id(
-                edge["source"]
-            )
-            target_id = node_map.get(edge["target"]) or workspace.get_node_id(
-                edge["target"]
-            )
-
-            if source_id and target_id:
-                workspace.add_edge(
-                    source_id=source_id,
-                    target_id=target_id,
-                    relationship=edge.get("relationship", "RELATED"),
-                    metadata=edge.get("metadata", {}),
+        The whole graph is written inside a single ``workspace.batch()`` so all
+        inserts share one transaction/commit instead of committing per row.
+        """
+        with workspace.batch():
+            node_map = {}
+            for node in results.get("nodes", []):
+                node_id = workspace.get_or_add_node(
+                    node_type=node["type"],
+                    value=node["value"],
+                    metadata=node.get("metadata", {}),
                 )
+                node_map[node["value"]] = node_id
+
+            for edge in results.get("edges", []):
+                source_id = node_map.get(edge["source"]) or workspace.get_node_id(
+                    edge["source"]
+                )
+                target_id = node_map.get(edge["target"]) or workspace.get_node_id(
+                    edge["target"]
+                )
+
+                if source_id and target_id:
+                    workspace.add_edge(
+                        source_id=source_id,
+                        target_id=target_id,
+                        relationship=edge.get("relationship", "RELATED"),
+                        metadata=edge.get("metadata", {}),
+                    )
 
     async def _run_magic_chaining(self, results: dict) -> None:
         """Stage 2: auto-chain modules on discovered nodes, if enabled.
@@ -484,6 +511,16 @@ class BaseModule:
             )
 
         return httpx.AsyncClient(**kwargs)
+
+    def cache_get(self, key: str):
+        """Read a value from the shared cross-run TTL cache (or None)."""
+        with self._config_ctx() as config:
+            return config.cache_get(key)
+
+    def cache_set(self, key: str, value: str, ttl: float | None = 3600) -> None:
+        """Write a value to the shared cross-run TTL cache."""
+        with self._config_ctx() as config:
+            config.cache_set(key, value, ttl)
 
     async def request(
         self,
