@@ -2,105 +2,102 @@
 
 ```
     __ __
-   / //_/__  ___  ____ 
+   / //_/__  ___  ____
   / ,< / _ \/ _ \/ __ \
  / /| /  __/  __/ / / /
-/_/ |_\___/\___/_/ /_/ 
+/_/ |_\___/\___/_/ /_/
 
 ```
 
-Keen, as in keen observation, is a reconnaissance and OSINT tool for ethical hacking and penetration testing.
+Keen, as in keen observation, is a reconnaissance and OSINT framework for ethical hacking and penetration testing. It runs as an interactive Metasploit-style shell and, optionally, as a FastAPI web server backing a single-page graph UI. Module results are ingested into per-case
+SQLite graph databases (`.keen` files) as STIX 2.1 / MISP-annotated nodes and edges, and can be auto-chained via the built-in *magic* engine.
 
-## Modules
-### Analysis
-This module process files or data you've already captured. You can check if discovered credentials appear in known breaches, or analyze data such as EXIF (GPS, camera type, metadata from images) and APKs/IPAs (find endpoints, hardcoded credentials, etc.).
+> **Ethical use only.** Keen is intended for authorized security testing, research,
+> and educational use. You are responsible for complying with all applicable laws
+> and for having permission to investigate any target.
 
-Available modules:
-- HudsonRock: If target email is associated with infostealers
-- LeakCheck: If email or password was leaked through LeakCheck, DeHashed, Have I Been Pwned and BreachVIP
+## Requirements
 
-TODO:
-- [ ] Add EXIF data extraction
-- [ ] Add APK/IPA parsing
+- Python 3.11+
+- Git (to fetch the vendored [Sherlock](https://github.com/sherlock-project/sherlock) submodule)
 
-### Discovery
-This module focuses on identifying the infrastructure and "surface area" of a target. Think infrastructure, servers, domains, subdomains, etc. 
+## Installation
 
-Available modules:
-- WHOIS: Domain ownership
-- Subdomains: Finding hidden sub-assets (bruteforce, passive, dns)
+```bash
+git clone --recurse-submodules https://github.com/sammwyy/keen-py.git
+cd keen-py
 
-TODO:
-- [ ] Add DNS enumeration (name servers, MX records, zone transfers)
-- [ ] Add port scanning
+# Recommended: install the package (and its dependencies) into a virtualenv.
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e .
 
-### Enumeration
-This module focuses on extracting as much detail as possible from targets.
+# For development (tests, linting, type-checking, stubs):
+pip install -e ".[dev]"
+```
 
-Available modules:
-- Holehe: Check if an username/email exists on social media.
-- Sherlock: Find usernames across multiple social media platforms.
+If you cloned without `--recurse-submodules`, fetch Sherlock afterwards:
 
-TODO:
-- [ ] Add email enumeration (breach checking)
-- [ ] Add phone number enumeration (breach checking, carrier info, location data)
-- [ ] Add username generation (if email or name provided)
-- [ ] Add profile scraping (if social media found)
-- [ ] Add contact scraping (if email or profile found)
+```bash
+git submodule update --init --recursive
+```
 
-### Intel
-This module uses third-party databases for intelligence gathering.
+> Dependencies are declared in `pyproject.toml`. `keen.py` also ships a convenience
+> auto-installer that pip-installs anything missing on first launch; set
+> `KEEN_SKIP_DEP_CHECK=1` to disable it once the package is installed.
 
-Available modules:
-None for now.
+## Usage
 
-TODO:
-- [ ] Add Shodan
-- [ ] Add Censys
-- [ ] Add Fofa
-- [ ] Add ZoomEye
-- [ ] Add IntelX
-- [ ] Add GreyNoise
-- [ ] Add Hunter
+After `pip install -e .` a `keen` command is available (equivalently, run `python keen.py`):
 
-### Web
-This module focuses on web scraping and data extraction from websites.
+```bash
+keen                       # interactive shell
+keen --debug               # verbose logging
+keen --check-deps          # force dependency verification/install
 
-Available modules:
-None for now.
+# Web server (FastAPI + uvicorn, serves the SPA in web/ plus REST + WebSocket):
+keen --web --host 127.0.0.1 --port 8000
+```
 
-TODO:
-- [ ] Add link, comments, tech stack extraction
-- [ ] Add vulnerability scanning
+Inside the shell:
 
-## To Do
-- [ ] Add tests
-- [ ] Add web interface
-  - [ ] REST API for automation
-  - [ ] Automation via UI (.keen-playbook recipes)
-  - [ ] Plugin marketplace
-  - [ ] Multi-language support (i18n)
-  - [ ] Mapping and camera integration (Geolocation)
-  - [ ] Integration with malshare and similar services
-  - [ ] Integration with MISP and similar services
-  - [ ] Collaboration features (shared workspaces, role-based access)
-  - [ ] Advanced threat intelligence (OSINT correlation, darknet monitoring)
-- [ ] Add PDF and documents generation capabilities
-- [ ] Add plugins
-    - [ ] Add plugin system
-    - [ ] Port scanning
-    - [ ] Vulnerability scanning
-    - [ ] Web scraping
-    - [ ] Social media enumeration
-    - [ ] Email enumeration
-    - [ ] Phone number enumeration
-    - [ ] Exif data extraction
-    - [ ] Tracert
-    - [ ] Dnsrecon
-    - [ ] APKs/IPAs endpoints/hardcored extraction
-- [ ] Integrate Shodan
-- [ ] Integrate Censys
-- [ ] Integrate ZoomEye
-- [ ] Integrate Fofa
-- [ ] Integrate GreyNoise
-- [ ] Integrate IntelligenceX
+```
+keen> use discovery/whois
+keen> set TARGET example.com
+keen> run
+keen> magic example.com          # auto-detect type and chain relevant modules
+keen> workspace create my-case   # investigations are saved to cases/my-case.keen
+```
+
+### Docker
+
+```bash
+docker build -t keen .
+docker run --rm -p 8000:8000 -v "$PWD/cases:/app/cases" keen   # web UI on :8000
+```
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+
+pytest                 # run the test suite (tests/)
+pytest --cov           # with coverage
+ruff check . && ruff format --check .   # lint & format
+pyrefly check          # type-check
+pre-commit install     # enable git hooks (ruff + hygiene)
+```
+
+## Module categories
+
+| Category      | Modules                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `analysis`    | Hudson Rock (infostealer exposure), Leak Check (breach lookups: LeakCheck, DeHashed, HIBP, BreachVIP)         |
+| `discovery`   | WHOIS, DNS Enum, Historical DNS, Subdomain Enum                                                               |
+| `enumeration` | Domain/Email Enrichment, Email Verification, Email Finder, GitHub, Phone Verification, Sherlock, User Scanner |
+| `web`         | WAF/CDN Detection                                                                                             |
+| `helpers`     | Email→Username, Org→Domain, URL→Domain                                                                        |
+| `intel`       | *(planned — Shodan, Censys, GreyNoise, reputation feeds)*                                                     |
+
+## License
+
+Distributed under the GNU GPL v3. See [`LICENSE`](LICENSE).
