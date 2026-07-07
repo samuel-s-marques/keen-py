@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 themeIcon.className = 'fa-solid fa-moon';
             }
         }
-        if (activeWorkspace) selectWorkspace(activeWorkspace); // Redraw graph to apply theme
+        if (KeenStore.activeWorkspace) selectWorkspace(KeenStore.activeWorkspace); // Redraw graph to apply theme
     });
 
     // --- Layout Resizing System ---
@@ -173,7 +173,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // State
-    let activeWorkspace = null;
     let modulesData = {};
     let network = null;
     let nodesDataSet = null;
@@ -183,7 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let minimap = null;
     let minimapNodesDataSet = null;
     let minimapEdgesDataSet = null;
-    let isConfigUnlocked = false;
     let configKeys = {};
     let currentNodes = [];
     let currentEdges = [];
@@ -299,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     btnSettings.addEventListener('click', () => {
         modalSettings.classList.add('active');
-        if (isConfigUnlocked) fetchApiKeys();
+        if (KeenStore.isConfigUnlocked) fetchApiKeys();
         fetchPreferences();
         fetchProxies();
         loadAISettings();
@@ -343,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConfirmCreateNode = document.getElementById('btn-confirm-create-node');
 
     document.getElementById('btn-add-node').addEventListener('click', () => {
-        if (!activeWorkspace) {
+        if (!KeenStore.activeWorkspace) {
             alert('Please select a workspace first.');
             return;
         }
@@ -433,14 +431,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         try {
-            const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type, value, metadata })
-            });
+            const res = await KeenAPI.post(`/workspaces/${KeenStore.activeWorkspace}/nodes`, { type, value, metadata });
             if (res.ok) {
                 modalCreateNode.classList.remove('active');
-                selectWorkspace(activeWorkspace);
+                selectWorkspace(KeenStore.activeWorkspace);
                 termPrint(`Node created: ${value} (${type})`, 'sys-msg');
             } else {
                 const err = await res.json();
@@ -454,13 +448,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Settings API Keys
     btnUnlockSettings.addEventListener('click', async () => {
         const password = inputMasterPassword.value;
-        const res = await fetch(`${API_BASE}/config/unlock`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password })
-        });
+        const res = await KeenAPI.post(`/config/unlock`, { password });
         if (res.ok) {
-            isConfigUnlocked = true;
+            KeenStore.setConfigUnlocked(true);
             // Persist the session token returned by unlock. Used as a bearer
             // token when the server runs with KEEN_REQUIRE_AUTH enabled; harmless
             // otherwise. (window.keenAuthToken is read by future authenticated
@@ -468,8 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const data = await res.json();
                 if (data && data.token) {
-                    window.keenAuthToken = data.token;
-                    sessionStorage.setItem('keenAuthToken', data.token);
+                    KeenAPI.setToken(data.token);
                 }
             } catch (e) { /* no token in response body */ }
             apiKeysLocked.classList.add('hidden');
@@ -486,11 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const api_key = document.getElementById('input-api-key').value.trim();
         if (!service || !api_key) return;
 
-        await fetch(`${API_BASE}/config/keys`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ service, api_key })
-        });
+        await KeenAPI.post(`/config/keys`, { service, api_key });
         document.getElementById('input-api-service').value = '';
         document.getElementById('input-api-key').value = '';
         fetchApiKeys();
@@ -505,17 +490,13 @@ document.addEventListener('DOMContentLoaded', () => {
             magic_interactive: String(prefMagicInteractive.checked),
             magic_exclude_modules: prefMagicExcludeModules.value.trim()
         };
-        await fetch(`${API_BASE}/config/preferences`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        await KeenAPI.post(`/config/preferences`, payload);
         alert('Preferences saved!');
     });
 
     async function fetchApiKeys() {
-        if (!isConfigUnlocked) return;
-        const res = await fetch(`${API_BASE}/config/keys`);
+        if (!KeenStore.isConfigUnlocked) return;
+        const res = await KeenAPI.get(`/config/keys`);
         if (res.ok) {
             const keys = await res.json();
             configKeys = {};
@@ -550,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function fetchPreferences() {
-        const res = await fetch(`${API_BASE}/config/preferences`);
+        const res = await KeenAPI.get(`/config/preferences`);
         if (res.ok) {
             const prefs = await res.json();
             if (prefs.extraction_mode) {
@@ -602,7 +583,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!tbody) return;
 
         try {
-            const res = await fetch(`${API_BASE}/proxies`);
+            const res = await KeenAPI.get(`/proxies`);
             if (res.ok) {
                 const proxies = await res.json();
                 tbody.innerHTML = '';
@@ -657,18 +638,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const toggleInput = tr.querySelector('.proxy-row-toggle');
                     toggleInput.addEventListener('change', async (e) => {
                         const is_enabled = e.target.checked;
-                        await fetch(`${API_BASE}/proxies/${p.id}/toggle`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ is_enabled })
-                        });
+                        await KeenAPI.post(`/proxies/${p.id}/toggle`, { is_enabled });
                     });
 
                     // Row Delete Event
                     const delBtn = tr.querySelector('.btn-delete-proxy');
                     delBtn.addEventListener('click', async () => {
                         if (confirm('Delete this proxy?')) {
-                            const dRes = await fetch(`${API_BASE}/proxies/${p.id}`, { method: 'DELETE' });
+                            const dRes = await KeenAPI.del(`/proxies/${p.id}`);
                             if (dRes.ok) {
                                 fetchProxies();
                             }
@@ -704,11 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (toggleProxyRouting) {
             toggleProxyRouting.addEventListener('change', async (e) => {
                 const checked = e.target.checked;
-                await fetch(`${API_BASE}/config/preferences`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ proxy_enabled: String(checked) })
-                });
+                await KeenAPI.post(`/config/preferences`, { proxy_enabled: String(checked) });
                 const proxyStatusVal = document.getElementById('proxy-status-val');
                 if (proxyStatusVal) {
                     proxyStatusVal.textContent = checked ? 'Enabled' : 'Disabled';
@@ -720,11 +693,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selectProxyRotation) {
             selectProxyRotation.addEventListener('change', async (e) => {
                 const val = e.target.value;
-                await fetch(`${API_BASE}/config/preferences`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ proxy_rotation_mode: val })
-                });
+                await KeenAPI.post(`/config/preferences`, { proxy_rotation_mode: val });
                 const proxyModeVal = document.getElementById('proxy-mode-val');
                 if (proxyModeVal) {
                     proxyModeVal.textContent = val;
@@ -737,11 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const url = inputProxyUrl.value.trim();
                 if (!url) return;
 
-                const res = await fetch(`${API_BASE}/proxies`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url })
-                });
+                const res = await KeenAPI.post(`/proxies`, { url });
                 if (res.ok) {
                     const data = await res.json();
                     if (data.success) {
@@ -758,7 +723,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btnTestProxies.addEventListener('click', async () => {
                 btnTestProxies.disabled = true;
                 btnTestProxies.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
-                await fetch(`${API_BASE}/proxies/test`, { method: 'POST' });
+                await KeenAPI.post(`/proxies/test`);
 
                 // Poll check every 2 seconds for up to 60 seconds to update table
                 let count = 0;
@@ -819,11 +784,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
 
-                    const res = await fetch(`${API_BASE}/proxies/load`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ content: text })
-                    });
+                    const res = await KeenAPI.post(`/proxies/load`, { content: text });
                     if (res.ok) {
                         const data = await res.json();
                         alert(`Successfully loaded ${data.loaded} proxies!`);
@@ -860,11 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!name) return;
 
         try {
-            const res = await fetch(`${API_BASE}/workspaces`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, description: desc })
-            });
+            const res = await KeenAPI.post(`/workspaces`, { name, description: desc });
             if (res.ok) {
                 modalNewWs.classList.remove('active');
                 inputWsName.value = '';
@@ -883,17 +840,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const newName = inputRenameWs.value.trim();
         if (!newName || newName === oldName) return;
 
-        const res = await fetch(`${API_BASE}/workspaces/${oldName}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ new_name: newName })
-        });
+        const res = await KeenAPI.put(`/workspaces/${oldName}`, { new_name: newName });
 
         if (res.ok) {
             modalRenameWs.classList.remove('active');
-            if (activeWorkspace === oldName) activeWorkspace = newName;
+            if (KeenStore.activeWorkspace === oldName) KeenStore.setActiveWorkspace(newName);
             await fetchWorkspaces();
-            if (activeWorkspace === newName) selectWorkspace(newName);
+            if (KeenStore.activeWorkspace === newName) selectWorkspace(newName);
         } else {
             alert("Failed to rename workspace. Ensure no other instances are locking it.");
         }
@@ -959,7 +912,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let defVal = (value[0] !== undefined && value[0] !== null) ? value[0] : '';
 
                 // Auto-pull API keys if unlocked
-                if (isConfigUnlocked && configKeys[key.toUpperCase()]) {
+                if (KeenStore.isConfigUnlocked && configKeys[key.toUpperCase()]) {
                     defVal = configKeys[key.toUpperCase()];
                 }
 
@@ -1071,14 +1024,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         termPrint(`[${modName}] Connecting...`, 'sys-msg');
 
-        const ws = new WebSocket(`${WS_BASE}/modules/${modName}/run`);
+        const ws = new WebSocket(KeenAPI.wsUrl(`/modules/${modName}/run`));
         activeSockets.push(ws);
         activeSocketsMap.set(snackbarId, ws);
         let gotResult = false;
 
         ws.onopen = () => {
             ws.send(JSON.stringify({
-                workspace_name: activeWorkspace || "",
+                workspace_name: KeenStore.activeWorkspace || "",
                 options: options
             }));
         };
@@ -1113,9 +1066,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Refresh workspace to show new nodes
-            if (activeWorkspace) {
-                selectWorkspace(activeWorkspace);
-                pollAISuggestionsStatus(activeWorkspace);
+            if (KeenStore.activeWorkspace) {
+                selectWorkspace(KeenStore.activeWorkspace);
+                pollAISuggestionsStatus(KeenStore.activeWorkspace);
             }
         };
     }
@@ -1247,7 +1200,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let defVal = (value[0] !== undefined && value[0] !== null) ? value[0] : '';
 
                 // Auto-pull API keys if unlocked
-                if (isConfigUnlocked && configKeys[key.toUpperCase()]) {
+                if (KeenStore.isConfigUnlocked && configKeys[key.toUpperCase()]) {
                     defVal = configKeys[key.toUpperCase()];
                 }
 
@@ -1361,7 +1314,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchWorkspaces() {
         try {
-            const res = await fetch(`${API_BASE}/workspaces`);
+            const res = await KeenAPI.get(`/workspaces`);
             const data = await res.json();
             currentWorkspaces = data;
             renderWorkspaces();
@@ -1380,7 +1333,7 @@ document.addEventListener('DOMContentLoaded', () => {
         workspaceList.innerHTML = '';
         filteredWorkspaces.forEach(w => {
             const item = document.createElement('div');
-            item.className = `workspace-item ${w.name === activeWorkspace ? 'active' : ''}`;
+            item.className = `workspace-item ${w.name === KeenStore.activeWorkspace ? 'active' : ''}`;
             item.onclick = () => selectWorkspace(w.name);
 
             item.innerHTML = `
@@ -1406,9 +1359,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 const wsName = btn.dataset.name;
                 if (confirm(`Are you sure you want to delete workspace "${wsName}"? This cannot be undone.`)) {
-                    await fetch(`${API_BASE}/workspaces/${wsName}`, { method: 'DELETE' });
-                    if (activeWorkspace === wsName) {
-                        activeWorkspace = null;
+                    await KeenAPI.del(`/workspaces/${wsName}`);
+                    if (KeenStore.activeWorkspace === wsName) {
+                        KeenStore.setActiveWorkspace(null);
                         activeWorkspaceTitle.textContent = "No Workspace Selected";
                         nodesTbody.innerHTML = '';
                         edgesTbody.innerHTML = '';
@@ -1441,7 +1394,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchModules() {
         try {
-            const res = await fetch(`${API_BASE}/modules`);
+            const res = await KeenAPI.get(`/modules`);
             modulesData = await res.json();
             buildModuleDropdown();
         } catch (e) {
@@ -1455,7 +1408,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleTimelinePlay(false);
         }
 
-        activeWorkspace = name;
+        KeenStore.setActiveWorkspace(name);
         activeWorkspaceTitle.textContent = name;
 
         // Show export dropdown
@@ -1473,8 +1426,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Load nodes and edges
         try {
             const [nodesRes, edgesRes] = await Promise.all([
-                fetch(`${API_BASE}/workspaces/${name}/nodes`),
-                fetch(`${API_BASE}/workspaces/${name}/edges`)
+                KeenAPI.get(`/workspaces/${name}/nodes`),
+                KeenAPI.get(`/workspaces/${name}/edges`)
             ]);
 
             const nodes = await nodesRes.json();
@@ -1647,8 +1600,8 @@ document.addEventListener('DOMContentLoaded', () => {
             arrows: 'to'
         }));
 
-        const isWorkspaceSwitched = (activeWorkspace !== currentWorkspace);
-        currentWorkspace = activeWorkspace;
+        const isWorkspaceSwitched = (KeenStore.activeWorkspace !== currentWorkspace);
+        currentWorkspace = KeenStore.activeWorkspace;
 
         if (network && !isWorkspaceSwitched && nodesDataSet && edgesDataSet) {
             // Keep track of which nodes are new to decide if we need to enable physics
@@ -1742,10 +1695,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 enabled: false,
                 deleteNode: function (data, callback) {
                     if (confirm("Delete selected node(s)? This will also cascade delete any connected edges.")) {
-                        const promises = data.nodes.map(id => fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${id}`, { method: 'DELETE' }));
+                        const promises = data.nodes.map(id => KeenAPI.del(`/workspaces/${KeenStore.activeWorkspace}/nodes/${id}`));
                         Promise.all(promises).then(() => {
                             callback(data);
-                            selectWorkspace(activeWorkspace);
+                            selectWorkspace(KeenStore.activeWorkspace);
                         }).catch(e => {
                             alert("Failed to delete nodes.");
                             callback(null);
@@ -1756,10 +1709,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 deleteEdge: function (data, callback) {
                     if (confirm("Delete selected edge(s)?")) {
-                        const promises = data.edges.map(id => fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${id}`, { method: 'DELETE' }));
+                        const promises = data.edges.map(id => KeenAPI.del(`/workspaces/${KeenStore.activeWorkspace}/edges/${id}`));
                         Promise.all(promises).then(() => {
                             callback(data);
-                            selectWorkspace(activeWorkspace);
+                            selectWorkspace(KeenStore.activeWorkspace);
                         }).catch(e => {
                             alert("Failed to delete edges.");
                             callback(null);
@@ -1775,18 +1728,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const rel = prompt("Enter relationship (e.g. resolves-to, belongs-to):");
                     if (rel) {
                         edgeData.label = rel;
-                        fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
+                        KeenAPI.post(`/workspaces/${KeenStore.activeWorkspace}/edges`, {
                                 source_id: String(edgeData.from),
                                 target_id: String(edgeData.to),
                                 relationship: rel
-                            })
-                        }).then(res => {
+                            }).then(res => {
                             if (res.ok) {
                                 callback(edgeData);
-                                selectWorkspace(activeWorkspace);
+                                selectWorkspace(KeenStore.activeWorkspace);
                             } else {
                                 alert("Failed to save edge.");
                                 callback(null);
@@ -1894,17 +1843,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function savePositions() {
-            if (!activeWorkspace || !network) return;
+            if (!KeenStore.activeWorkspace || !network) return;
             const positions = network.getPositions();
             const formattedPositions = {};
             for (const [id, pos] of Object.entries(positions)) {
                 formattedPositions[id] = { x: pos.x, y: pos.y };
             }
-            fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/positions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ positions: formattedPositions })
-            });
+            KeenAPI.post(`/workspaces/${KeenStore.activeWorkspace}/nodes/positions`, { positions: formattedPositions });
         }
 
         // Freeze physics once initial stabilization is done to save CPU
@@ -1950,10 +1895,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (confirm(`Are you sure you want to delete ${selectedNodes.length} node(s) and ${selectedEdges.length} edge(s)?`)) {
                 try {
                     const nodePromises = selectedNodes.map(id =>
-                        fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${id}`, { method: 'DELETE' })
+                        KeenAPI.del(`/workspaces/${KeenStore.activeWorkspace}/nodes/${id}`)
                     );
                     const edgePromises = selectedEdges.map(id =>
-                        fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${id}`, { method: 'DELETE' })
+                        KeenAPI.del(`/workspaces/${KeenStore.activeWorkspace}/edges/${id}`)
                     );
 
                     await Promise.all([...nodePromises, ...edgePromises]);
@@ -1963,7 +1908,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (network) network.setSelection({ nodes: [], edges: [] });
 
                     // Refresh workspace
-                    selectWorkspace(activeWorkspace);
+                    selectWorkspace(KeenStore.activeWorkspace);
 
                     showSnackbar("Success", "Selected items deleted successfully.", "success");
                 } catch (e) {
@@ -2431,8 +2376,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 contextMenu.classList.add('hidden');
                 if (confirm("Delete this edge?")) {
-                    fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${edgeId}`, { method: 'DELETE' })
-                        .then(() => selectWorkspace(activeWorkspace))
+                    KeenAPI.del(`/workspaces/${KeenStore.activeWorkspace}/edges/${edgeId}`)
+                        .then(() => selectWorkspace(KeenStore.activeWorkspace))
                         .catch(() => alert("Failed to delete edge."));
                 }
             };
@@ -2547,8 +2492,8 @@ document.addEventListener('DOMContentLoaded', () => {
             e.stopPropagation();
             contextMenu.classList.add('hidden');
             if (confirm("Delete this node? This will also cascade delete any connected edges.")) {
-                fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${node.id || node.value}`, { method: 'DELETE' })
-                    .then(() => selectWorkspace(activeWorkspace))
+                KeenAPI.del(`/workspaces/${KeenStore.activeWorkspace}/nodes/${node.id || node.value}`)
+                    .then(() => selectWorkspace(KeenStore.activeWorkspace))
                     .catch(() => alert("Failed to delete node."));
             }
         };
@@ -2722,14 +2667,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             try {
-                const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/nodes/${nodeId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type, value, metadata })
-                });
+                const res = await KeenAPI.put(`/workspaces/${KeenStore.activeWorkspace}/nodes/${nodeId}`, { type, value, metadata });
                 if (res.ok) {
                     modalEditNode.classList.remove('active');
-                    selectWorkspace(activeWorkspace);
+                    selectWorkspace(KeenStore.activeWorkspace);
                     termPrint(`Node updated: ${value}`, 'sys-msg');
                 } else {
                     const err = await res.json();
@@ -2763,14 +2704,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             try {
-                const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/edges/${edgeId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ relationship, metadata })
-                });
+                const res = await KeenAPI.put(`/workspaces/${KeenStore.activeWorkspace}/edges/${edgeId}`, { relationship, metadata });
                 if (res.ok) {
                     modalEditEdge.classList.remove('active');
-                    selectWorkspace(activeWorkspace);
+                    selectWorkspace(KeenStore.activeWorkspace);
                     termPrint(`Edge updated: ${relationship}`, 'sys-msg');
                 } else {
                     const err = await res.json();
@@ -2923,7 +2860,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function checkServerStatus() {
         try {
-            const res = await fetch(`${API_BASE}/health`, { method: 'GET' });
+            const res = await KeenAPI.get(`/health`);
             if (res.ok) {
                 if (statusIndicator && !statusIndicator.classList.contains('online')) {
                     statusIndicator.className = 'status-indicator online';
@@ -2955,7 +2892,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         termPrint(`[magic] Connecting for target: ${targetValue}`, 'sys-msg');
 
-        const ws = new WebSocket(`${WS_BASE}/magic/run`);
+        const ws = new WebSocket(KeenAPI.wsUrl(`/magic/run`));
         activeSockets.push(ws);
         activeSocketsMap.set(snackbarId, ws);
         let gotResult = false;
@@ -2963,7 +2900,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ws.onopen = () => {
             ws.send(JSON.stringify({
                 target: targetValue,
-                workspace_name: activeWorkspace || ""
+                workspace_name: KeenStore.activeWorkspace || ""
             }));
         };
 
@@ -2997,9 +2934,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Refresh workspace to show new nodes and edges
-            if (activeWorkspace) {
-                selectWorkspace(activeWorkspace);
-                pollAISuggestionsStatus(activeWorkspace);
+            if (KeenStore.activeWorkspace) {
+                selectWorkspace(KeenStore.activeWorkspace);
+                pollAISuggestionsStatus(KeenStore.activeWorkspace);
             }
         };
     }
@@ -3011,8 +2948,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Periodically refresh the active workspace graph to stream new nodes and edges in real time
     // but only when there is an active module run or magic chaining in progress.
     setInterval(() => {
-        if (activeWorkspace && activeSockets.length > 0) {
-            selectWorkspace(activeWorkspace);
+        if (KeenStore.activeWorkspace && activeSockets.length > 0) {
+            selectWorkspace(KeenStore.activeWorkspace);
         }
     }, 2000);
 
@@ -3039,7 +2976,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 exportMenu.classList.remove('show');
 
-                if (!activeWorkspace) {
+                if (!KeenStore.activeWorkspace) {
                     alert('No active workspace to export.');
                     return;
                 }
@@ -3051,11 +2988,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 showSnackbar(displayName, 'Generating export file...', 'info', 0, snackbarId);
 
                 try {
-                    const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/export?format=${format}`);
+                    const res = await KeenAPI.get(`/workspaces/${KeenStore.activeWorkspace}/export?format=${format}`);
                     if (res.ok) {
                         const blob = await res.blob();
                         // Guess filename from headers or default to workspace name
-                        let filename = `${activeWorkspace}_export.${format === 'stix2' ? 'json' : format}`;
+                        let filename = `${KeenStore.activeWorkspace}_export.${format === 'stix2' ? 'json' : format}`;
                         const disposition = res.headers.get('Content-Disposition');
                         if (disposition && disposition.indexOf('attachment') !== -1) {
                             const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
@@ -3165,7 +3102,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadAISettings() {
         try {
-            const res = await fetch(`${API_BASE}/config/preferences`);
+            const res = await KeenAPI.get(`/config/preferences`);
             if (res.ok) {
                 const prefs = await res.json();
                 if (prefAiEnabled) prefAiEnabled.checked = prefs.llm_thinking_partner_enabled === 'true';
@@ -3188,9 +3125,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Load API key if config is unlocked
-            if (isConfigUnlocked && prefAiProvider && prefAiApiKey) {
+            if (KeenStore.isConfigUnlocked && prefAiProvider && prefAiApiKey) {
                 const provider = prefAiProvider.value.toLowerCase();
-                const keysRes = await fetch(`${API_BASE}/config/keys`);
+                const keysRes = await KeenAPI.get(`/config/keys`);
                 if (keysRes.ok) {
                     const keys = await keysRes.json();
                     const matchingKey = keys.find(k => k.service.toLowerCase() === provider);
@@ -3223,29 +3160,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 // Save preferences
-                await fetch(`${API_BASE}/config/preferences`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
+                await KeenAPI.post(`/config/preferences`, {
                         llm_thinking_partner_enabled: enabled,
                         llm_provider: provider,
                         llm_model: model,
                         llm_base_url: baseUrl,
                         llm_export_suggestions_enabled: exportEnabled,
                         llm_export_analysis_enabled: exportAnalysisEnabled
-                    })
-                });
+                    });
 
                 // Save API key if provided and config is unlocked
-                if (apiKey && isConfigUnlocked) {
-                    await fetch(`${API_BASE}/config/keys`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
+                if (apiKey && KeenStore.isConfigUnlocked) {
+                    await KeenAPI.post(`/config/keys`, {
                             service: provider.toLowerCase(),
                             api_key: apiKey
-                        })
-                    });
+                        });
                     fetchApiKeys(); // Refresh keys list
                 }
 
@@ -3275,7 +3204,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let consecutiveErrors = 0;
 
         const checkStatus = async () => {
-            if (activeWorkspace !== workspaceName) {
+            if (KeenStore.activeWorkspace !== workspaceName) {
                 if (aiPollingInterval) {
                     clearInterval(aiPollingInterval);
                     aiPollingInterval = null;
@@ -3285,7 +3214,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
-                const res = await fetch(`${API_BASE}/workspaces/${workspaceName}/suggestions/status`);
+                const res = await KeenAPI.get(`/workspaces/${workspaceName}/suggestions/status`);
                 if (res.ok) {
                     consecutiveErrors = 0;
                     const statusData = await res.json();
@@ -3317,7 +3246,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         loadSuggestions();
 
                         setTimeout(() => {
-                            if (!aiPollingInterval && logsContainer && activeWorkspace === workspaceName) {
+                            if (!aiPollingInterval && logsContainer && KeenStore.activeWorkspace === workspaceName) {
                                 logsContainer.style.display = 'none';
                             }
                         }, 5000);
@@ -3347,10 +3276,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadSuggestions() {
-        if (!activeWorkspace || !suggestionsList) return;
+        if (!KeenStore.activeWorkspace || !suggestionsList) return;
 
         try {
-            const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/suggestions`);
+            const res = await KeenAPI.get(`/workspaces/${KeenStore.activeWorkspace}/suggestions`);
             if (res.ok) {
                 const data = await res.json();
                 let suggestions = [];
@@ -3527,13 +3456,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function submitFeedback(suggestionId, status, feedbackText) {
-        if (!activeWorkspace) return;
+        if (!KeenStore.activeWorkspace) return;
         try {
-            const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/suggestions/${suggestionId}/feedback`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status, feedback: feedbackText })
-            });
+            const res = await KeenAPI.post(`/workspaces/${KeenStore.activeWorkspace}/suggestions/${suggestionId}/feedback`, { status, feedback: feedbackText });
             if (res.ok) {
                 if (status === 'dismissed') {
                     showSnackbar("AI Suggestions", "Suggestion dismissed.", "info", 2000);
@@ -3553,7 +3478,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnAnalyzeGraph) {
         btnAnalyzeGraph.addEventListener('click', async () => {
-            if (!activeWorkspace) {
+            if (!KeenStore.activeWorkspace) {
                 alert('Please select a workspace first.');
                 return;
             }
@@ -3591,18 +3516,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Start polling immediately to show pulsing dot and activity log container
-            pollAISuggestionsStatus(activeWorkspace);
+            pollAISuggestionsStatus(KeenStore.activeWorkspace);
 
             try {
                 const payload = {};
                 if (userQuery) payload.user_query = userQuery;
                 if (selectedNodesPayload.length > 0) payload.selected_nodes = selectedNodesPayload;
 
-                const res = await fetch(`${API_BASE}/workspaces/${activeWorkspace}/suggestions/generate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                const res = await KeenAPI.post(`/workspaces/${KeenStore.activeWorkspace}/suggestions/generate`, payload);
                 if (res.ok) {
                     const suggestions = await res.json();
                     termPrint(`[AI Thinking Partner] Completed. Generated ${suggestions.length} suggestions.`, 'success');
@@ -3686,16 +3607,12 @@ document.addEventListener('DOMContentLoaded', () => {
             btnTestAiConn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
 
             try {
-                const res = await fetch(`${API_BASE}/config/ai/test`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
+                const res = await KeenAPI.post(`/config/ai/test`, {
                         provider,
                         model,
                         base_url: baseUrl,
                         api_key: apiKey
-                    })
-                });
+                    });
                 if (res.ok) {
                     const data = await res.json();
                     if (data.success) {
@@ -3726,15 +3643,11 @@ document.addEventListener('DOMContentLoaded', () => {
             btnDetectAiModel.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Detecting...';
 
             try {
-                const res = await fetch(`${API_BASE}/config/ai/detect-models`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
+                const res = await KeenAPI.post(`/config/ai/detect-models`, {
                         provider,
                         base_url: baseUrl,
                         api_key: apiKey
-                    })
-                });
+                    });
                 if (res.ok) {
                     const data = await res.json();
                     if (data.success && data.models && data.models.length > 0) {
