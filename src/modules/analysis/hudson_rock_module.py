@@ -1,6 +1,6 @@
-from src.utils.user_agents import UserAgents
-from src.utils.print_utils import error, success
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, success
+from src.utils.user_agents import UserAgents
 
 
 class HudsonRockModule(BaseModule):
@@ -122,7 +122,7 @@ class HudsonRockModule(BaseModule):
             )
 
     async def _save_results(self, target: str, results: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces
+        from src.core.result_builder import NodeFactory, ResultBuilder, STIXNamespaces
 
         stealers = results.get("stealers", [])
 

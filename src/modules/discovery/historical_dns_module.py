@@ -1,11 +1,12 @@
 import asyncio
+
 import dns.resolver
 from bs4 import BeautifulSoup
 
-from src.utils.print_utils import info, success, warn
-from src.utils.user_agents import UserAgents
 from src.core.base_module import BaseModule
 from src.modules.discovery.subdomain_module import SubdomainModule
+from src.utils.print_utils import info, success, warn
+from src.utils.user_agents import UserAgents
 
 
 class HistoricalDnsModule(BaseModule):
@@ -359,7 +360,7 @@ class HistoricalDnsModule(BaseModule):
         return vulnerable
 
     async def _save_results(self, target: str, results: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         ip_history = results.get("ip_history", [])
         subdomains = results.get("subdomains", [])

@@ -1,8 +1,8 @@
 import os
 import sys
 
-from src.utils.print_utils import error, info
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, info
 
 # Repo root (…/keen-py), four levels up from this file, used to locate the
 # vendored Sherlock submodule regardless of the process working directory.
@@ -120,7 +120,7 @@ class SherlockModule(BaseModule):
         )
 
     async def _save_results(self, target: str, results: dict[str, str]) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         builder = ResultBuilder()
         builder.add_node(

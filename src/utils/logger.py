@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 from loguru import logger
 
 # Ids of the handlers this module manages, so reconfiguring (e.g. toggling debug
@@ -37,7 +38,9 @@ def setup_logger(debug_mode: bool = False):
         console_format = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{module}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
         console_level = "DEBUG"
     else:
-        console_format = "<level>{level: <8}</level> <cyan>|</cyan> <level>{message}</level>"
+        console_format = (
+            "<level>{level: <8}</level> <cyan>|</cyan> <level>{message}</level>"
+        )
         console_level = "INFO"
 
     # Add console handler
@@ -48,10 +51,15 @@ def setup_logger(debug_mode: bool = False):
     # Add file handler with verbose formatting
     file_format = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
     file_id = logger.add(
-        "logs/keen.log", format=file_format, level="DEBUG", rotation="10 MB", compression="zip"
+        "logs/keen.log",
+        format=file_format,
+        level="DEBUG",
+        rotation="10 MB",
+        compression="zip",
     )
 
     _MANAGED_HANDLERS = [console_id, file_id]
+
 
 def set_debug_mode(enable: bool):
     """

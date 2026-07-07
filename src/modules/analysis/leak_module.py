@@ -1,8 +1,7 @@
-from src.utils.print_utils import warn, error, success
+from src.core.base_module import BaseModule
+from src.utils.print_utils import error, success, warn
 from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
-
-from src.core.base_module import BaseModule
 
 
 class LeakModule(BaseModule):
@@ -571,8 +570,8 @@ class LeakModule(BaseModule):
             return []
 
     async def _save_results(self, target: str, results: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces
         from src.core.pattern_extractor import PatternExtractor
+        from src.core.result_builder import NodeFactory, ResultBuilder, STIXNamespaces
 
         target_type = results.get("type", "email")
         leaks = results.get("leaks", [])

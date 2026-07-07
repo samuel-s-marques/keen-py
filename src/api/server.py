@@ -1,30 +1,29 @@
-from src.utils.config_util import get_valid_name
-import os
-import json
 import asyncio
 import contextlib
-import uvicorn
-from typing import Optional, Dict, Any, Generator, List, Union
 import io
+import json
+import os
 import re
+from typing import Any, Dict, Generator, List, Optional, Union
 
+import uvicorn
 from fastapi import (
+    BackgroundTasks,
+    Depends,
     FastAPI,
+    Request,
     WebSocket,
     WebSocketDisconnect,
-    Depends,
-    Request,
-    BackgroundTasks,
 )
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 from pydantic import BaseModel
 
-from loguru import logger
-
-from src.core.managers import ConfigManager, WorkspaceManager
 from src.core.loader import load_modules
+from src.core.managers import ConfigManager, WorkspaceManager
+from src.utils.config_util import get_valid_name
 
 app = FastAPI(title="Keen API Web Server")
 
@@ -604,8 +603,9 @@ async def test_proxies(config: ConfigManager = Depends(get_config)) -> Dict[str,
             bg_config.close()
             return
 
-        import httpx
         import time
+
+        import httpx
 
         sem = asyncio.Semaphore(10)
 
@@ -712,8 +712,9 @@ def export_workspace(
             status_code=400, content={"error": f"Unsupported export format: {format}"}
         )
 
-    import tempfile
     import os
+    import tempfile
+
     from fastapi.responses import FileResponse
 
     ext_map = {
@@ -732,7 +733,7 @@ def export_workspace(
         wm = WorkspaceManager(w["path"], name=name)
         wm.export(format, temp_path)
         wm.close()
-    except Exception as e:
+    except Exception:
         logger.exception("Workspace export failed")
         if os.path.exists(temp_path):
             try:

@@ -1,10 +1,11 @@
-from src.utils.print_utils import warn, info, error
-from src.utils.utils import clean_node_value
-import re
 import asyncio
+import re
 from collections import deque
+
 from src.core.loader import load_modules
 from src.core.options import as_option
+from src.utils.print_utils import error, info, warn
+from src.utils.utils import clean_node_value
 from src.utils.validator import InputValidator
 
 # Precompiled once instead of on every detect_type() call.

@@ -45,7 +45,7 @@ class DatabaseEngine:
 
     def _set_user_version(self, version: int) -> None:
         # PRAGMA values cannot be parameterized; coerce to int to stay safe.
-        self.conn.execute(f"PRAGMA user_version = {int(version)}")
+        self.conn.execute(f"PRAGMA user_version = {version}")
 
     def column_exists(self, table: str, column: str) -> bool:
         cursor = self.conn.execute(f"PRAGMA table_info({table})")

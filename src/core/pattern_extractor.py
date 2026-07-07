@@ -1,8 +1,9 @@
 import os
 import uuid
 from typing import Any
-from src.core.result_builder import ResultBuilder, NodeFactory
+
 from src.core.managers import ConfigManager
+from src.core.result_builder import NodeFactory, ResultBuilder
 
 
 class PatternExtractor:

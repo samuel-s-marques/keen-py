@@ -1,17 +1,18 @@
-from pathlib import Path
-from src.utils.config_util import get_valid_name
 import base64
 import json
 import os
 import sqlite3
 import threading
+from pathlib import Path
+from typing import Any
+
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from typing import Any
 
 from src.core.database_engine import DatabaseEngine
 from src.core.exporters import export_workspace
+from src.utils.config_util import get_valid_name
 
 
 class ConfigManager(DatabaseEngine):
@@ -151,7 +152,9 @@ class ConfigManager(DatabaseEngine):
     @staticmethod
     def _migrate_config_v1(db) -> None:
         """v0 -> v1: workspaces.description for databases created before it existed."""
-        db.add_column_if_missing("workspaces", "description", "description TEXT DEFAULT ''")
+        db.add_column_if_missing(
+            "workspaces", "description", "description TEXT DEFAULT ''"
+        )
 
     def add_proxy(self, url: str) -> bool:
         cursor = self.conn.cursor()

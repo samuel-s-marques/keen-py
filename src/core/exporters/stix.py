@@ -1,5 +1,6 @@
-import uuid
 import json
+import uuid
+
 from src.core.result_builder import STIXNamespaces
 
 

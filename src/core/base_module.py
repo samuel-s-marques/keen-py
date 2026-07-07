@@ -1,15 +1,13 @@
-from src.core.managers import WorkspaceManager
-from src.core.options import as_option
 from contextlib import contextmanager
-from typing import Any
-from typing import Callable
-from typing import Literal
+from typing import Any, Callable, Literal
+
 from rich.console import Console
 from rich.table import Table
 
-from src.utils.validator import InputValidator
+from src.core.managers import WorkspaceManager
+from src.core.options import as_option
 from src.utils.print_utils import error
-
+from src.utils.validator import InputValidator
 
 # Strong references to fire-and-forget background tasks
 _BACKGROUND_TASKS: set = set()

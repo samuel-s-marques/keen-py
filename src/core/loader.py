@@ -1,5 +1,6 @@
 import ast
 import os
+
 from loguru import logger
 
 
@@ -174,8 +175,9 @@ def _scan_modules(root_dir: str) -> dict:
                     )
                     try:
                         import importlib
-                        from src.core.base_module import BaseModule
                         import inspect
+
+                        from src.core.base_module import BaseModule
 
                         mod = importlib.import_module(module_path)
                         for name, obj in inspect.getmembers(mod):

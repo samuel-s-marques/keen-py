@@ -1,8 +1,9 @@
-import os
 import json
+import os
 import time
 from datetime import datetime
 from typing import Any
+
 import httpx
 
 from src.utils.print_utils import error, warn
@@ -27,6 +28,7 @@ async def get_bootstrap_data(client: httpx.AsyncClient | None = None) -> dict | 
     try:
         os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
         from contextlib import asynccontextmanager
+
         @asynccontextmanager
         async def get_bootstrap_client():
             if client is not None:
@@ -43,7 +45,9 @@ async def get_bootstrap_data(client: httpx.AsyncClient | None = None) -> dict | 
                     json.dump(data, f)
                 return data
     except Exception as e:
-        warn(f"Failed to download IANA RDAP bootstrap data: {str(e)}. Using local cache if available.")
+        warn(
+            f"Failed to download IANA RDAP bootstrap data: {str(e)}. Using local cache if available."
+        )
         # If fetch fails, try to load expired cache as fallback
         if os.path.exists(CACHE_PATH):
             try:
@@ -76,7 +80,7 @@ def get_vcard_property(vcard_array: list, prop_name: str) -> Any:
     """Parses a jCard vcardArray to extract the value of a specific property."""
     if not vcard_array or len(vcard_array) < 2 or vcard_array[0] != "vcard":
         return None
-    
+
     properties = vcard_array[1]
     for prop in properties:
         if isinstance(prop, list) and len(prop) >= 4 and prop[0] == prop_name:
@@ -114,11 +118,11 @@ def parse_date(date_str: str) -> datetime | None:
     """Safely parses an ISO 8601 RDAP date string into a datetime object."""
     if not date_str:
         return None
-    
+
     # Standardize 'Z' suffix to +00:00 timezone offset
     if date_str.endswith("Z"):
         date_str = date_str[:-1] + "+00:00"
-    
+
     try:
         # datetime.fromisoformat handles timezone suffixes in modern Python
         return datetime.fromisoformat(date_str)
@@ -134,14 +138,16 @@ def parse_date(date_str: str) -> datetime | None:
 def parse_rdap_domain_data(data: dict) -> dict[str, Any]:
     """Parses RDAP response JSON into a legacy WHOIS-compatible dictionary."""
     entities = data.get("entities", [])
-    
+
     # 1. Registrar
     registrar_name = None
     registrar_entity = find_entity_by_role(entities, "registrar")
     if registrar_entity:
         vcard = registrar_entity.get("vcardArray")
         if vcard:
-            registrar_name = get_vcard_property(vcard, "fn") or get_vcard_property(vcard, "org")
+            registrar_name = get_vcard_property(vcard, "fn") or get_vcard_property(
+                vcard, "org"
+            )
 
     # 2. Registrant Organization
     registrant_org = None
@@ -149,13 +155,15 @@ def parse_rdap_domain_data(data: dict) -> dict[str, Any]:
     if registrant_entity:
         vcard = registrant_entity.get("vcardArray")
         if vcard:
-            registrant_org = get_vcard_property(vcard, "fn") or get_vcard_property(vcard, "org")
+            registrant_org = get_vcard_property(vcard, "fn") or get_vcard_property(
+                vcard, "org"
+            )
 
     # 3. Dates (Creation, Last Changed, Expiration)
     creation_date = None
     updated_date = None
     expiration_date = None
-    
+
     for event in data.get("events", []):
         action = event.get("eventAction")
         date_val = parse_date(event.get("eventDate", ""))
@@ -193,7 +201,9 @@ def parse_rdap_domain_data(data: dict) -> dict[str, Any]:
     }
 
 
-async def query_rdap(domain: str, client: httpx.AsyncClient | None = None) -> dict[str, Any] | None:
+async def query_rdap(
+    domain: str, client: httpx.AsyncClient | None = None
+) -> dict[str, Any] | None:
     """Performs an RDAP query for a domain, falls back to rdap.org, and returns parsed data."""
     bootstrap_data = await get_bootstrap_data(client)
     base_url = get_rdap_base_url(domain, bootstrap_data)
@@ -206,25 +216,30 @@ async def query_rdap(domain: str, client: httpx.AsyncClient | None = None) -> di
         url = f"https://rdap.org/domain/{domain}"
 
     from contextlib import asynccontextmanager
+
     @asynccontextmanager
     async def get_active_client():
         if client is not None:
             yield client
         else:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=15) as local_client:
+            async with httpx.AsyncClient(
+                follow_redirects=True, timeout=15
+            ) as local_client:
                 yield local_client
 
     try:
         async with get_active_client() as active_client:
-            r = await active_client.get(url, headers={"Accept": "application/rdap+json"})
+            r = await active_client.get(
+                url, headers={"Accept": "application/rdap+json"}
+            )
             if r.status_code == 200:
                 return parse_rdap_domain_data(r.json())
-            
+
             # If query failed but we resolved via bootstrap, retry with rdap.org redirector
             if base_url:
                 r = await active_client.get(
                     f"https://rdap.org/domain/{domain}",
-                    headers={"Accept": "application/rdap+json"}
+                    headers={"Accept": "application/rdap+json"},
                 )
                 if r.status_code == 200:
                     return parse_rdap_domain_data(r.json())
@@ -235,12 +250,12 @@ async def query_rdap(domain: str, client: httpx.AsyncClient | None = None) -> di
                 async with get_active_client() as active_client:
                     r = await active_client.get(
                         f"https://rdap.org/domain/{domain}",
-                        headers={"Accept": "application/rdap+json"}
+                        headers={"Accept": "application/rdap+json"},
                     )
                     if r.status_code == 200:
                         return parse_rdap_domain_data(r.json())
             except Exception:
                 pass
         error(f"RDAP query failed for {domain}: {str(e)}")
-    
+
     return None

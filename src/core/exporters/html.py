@@ -1,7 +1,7 @@
 import datetime
+import html as _html_lib
 import json
 import re
-import html as _html_lib
 
 
 def _esc(value) -> str:
@@ -15,20 +15,35 @@ def md_to_html(md_text: str) -> str:
         return ""
     # Escape HTML special characters to prevent injection/broken layout
     html = md_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    
+
     # Convert bold **text**
     html = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", html)
     # Convert italic *text*
     html = re.sub(r"\*(.*?)\*", r"<em>\1</em>", html)
-    
+
     # Convert headers (###, ##, #)
-    html = re.sub(r"^### (.*?)$", r"<h4 style='color: var(--accent-cyan); margin-top: 12px; margin-bottom: 8px;'>\1</h4>", html, flags=re.MULTILINE)
-    html = re.sub(r"^## (.*?)$", r"<h3 style='color: #fff; margin-top: 16px; margin-bottom: 10px;'>\1</h3>", html, flags=re.MULTILINE)
-    html = re.sub(r"^# (.*?)$", r"<h2 style='color: #fff; margin-top: 20px; margin-bottom: 12px;'>\1</h2>", html, flags=re.MULTILINE)
-    
+    html = re.sub(
+        r"^### (.*?)$",
+        r"<h4 style='color: var(--accent-cyan); margin-top: 12px; margin-bottom: 8px;'>\1</h4>",
+        html,
+        flags=re.MULTILINE,
+    )
+    html = re.sub(
+        r"^## (.*?)$",
+        r"<h3 style='color: #fff; margin-top: 16px; margin-bottom: 10px;'>\1</h3>",
+        html,
+        flags=re.MULTILINE,
+    )
+    html = re.sub(
+        r"^# (.*?)$",
+        r"<h2 style='color: #fff; margin-top: 20px; margin-bottom: 12px;'>\1</h2>",
+        html,
+        flags=re.MULTILINE,
+    )
+
     # Convert bullet points * or -
     html = re.sub(r"^[*-] (.*?)$", r"<li>\1</li>", html, flags=re.MULTILINE)
-    
+
     # Convert newlines to <br/>
     html = html.replace("\n", "<br/>")
     return html
@@ -70,9 +85,7 @@ def export_to_html(
                 for k, v in meta.items():
                     if k in ["stix2", "misp"]:
                         continue
-                    meta_details += (
-                        f"<span class='meta-tag'><strong>{_esc(k)}:</strong> {_esc(v)}</span> "
-                    )
+                    meta_details += f"<span class='meta-tag'><strong>{_esc(k)}:</strong> {_esc(v)}</span> "
             if not meta_details:
                 meta_details = "<span class='meta-tag-empty'>No metadata</span>"
 

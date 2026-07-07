@@ -1,10 +1,10 @@
-from src.core.pattern_extractor import PatternExtractor
-from user_scanner.core.result import Result
-from src.utils.validator import InputValidator
 from user_scanner.core import engine as us_engine
+from user_scanner.core.result import Result
 
-from src.utils.print_utils import error, success
 from src.core.base_module import BaseModule
+from src.core.pattern_extractor import PatternExtractor
+from src.utils.print_utils import error, success
+from src.utils.validator import InputValidator
 
 
 class UserScannerModule(BaseModule):
@@ -85,7 +85,7 @@ class UserScannerModule(BaseModule):
         self.render(table)
 
     async def _save_results(self, target: str, results: list) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
         from src.utils.validator import InputValidator
 
         is_email = InputValidator.is_valid_email(target)

@@ -1,7 +1,8 @@
 from typing import Any, Dict, List, Set
-from src.utils.user_agents import UserAgents
-from src.utils.print_utils import error, success, info, warn
+
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, info, success, warn
+from src.utils.user_agents import UserAgents
 
 
 class GitHubModule(BaseModule):
@@ -193,14 +194,10 @@ class GitHubModule(BaseModule):
         return items
 
     async def get_orgs(self, target: str) -> List[Dict[str, Any]]:
-        return await self._get_paginated(
-            f"https://api.github.com/users/{target}/orgs"
-        )
+        return await self._get_paginated(f"https://api.github.com/users/{target}/orgs")
 
     async def get_repos(self, target: str) -> List[Dict[str, Any]]:
-        return await self._get_paginated(
-            f"https://api.github.com/users/{target}/repos"
-        )
+        return await self._get_paginated(f"https://api.github.com/users/{target}/repos")
 
     async def get_public_events(self, target: str) -> List[Dict[str, Any]]:
         events = await self._get_paginated(
@@ -287,7 +284,7 @@ class GitHubModule(BaseModule):
                 info(f"  [{date_str}] {clean_type} in {repo_name}")
 
     async def _save_results(self, target: str, results: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         profile = results.get("profile", {})
         orgs = results.get("orgs", [])

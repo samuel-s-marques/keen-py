@@ -1,14 +1,15 @@
 import asyncio
-from src.utils.user_agents import UserAgents
+import os
 import re
 import socket
-import os
+
+import dns.query
 import dns.resolver
 import dns.zone
-import dns.query
 
-from src.utils.print_utils import error, info
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, info
+from src.utils.user_agents import UserAgents
 
 
 class SubdomainModule(BaseModule):
@@ -171,12 +172,9 @@ class SubdomainModule(BaseModule):
                 try:
                     xfr = dns.query.xfr(ns_str, target, timeout=10)
                     zone = dns.zone.from_xfr(xfr)
-                    if zone:
-                        for name, node in zone.nodes.items():
-                            hostname = (
-                                f"{name}.{target}" if str(name) != "@" else target
-                            )
-                            subdomains.add(hostname.rstrip("."))
+                    for name, node in zone.nodes.items():
+                        hostname = f"{name}.{target}" if str(name) != "@" else target
+                        subdomains.add(hostname.rstrip("."))
                 except Exception:
                     pass
         except Exception:
@@ -308,7 +306,7 @@ class SubdomainModule(BaseModule):
         return subdomains
 
     async def _save_results(self, target: str, results: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         subdomains = results.get("subdomains", [])
 

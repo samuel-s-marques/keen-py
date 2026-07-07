@@ -1,5 +1,5 @@
-from src.utils.print_utils import error, warn, info
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, info, warn
 from src.utils.utils import get_bool
 
 
@@ -152,7 +152,7 @@ class EmailFinderModule(BaseModule):
         )
 
     async def save_hunter_results(self, data: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         builder = ResultBuilder()
 
@@ -248,10 +248,11 @@ class EmailFinderModule(BaseModule):
         Returns:
             dict[str, int]: Dictionary of email addresses with their probabilities.
         """
+        import asyncio
+
         from src.modules.enumeration.email_verification_module import (
             EmailVerificationModule,
         )
-        import asyncio
 
         module: EmailVerificationModule = EmailVerificationModule()
         results: dict[str, int] = {}
@@ -267,7 +268,7 @@ class EmailFinderModule(BaseModule):
         return results
 
     async def save_results(self, emails: list[str]) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         builder = ResultBuilder()
 

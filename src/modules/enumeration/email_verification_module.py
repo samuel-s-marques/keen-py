@@ -1,11 +1,12 @@
-from src.utils.user_agents import UserAgents
 import asyncio
 import smtplib
 import socket
+
 import dns.resolver
 
-from src.utils.print_utils import error, success, warn
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, success, warn
+from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
 
 ROLE_ACCOUNTS = {
@@ -387,7 +388,7 @@ class EmailVerificationModule(BaseModule):
             error(f"{email} looks risky or undeliverable.")
 
     async def _save_results(self, email: str, results: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         builder = ResultBuilder()
 

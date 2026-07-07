@@ -1,5 +1,5 @@
-from src.utils.print_utils import success
 from src.core.base_module import BaseModule
+from src.utils.print_utils import success
 
 
 class EmailToUsername(BaseModule):
@@ -38,7 +38,7 @@ class EmailToUsername(BaseModule):
         if not email or not username:
             return
 
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         builder = ResultBuilder()
         builder.add_node(NodeFactory.email(email))

@@ -1,5 +1,5 @@
-import unicodedata
 import re
+import unicodedata
 
 
 def get_valid_name(name: str) -> str:

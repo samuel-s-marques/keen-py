@@ -1,18 +1,18 @@
-from src.utils.banner import get_banner
+import asyncio
+import os
 import sys
-from src.core.managers import WorkspaceManager
-from src.core.managers import ConfigManager
+
 from cmd2 import Cmd, Color, stylize
 from rich.console import Console
-from rich.table import Table
 from rich.style import Style
-import os
-import asyncio
+from rich.table import Table
 
-from src.core.loader import load_modules
 from src.core.base_module import BaseModule
-from src.utils.print_utils import error, info, success
+from src.core.loader import load_modules
+from src.core.managers import ConfigManager, WorkspaceManager
+from src.utils.banner import get_banner
 from src.utils.logger import set_debug_mode
+from src.utils.print_utils import error, info, success
 
 
 class Shell(Cmd):
@@ -79,7 +79,8 @@ class Shell(Cmd):
             return True
 
         import getpass
-        from src.utils.print_utils import success, warn, error
+
+        from src.utils.print_utils import error, success, warn
 
         if self.config.has_master_password():
             print(
@@ -558,8 +559,9 @@ class Shell(Cmd):
             )
 
             async def test_single_proxy(p, sem):
-                import httpx
                 import time
+
+                import httpx
 
                 async with sem:
                     url = p["url"]
@@ -1083,7 +1085,9 @@ class Shell(Cmd):
                         )
                         return
                     try:
-                        self.config.add_workspace(name, db_file, f"Workspace for {name}")
+                        self.config.add_workspace(
+                            name, db_file, f"Workspace for {name}"
+                        )
                     except ValueError as e:
                         error(str(e))
                         return

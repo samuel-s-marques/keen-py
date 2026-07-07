@@ -1,5 +1,5 @@
-from src.utils.print_utils import error, warn, success
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, success, warn
 
 
 class DomainEnrichmentModule(BaseModule):
@@ -198,7 +198,7 @@ class DomainEnrichmentModule(BaseModule):
         success(f"Enrichment completed for {target}")
 
     async def _save_results(self, target: str) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         builder = ResultBuilder()
         builder.add_node(NodeFactory.domain(target))

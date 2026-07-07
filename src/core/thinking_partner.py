@@ -1,11 +1,11 @@
 import json
-import asyncio
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 import httpx
 from loguru import logger
 
-from src.core.managers import ConfigManager, WorkspaceManager
 from src.core.loader import load_modules
+from src.core.managers import ConfigManager, WorkspaceManager
 from src.core.options import as_option
 
 
@@ -16,18 +16,24 @@ class ThinkingPartnerEngine:
     active_tasks: Dict[str, Dict[str, Any]] = {}
 
     @classmethod
-    def log_activity(cls, workspace_name: str, message: str, is_generating: bool = True):
+    def log_activity(
+        cls, workspace_name: str, message: str, is_generating: bool = True
+    ):
         """Append a timestamped log message to the workspace's AI session activity log."""
         import datetime
+
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         log_line = f"{timestamp} | {message}"
-        
+
         if workspace_name not in cls.active_tasks:
-            cls.active_tasks[workspace_name] = {"is_generating": is_generating, "logs": []}
-            
+            cls.active_tasks[workspace_name] = {
+                "is_generating": is_generating,
+                "logs": [],
+            }
+
         cls.active_tasks[workspace_name]["is_generating"] = is_generating
         cls.active_tasks[workspace_name]["logs"].append(log_line)
-        
+
         # Limit to last 50 log lines to prevent memory bloating
         if len(cls.active_tasks[workspace_name]["logs"]) > 50:
             cls.active_tasks[workspace_name]["logs"].pop(0)
@@ -43,11 +49,19 @@ class ThinkingPartnerEngine:
     ) -> List[Dict[str, Any]]:
         """Scan the current workspace graph and generate investigative suggestions using configured LLM."""
         # Initialize logging state
-        self.log_activity(workspace_name, "[AI] Initializing Thinking Partner scan...", is_generating=True)
+        self.log_activity(
+            workspace_name,
+            "[AI] Initializing Thinking Partner scan...",
+            is_generating=True,
+        )
         if user_query:
-            self.log_activity(workspace_name, f"[AI] Investigator Query: '{user_query}'")
+            self.log_activity(
+                workspace_name, f"[AI] Investigator Query: '{user_query}'"
+            )
         if selected_nodes:
-            self.log_activity(workspace_name, f"[AI] Focused on {len(selected_nodes)} selected nodes.")
+            self.log_activity(
+                workspace_name, f"[AI] Focused on {len(selected_nodes)} selected nodes."
+            )
         config = ConfigManager(self.config_path)
         workspace = None
         try:
@@ -55,7 +69,11 @@ class ThinkingPartnerEngine:
             enabled = config.get_preference("llm_thinking_partner_enabled")
             if enabled != "true":
                 logger.info("AI Thinking Partner is disabled in preferences.")
-                self.log_activity(workspace_name, "[AI] Thinking Partner is disabled in preferences.", is_generating=False)
+                self.log_activity(
+                    workspace_name,
+                    "[AI] Thinking Partner is disabled in preferences.",
+                    is_generating=False,
+                )
                 return []
 
             provider = config.get_preference("llm_provider") or "openai"
@@ -67,16 +85,24 @@ class ThinkingPartnerEngine:
             if config.is_unlocked():
                 api_key = config.get_api_key(provider.lower()) or ""
 
-            self.log_activity(workspace_name, f"[AI] Loading workspace '{workspace_name}' database...")
+            self.log_activity(
+                workspace_name, f"[AI] Loading workspace '{workspace_name}' database..."
+            )
             w = config.get_workspace(workspace_name)
             if not w:
                 logger.error(f"Workspace '{workspace_name}' not found.")
-                self.log_activity(workspace_name, f"[AI] Error: Workspace '{workspace_name}' not found.", is_generating=False)
+                self.log_activity(
+                    workspace_name,
+                    f"[AI] Error: Workspace '{workspace_name}' not found.",
+                    is_generating=False,
+                )
                 return []
 
             workspace = WorkspaceManager(w["path"], name=workspace_name)
 
-            self.log_activity(workspace_name, "[AI] Loading graph structure (nodes & edges)...")
+            self.log_activity(
+                workspace_name, "[AI] Loading graph structure (nodes & edges)..."
+            )
             # 1. Fetch Graph State
             nodes = []
             cursor = workspace.conn.cursor()
@@ -117,14 +143,23 @@ class ThinkingPartnerEngine:
                         "metadata": meta,
                     }
                 )
-            self.log_activity(workspace_name, f"[AI] Loaded {len(nodes)} nodes and {len(edges)} edges.")
+            self.log_activity(
+                workspace_name,
+                f"[AI] Loaded {len(nodes)} nodes and {len(edges)} edges.",
+            )
 
             if not nodes:
                 logger.info("No nodes in workspace. Skipping AI suggestion generation.")
-                self.log_activity(workspace_name, "[AI] Workspace is empty. Skipping scan.", is_generating=False)
+                self.log_activity(
+                    workspace_name,
+                    "[AI] Workspace is empty. Skipping scan.",
+                    is_generating=False,
+                )
                 return []
 
-            self.log_activity(workspace_name, "[AI] Scanning system for available OSINT modules...")
+            self.log_activity(
+                workspace_name, "[AI] Scanning system for available OSINT modules..."
+            )
 
             # 2. Load Available Modules to supply as tools/options to LLM
             modules = load_modules()
@@ -150,7 +185,10 @@ class ThinkingPartnerEngine:
                         }
                     )
 
-            self.log_activity(workspace_name, f"[AI] Context compiled. {len(modules_summary)} modules available.")
+            self.log_activity(
+                workspace_name,
+                f"[AI] Context compiled. {len(modules_summary)} modules available.",
+            )
 
             # 3. Fetch past feedback to allow reinforcement learning in prompts
             cursor.execute(
@@ -196,7 +234,10 @@ class ThinkingPartnerEngine:
             if feedback_history:
                 user_prompt["user_feedback_history"] = feedback_history
 
-            self.log_activity(workspace_name, f"[AI] Contacting LLM provider ({provider}) with model '{model}'...")
+            self.log_activity(
+                workspace_name,
+                f"[AI] Contacting LLM provider ({provider}) with model '{model}'...",
+            )
             # 5. Call LLM API
             suggestions_json = await self._call_llm(
                 provider=provider,
@@ -210,7 +251,10 @@ class ThinkingPartnerEngine:
             # 6. Parse and Save Suggestions
             parsed_suggestions = []
             if suggestions_json:
-                self.log_activity(workspace_name, "[AI] Received response from LLM. Parsing suggestions...")
+                self.log_activity(
+                    workspace_name,
+                    "[AI] Received response from LLM. Parsing suggestions...",
+                )
                 # Strip markdown code block wrappers if the LLM ignored instructions
                 cleaned_json = suggestions_json.strip()
                 if cleaned_json.startswith("```"):
@@ -235,7 +279,10 @@ class ThinkingPartnerEngine:
                     # Save high-level thoughts/analysis if present
                     if analysis_text:
                         workspace.add_analysis(analysis_text)
-                        self.log_activity(workspace_name, "[AI] Successfully saved high-level case analysis.")
+                        self.log_activity(
+                            workspace_name,
+                            "[AI] Successfully saved high-level case analysis.",
+                        )
 
                     for sug in suggestions_list:
                         sug_text = sug.get("suggestion_text")
@@ -257,20 +304,36 @@ class ThinkingPartnerEngine:
                     logger.info(
                         f"Successfully generated and stored {len(parsed_suggestions)} AI suggestions."
                     )
-                    self.log_activity(workspace_name, f"[AI] Analysis complete. Generated and saved {len(parsed_suggestions)} suggestions.", is_generating=False)
+                    self.log_activity(
+                        workspace_name,
+                        f"[AI] Analysis complete. Generated and saved {len(parsed_suggestions)} suggestions.",
+                        is_generating=False,
+                    )
                 except json.JSONDecodeError as e:
                     logger.error(
                         f"Failed to parse AI response as JSON: {e}. Raw response: {suggestions_json}"
                     )
-                    self.log_activity(workspace_name, f"[AI] Error: Failed to parse AI response as JSON.", is_generating=False)
+                    self.log_activity(
+                        workspace_name,
+                        "[AI] Error: Failed to parse AI response as JSON.",
+                        is_generating=False,
+                    )
             else:
-                self.log_activity(workspace_name, "[AI] Error: Empty or failed response from LLM.", is_generating=False)
+                self.log_activity(
+                    workspace_name,
+                    "[AI] Error: Empty or failed response from LLM.",
+                    is_generating=False,
+                )
 
             return parsed_suggestions
 
         except Exception as e:
             logger.exception(f"Error generating AI suggestions: {e}")
-            self.log_activity(workspace_name, f"[AI] Error: Exception occurred during scan: {str(e)}", is_generating=False)
+            self.log_activity(
+                workspace_name,
+                f"[AI] Error: Exception occurred during scan: {str(e)}",
+                is_generating=False,
+            )
             return []
         finally:
             if workspace:

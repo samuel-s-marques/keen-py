@@ -1,11 +1,11 @@
 import asyncio
-from typing import Any
-import dns.resolver
 import random
 import string
 
-from src.utils.print_utils import info, success, warn
+import dns.resolver
+
 from src.core.base_module import BaseModule
+from src.utils.print_utils import info, success, warn
 
 
 class DnsModule(BaseModule):
@@ -246,7 +246,7 @@ class DnsModule(BaseModule):
         return await lookup_asn(ip)
 
     async def _save_results(self, target: str, results: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory, STIXNamespaces
+        from src.core.result_builder import NodeFactory, ResultBuilder, STIXNamespaces
 
         records = results.get("records", [])
         asn_info = results.get("asn_info", [])

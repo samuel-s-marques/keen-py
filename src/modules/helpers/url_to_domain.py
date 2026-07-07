@@ -1,7 +1,7 @@
-from src.utils.print_utils import success
 from urllib.parse import urlparse
 
 from src.core.base_module import BaseModule
+from src.utils.print_utils import success
 
 
 class UrlToDomain(BaseModule):
@@ -32,7 +32,7 @@ class UrlToDomain(BaseModule):
         return domain
 
     async def _save_results(self, domain: str) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         url: str = str(self.options.get("TARGET")).lower()
         if not url:

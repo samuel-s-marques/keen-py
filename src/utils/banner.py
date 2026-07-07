@@ -1,6 +1,7 @@
+import random
+
 from cmd2 import Color, stylize
 from rich.style import Style
-import random
 
 fonts: list[str] = [
     "3-d",

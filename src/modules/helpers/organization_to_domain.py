@@ -1,15 +1,16 @@
-from src.utils.user_agents import UserAgents
-from src.utils.print_utils import info, error, success
-from ddgs import DDGS
+import asyncio
 import re
 import socket
 import ssl
-import asyncio
 import unicodedata
+
 from bs4 import BeautifulSoup
-from src.utils.rdap import query_rdap
+from ddgs import DDGS
 
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, info, success
+from src.utils.rdap import query_rdap
+from src.utils.user_agents import UserAgents
 
 
 class OrgToDomain(BaseModule):
@@ -386,7 +387,7 @@ class OrgToDomain(BaseModule):
         return total_word_len / span_len
 
     async def _save_results(self, name: str, domain: str) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         builder = ResultBuilder()
         builder.add_node(NodeFactory.organization(name))

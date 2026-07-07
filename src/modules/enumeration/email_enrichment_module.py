@@ -1,5 +1,5 @@
-from src.utils.print_utils import error, warn, success
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, success, warn
 
 
 class EmailEnrichmentModule(BaseModule):
@@ -30,7 +30,7 @@ class EmailEnrichmentModule(BaseModule):
         else:
             # Even with no enrichment data (e.g. no API key), persist the target
             # node so it appears in the workspace and magic chaining can proceed.
-            from src.core.result_builder import ResultBuilder, NodeFactory
+            from src.core.result_builder import NodeFactory, ResultBuilder
 
             builder = ResultBuilder()
             builder.add_node(NodeFactory.email(email))
@@ -165,7 +165,7 @@ class EmailEnrichmentModule(BaseModule):
         success(f"Enrichment completed for {email}")
 
     async def _save_results(self, email: str, results: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         name_data = results.get("name", {})
         full_name = name_data.get("fullName")

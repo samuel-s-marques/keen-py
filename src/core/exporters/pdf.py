@@ -1,39 +1,45 @@
-from typing import Any
-import json
 import datetime
+import json
+from typing import Any
 
 
 def _esc(value: Any) -> str:
     """Escape text so it is safe inside a reportlab ``Paragraph`` (which parses a
     mini-HTML markup dialect). Prevents crashes on literal ``&``/``<``/``>``."""
-    return (
-        str(value)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def md_to_pdf_html(md_text: str) -> str:
     if not md_text:
         return ""
     import re
+
     # Escape HTML special characters to prevent reportlab markup errors
     html = md_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    
+
     # Convert bold **text**
     html = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", html)
     # Convert italic *text*
     html = re.sub(r"\*(.*?)\*", r"<i>\1</i>", html)
-    
+
     # Convert headers
     html = re.sub(r"^### (.*?)$", r"<br/><b>\1</b><br/>", html, flags=re.MULTILINE)
-    html = re.sub(r"^## (.*?)$", r"<br/><font size='12'><b>\1</b></font><br/>", html, flags=re.MULTILINE)
-    html = re.sub(r"^# (.*?)$", r"<br/><font size='14'><b>\1</b></font><br/>", html, flags=re.MULTILINE)
-    
+    html = re.sub(
+        r"^## (.*?)$",
+        r"<br/><font size='12'><b>\1</b></font><br/>",
+        html,
+        flags=re.MULTILINE,
+    )
+    html = re.sub(
+        r"^# (.*?)$",
+        r"<br/><font size='14'><b>\1</b></font><br/>",
+        html,
+        flags=re.MULTILINE,
+    )
+
     # Convert bullet points
     html = re.sub(r"^[*-] (.*?)$", r"&bull; \1", html, flags=re.MULTILINE)
-    
+
     # Convert newlines to <br/>
     html = html.replace("\n", "<br/>")
     return html
@@ -50,18 +56,18 @@ def export_to_pdf(
     # reportlab is imported lazily so that importing this module (which happens
     # transitively when importing the shell or the API server) does not require
     # reportlab to be installed unless a PDF export is actually requested.
-    from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
     from reportlab.platypus import (
-        SimpleDocTemplate,
+        PageBreak,
         Paragraph,
+        SimpleDocTemplate,
         Spacer,
         Table,
         TableStyle,
-        PageBreak,
     )
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
 
     doc = SimpleDocTemplate(
         path,

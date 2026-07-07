@@ -1,9 +1,9 @@
-from src.utils.user_agents import UserAgents
 import phonenumbers
-from phonenumbers import geocoder, carrier, timezone
+from phonenumbers import carrier, geocoder, timezone
 
-from src.utils.print_utils import error, success, warn
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error, success, warn
+from src.utils.user_agents import UserAgents
 from src.utils.validator import InputValidator
 
 
@@ -161,7 +161,7 @@ class PhoneVerificationModule(BaseModule):
             error(f"Phone number {phone} is invalid or could not be verified.")
 
     async def _save_results(self, phone: str, results: dict) -> None:
-        from src.core.result_builder import ResultBuilder, NodeFactory
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         local = results.get("local", {})
         api = results.get("api") or {}

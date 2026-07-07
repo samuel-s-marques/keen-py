@@ -1,8 +1,8 @@
 from typing import Any
-from src.utils.rdap import query_rdap
 
-from src.utils.print_utils import error
 from src.core.base_module import BaseModule
+from src.utils.print_utils import error
+from src.utils.rdap import query_rdap
 
 
 class WhoisModule(BaseModule):
@@ -31,7 +31,9 @@ class WhoisModule(BaseModule):
 
     async def execute(self, target: str) -> None:
         try:
-            async with self.get_http_client(follow_redirects=True, timeout=15) as client:
+            async with self.get_http_client(
+                follow_redirects=True, timeout=15
+            ) as client:
                 w = await query_rdap(target, client=client)
             if w:
                 self.display_whois_results(target, w)
@@ -84,7 +86,8 @@ class WhoisModule(BaseModule):
 
     async def _save_results(self, target: str, results: dict) -> None:
         from datetime import datetime
-        from src.core.result_builder import ResultBuilder, NodeFactory
+
+        from src.core.result_builder import NodeFactory, ResultBuilder
 
         # Helper to convert datetime to string safely
         def format_date(d) -> str | None:
