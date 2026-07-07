@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "keen-osint"
+version = "0.1.0"
+description = "Keen — a reconnaissance / OSINT framework for ethical hacking and pentesting (interactive shell + web UI)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Samuel Marques" }]
+keywords = ["osint", "reconnaissance", "recon", "pentest", "security", "stix", "misp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Information Technology",
+    "Topic :: Security",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+]
+
+# Runtime dependencies. This is the canonical dependency list — the
+# check_dependencies() fallback in keen.py mirrors it for convenience only.
+dependencies = [
+    "beautifulsoup4==4.14.3",
+    "cmd2==3.5.1",
+    "cryptography==48.0.1",
+    "dnspython==2.8.0",
+    "fastapi==0.136.1",
+    "httpx==0.28.1",
+    "loguru==0.7.3",
+    "phonenumbers==9.0.30",
+    "pydantic==2.13.4",
+    "rich==15.0.0",
+    "uvicorn[standard]>=0.46.0",
+    "user-scanner>=1.3.6.2",
+    "ddgs>=9.14.4",
+    "reportlab>=4.5.1",
+    "python-whois>=0.9.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.0.3",
+    "pytest-asyncio==0.24.0",
+    "pytest-mock==3.14.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "types-reportlab>=4.5.1.20260521",
+]
+docs = [
+    "mkdocs-material>=9.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/sammwyy/keen-py"
+Documentation = "https://keen-py.readthedocs.io"
+Repository = "https://github.com/sammwyy/keen-py"
+
+[project.scripts]
+keen = "keen:main"
+
+[tool.setuptools]
+py-modules = ["keen"]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+# Keep plain `async def` tests skipped (current behavior) rather than auto-running
+# them; opt in per-test with @pytest.mark.asyncio. Silences the loop-scope warning.
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "scratch/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = ["vendors", "scratch", "web"]
+
+[tool.ruff.lint]
+# Conservative baseline: real errors (pyflakes) + import sorting. Expand over time.
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = ["E402"]  # late imports are intentional (lazy loading pattern)
