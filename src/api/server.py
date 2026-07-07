@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import secrets
 from typing import Any, Dict, Generator, List, Optional, Union
 
 import uvicorn
@@ -11,15 +12,19 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     FastAPI,
+    HTTPException,
     Request,
     WebSocket,
     WebSocketDisconnect,
 )
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.core.loader import load_modules
 from src.core.managers import ConfigManager, WorkspaceManager
@@ -46,6 +51,45 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --------------------------------------------------------------------------- #
+# Optional session-token authentication.
+#
+# Off by default (preserving the current single-user local workflow). When
+# enabled via KEEN_REQUIRE_AUTH=1, every /api route except the exemptions below
+# requires an `Authorization: Bearer <token>` header; a token is minted on a
+# successful /api/config/unlock and returned to the client. This closes the
+# "any host that can reach the port drives the tool" gap for networked
+# deployments without changing local behavior.
+# --------------------------------------------------------------------------- #
+_SESSION_TOKENS: set = set()
+_AUTH_EXEMPT_PATHS = {"/api/health", "/api/config/unlock", "/api"}
+
+
+def _auth_enabled() -> bool:
+    return os.environ.get("KEEN_REQUIRE_AUTH", "").lower() in ("1", "true", "yes")
+
+
+def _issue_session_token() -> str:
+    token = secrets.token_urlsafe(32)
+    _SESSION_TOKENS.add(token)
+    return token
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Enforce bearer-token auth on /api routes when KEEN_REQUIRE_AUTH is set."""
+    if _auth_enabled():
+        path = request.url.path
+        if path.startswith("/api") and path not in _AUTH_EXEMPT_PATHS:
+            header = request.headers.get("Authorization", "")
+            token = header[7:] if header.startswith("Bearer ") else ""
+            if token not in _SESSION_TOKENS:
+                return JSONResponse(
+                    status_code=401, content={"error": "Unauthorized"}
+                )
+    return await call_next(request)
+
 
 os.makedirs("web", exist_ok=True)
 
@@ -87,6 +131,14 @@ class ProxyCreate(BaseModel):
 class ProxyUpdate(BaseModel):
     url: Optional[str] = None
     is_enabled: Optional[bool] = None
+
+
+class ProxyToggle(BaseModel):
+    is_enabled: bool = True
+
+
+class ProxyLoad(BaseModel):
+    content: str = ""
 
 
 class NodePositionsUpdate(BaseModel):
@@ -177,6 +229,23 @@ def get_config() -> Generator[ConfigManager, None, None]:
         config.close()
 
 
+def validate_workspace_name(raw_name: str) -> str:
+    """Validate a workspace display name, returning the trimmed name.
+
+    Shared by workspace create and rename so the rule lives in one place.
+    Raises HTTPException(400) with the API's ``{"error": ...}`` shape on failure.
+    """
+    name = (raw_name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not all(c.isalnum() or c in " _-" for c in name):
+        raise HTTPException(
+            status_code=400,
+            detail="Workspace name must be alphanumeric (underscores/hyphens/spaces allowed).",
+        )
+    return name
+
+
 class WorkspaceNotFoundException(Exception):
     pass
 
@@ -186,6 +255,29 @@ def workspace_not_found_handler(
     request: Request, exc: WorkspaceNotFoundException
 ) -> JSONResponse:
     return JSONResponse(status_code=404, content={"error": "Workspace not found"})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException
+) -> JSONResponse:
+    """Return HTTP errors in the API's consistent ``{"error": ...}`` envelope
+    (the SPA reads ``.error``) rather than Starlette's default ``{"detail": ...}``."""
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Shape 422 request-validation failures like every other error."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Invalid request parameters.",
+            "details": jsonable_encoder(exc.errors()),
+        },
+    )
 
 
 def get_workspace_manager(
@@ -213,16 +305,25 @@ def health_check() -> Dict[str, str]:
 
 @app.get("/api/workspaces")
 def get_workspaces(
+    include_counts: bool = True,
     config: ConfigManager = Depends(get_config),
 ) -> List[Dict[str, Any]]:
     """Get all workspaces.
+
+    Args:
+        include_counts: When True (default), enrich each workspace with node/edge
+            counts — which requires opening every workspace DB file. Pass
+            ``?include_counts=false`` to skip that work for a fast listing.
 
     Returns:
         List[Dict[str, Any]]: List of workspaces.
     """
     workspaces = config.get_all_workspaces()
 
-    # Enrich with counts
+    if not include_counts:
+        return workspaces
+
+    # Enrich with counts (opens each workspace DB — one connection per file).
     for w in workspaces:
         wm = None
         try:
@@ -251,17 +352,7 @@ def create_workspace(
     Returns:
         Dict[str, Any]: Workspace.
     """
-    if not req.name.strip():
-        return JSONResponse(status_code=400, content={"error": "Name is required"})
-
-    name = req.name.strip()
-    if not all(c.isalnum() or c in " _-" for c in name):
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."
-            },
-        )
+    name = validate_workspace_name(req.name)
 
     filename = get_valid_name(name)
 
@@ -269,25 +360,35 @@ def create_workspace(
     try:
         config.add_workspace(name, db_file, req.description or "")
     except ValueError as e:
-        return JSONResponse(status_code=409, content={"error": str(e)})
+        raise HTTPException(status_code=409, detail=str(e))
     return {"success": True, "name": name, "path": db_file}
 
 
 @app.get("/api/workspaces/{name}/nodes", response_model=None)
 def get_workspace_nodes(
     wm: WorkspaceManager = Depends(get_workspace_manager),
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> Union[List[Dict[str, Any]], JSONResponse]:
-    """Get all nodes in a workspace.
+    """Get nodes in a workspace.
 
     Args:
         wm (WorkspaceManager): The active workspace manager dependency.
+        limit: Optional maximum number of nodes to return (omit for all).
+        offset: Number of rows to skip (for pagination); default 0.
 
     Returns:
         Union[List[Dict[str, Any]], JSONResponse]: List of nodes in the workspace or a 500 JSONResponse on exception.
     """
     try:
         cursor = wm.conn.cursor()
-        cursor.execute("SELECT * FROM nodes")
+        if limit is not None:
+            cursor.execute(
+                "SELECT * FROM nodes ORDER BY id LIMIT ? OFFSET ?",
+                (max(0, limit), max(0, offset)),
+            )
+        else:
+            cursor.execute("SELECT * FROM nodes")
         nodes = [dict(row) for row in cursor.fetchall()]
         for node in nodes:
             if node.get("metadata"):
@@ -334,18 +435,28 @@ def create_workspace_node(
 @app.get("/api/workspaces/{name}/edges", response_model=None)
 def get_workspace_edges(
     wm: WorkspaceManager = Depends(get_workspace_manager),
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> Union[List[Dict[str, Any]], JSONResponse]:
-    """Get all edges in a workspace.
+    """Get edges in a workspace.
 
     Args:
         name (str): Workspace name.
+        limit: Optional maximum number of edges to return (omit for all).
+        offset: Number of rows to skip (for pagination); default 0.
 
     Returns:
         List[Dict[str, Any]]: List of edges.
     """
     try:
         cursor = wm.conn.cursor()
-        cursor.execute("SELECT * FROM edge")
+        if limit is not None:
+            cursor.execute(
+                "SELECT * FROM edge ORDER BY id LIMIT ? OFFSET ?",
+                (max(0, limit), max(0, offset)),
+            )
+        else:
+            cursor.execute("SELECT * FROM edge")
         edges = [dict(row) for row in cursor.fetchall()]
         for edge in edges:
             if edge.get("metadata"):
@@ -371,7 +482,9 @@ def unlock_config(
         Dict[str, Any]: Success status.
     """
     if config.unlock(req.password):
-        return {"success": True}
+        # Mint a session token so clients can authenticate subsequent requests
+        # when KEEN_REQUIRE_AUTH is enabled (harmless/no-op otherwise).
+        return {"success": True, "token": _issue_session_token()}
     return JSONResponse(status_code=401, content={"error": "Invalid password"})
 
 
@@ -555,20 +668,19 @@ def delete_proxy(
 
 @app.post("/api/proxies/{proxy_id}/toggle")
 def toggle_proxy(
-    proxy_id: int, req: Dict[str, Any], config: ConfigManager = Depends(get_config)
+    proxy_id: int, req: ProxyToggle, config: ConfigManager = Depends(get_config)
 ) -> Dict[str, bool]:
     """Toggle is_enabled for a proxy."""
-    enabled = bool(req.get("is_enabled", True))
-    success = config.set_proxy_enabled(proxy_id, enabled)
+    success = config.set_proxy_enabled(proxy_id, req.is_enabled)
     return {"success": success}
 
 
 @app.post("/api/proxies/load")
 def load_proxies(
-    req: Dict[str, Any], config: ConfigManager = Depends(get_config)
+    req: ProxyLoad, config: ConfigManager = Depends(get_config)
 ) -> Dict[str, Any]:
     """Bulk import proxies from raw text content."""
-    content = req.get("content", "")
+    content = req.content
     if not content:
         return {"success": False, "error": "No proxies provided"}
 
@@ -665,17 +777,7 @@ def rename_workspace(
     Returns:
         Dict[str, Any]: Success status.
     """
-    if not req.new_name.strip():
-        return JSONResponse(status_code=400, content={"error": "Name is required"})
-
-    new_name = req.new_name.strip()
-    if not all(c.isalnum() or c in " _-" for c in new_name):
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": "Workspace name must be alphanumeric (underscores/hyphens/spaces allowed)."
-            },
-        )
+    new_name = validate_workspace_name(req.new_name)
 
     # Pass the display name through; rename_workspace derives the .keen filename
     # via get_valid_name internally.
@@ -683,7 +785,7 @@ def rename_workspace(
         config.rename_workspace(name, new_name)
         return {"success": True, "new_name": new_name}
     except Exception as e:
-        return JSONResponse(status_code=400, content={"error": str(e)})
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/workspaces/{name}/export")
@@ -1257,6 +1359,67 @@ def get_modules() -> Dict[str, Any]:
     return result
 
 
+async def _stream_run(websocket: WebSocket, run_coro_factory) -> None:
+    """Run ``run_coro_factory()`` while streaming its logs/stdout to ``websocket``.
+
+    Shared by the module- and magic-run WebSocket endpoints (previously ~120
+    duplicated lines each). Emits the same wire messages the SPA consumes:
+    ``{"type": "log", "message": ...}`` per line and, on success,
+    ``{"type": "status", "status": "completed"}``. Manages the per-run loguru
+    sink (scoped to this run via ``ws_run_id`` so concurrent runs don't bleed
+    logs into each other) and cancels the task if the client disconnects.
+    """
+    import uuid as _uuid
+
+    log_queue: asyncio.Queue = asyncio.Queue()
+    queue_sink = QueueSink(log_queue)
+    run_id = _uuid.uuid4().hex
+    handler_id = logger.add(
+        queue_sink.write,
+        format="{time:HH:mm:ss} | {level} | {message}",
+        level="DEBUG",
+        filter=lambda r: r["extra"].get("ws_run_id") == run_id,
+    )
+    stdout_redirector = QueueStdoutRedirector(log_queue)
+
+    async def _runner():
+        with contextlib.redirect_stdout(stdout_redirector):
+            with contextlib.redirect_stderr(stdout_redirector):
+                try:
+                    await run_coro_factory()
+                except Exception as e:
+                    logger.error(f"Execution failed: {e}")
+
+    try:
+        # Create the task inside contextualize so it inherits ws_run_id, which the
+        # sink filter above keys on.
+        with logger.contextualize(ws_run_id=run_id):
+            task = asyncio.create_task(_runner())
+
+        while not task.done() or not log_queue.empty():
+            try:
+                log_msg = await asyncio.wait_for(log_queue.get(), timeout=0.1)
+                await websocket.send_json({"type": "log", "message": log_msg})
+                log_queue.task_done()
+            except asyncio.TimeoutError:
+                continue
+            except Exception:
+                # Client disconnected — cancel execution and stop streaming.
+                task.cancel()
+                break
+
+        try:
+            await task
+            await websocket.send_json({"type": "status", "status": "completed"})
+        except asyncio.CancelledError:
+            pass
+    finally:
+        try:
+            logger.remove(handler_id)
+        except Exception:
+            pass
+
+
 @app.websocket("/ws/modules/{module_name:path}/run")
 async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
     """Run a module asynchronously via WebSocket.
@@ -1268,7 +1431,6 @@ async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
     await websocket.accept()
 
     config = ConfigManager("~/.keen/config.db")
-    handler_id = None
     workspace = None
 
     try:
@@ -1326,58 +1488,8 @@ async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
             await websocket.close()
             return
 
-        # Setup Log Streaming
-        log_queue = asyncio.Queue()
-        queue_sink = QueueSink(log_queue)
-
-        # Tag this run with a unique id and filter the sink to only records emitted
-        # within this run's context.
-        import uuid as _uuid
-
-        run_id = _uuid.uuid4().hex
-        handler_id = logger.add(
-            queue_sink.write,
-            format="{time:HH:mm:ss} | {level} | {message}",
-            level="DEBUG",
-            filter=lambda r: r["extra"].get("ws_run_id") == run_id,
-        )
-
-        stdout_redirector = QueueStdoutRedirector(log_queue)
-
-        # Run Module
-        async def run_module_task():
-            # Redirect stdout to our queue so rich/print go to WS
-            with contextlib.redirect_stdout(stdout_redirector):
-                with contextlib.redirect_stderr(stdout_redirector):
-                    try:
-                        await module_instance.run()
-                    except Exception as e:
-                        logger.error(f"Execution failed: {e}")
-
-        # Create the task inside contextualize so it inherits ws_run_id in its
-        # context, which the sink filter above keys on.
-        with logger.contextualize(ws_run_id=run_id):
-            module_task = asyncio.create_task(run_module_task())
-
-        # Stream logs down to WS concurrently
-        while not module_task.done() or not log_queue.empty():
-            try:
-                # Wait for next log with timeout to occasionally check task completion
-                log_msg = await asyncio.wait_for(log_queue.get(), timeout=0.1)
-                await websocket.send_json({"type": "log", "message": log_msg})
-                log_queue.task_done()
-            except asyncio.TimeoutError:
-                continue
-            except Exception:
-                # Client disconnected, cancel execution
-                module_task.cancel()
-                break
-
-        try:
-            await module_task
-            await websocket.send_json({"type": "status", "status": "completed"})
-        except asyncio.CancelledError:
-            pass
+        # Stream the module run's logs/stdout to the WebSocket.
+        await _stream_run(websocket, module_instance.run)
 
     except WebSocketDisconnect:
         pass
@@ -1387,11 +1499,6 @@ async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
         except Exception:
             pass
     finally:
-        if handler_id is not None:
-            try:
-                logger.remove(handler_id)
-            except Exception:
-                pass
         try:
             config.close()
         except Exception:
@@ -1413,7 +1520,6 @@ async def websocket_run_magic(websocket: WebSocket) -> None:
     await websocket.accept()
 
     config = ConfigManager("~/.keen/config.db")
-    handler_id = None
     workspace = None
 
     try:
@@ -1455,51 +1561,8 @@ async def websocket_run_magic(websocket: WebSocket) -> None:
 
         engine = MagicEngine(shell_adapter, config=config)
 
-        # Setup Log Streaming
-        log_queue = asyncio.Queue()
-        queue_sink = QueueSink(log_queue)
-
-        # Scope this connection's sink to its own run (see the module-run endpoint
-        # for details) so concurrent runs don't leak logs into each other.
-        import uuid as _uuid
-
-        run_id = _uuid.uuid4().hex
-        handler_id = logger.add(
-            queue_sink.write,
-            format="{time:HH:mm:ss} | {level} | {message}",
-            level="DEBUG",
-            filter=lambda r: r["extra"].get("ws_run_id") == run_id,
-        )
-
-        stdout_redirector = QueueStdoutRedirector(log_queue)
-
-        async def run_magic_task():
-            with contextlib.redirect_stdout(stdout_redirector):
-                with contextlib.redirect_stderr(stdout_redirector):
-                    try:
-                        await engine.run_chain(target, force=True)
-                    except Exception as e:
-                        logger.error(f"Magic execution failed: {e}")
-
-        with logger.contextualize(ws_run_id=run_id):
-            magic_task = asyncio.create_task(run_magic_task())
-        # Stream logs down to WS concurrently
-        while not magic_task.done() or not log_queue.empty():
-            try:
-                log_msg = await asyncio.wait_for(log_queue.get(), timeout=0.1)
-                await websocket.send_json({"type": "log", "message": log_msg})
-                log_queue.task_done()
-            except asyncio.TimeoutError:
-                continue
-            except Exception:
-                magic_task.cancel()
-                break
-
-        try:
-            await magic_task
-            await websocket.send_json({"type": "status", "status": "completed"})
-        except asyncio.CancelledError:
-            pass
+        # Stream the magic chain's logs/stdout to the WebSocket.
+        await _stream_run(websocket, lambda: engine.run_chain(target, force=True))
 
     except WebSocketDisconnect:
         pass
@@ -1509,11 +1572,6 @@ async def websocket_run_magic(websocket: WebSocket) -> None:
         except Exception:
             pass
     finally:
-        if handler_id is not None:
-            try:
-                logger.remove(handler_id)
-            except Exception:
-                pass
         try:
             config.close()
         except Exception:
