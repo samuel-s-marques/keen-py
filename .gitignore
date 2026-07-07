@@ -186,3 +186,9 @@ cython_debug/
 *.keen
 *.db
 cases
+# Keen: scratch is throwaway experiment territory (real tests live in tests/)
+scratch/
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
