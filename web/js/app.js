@@ -461,6 +461,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (res.ok) {
             isConfigUnlocked = true;
+            // Persist the session token returned by unlock. Used as a bearer
+            // token when the server runs with KEEN_REQUIRE_AUTH enabled; harmless
+            // otherwise. (window.keenAuthToken is read by future authenticated
+            // request helpers.)
+            try {
+                const data = await res.json();
+                if (data && data.token) {
+                    window.keenAuthToken = data.token;
+                    sessionStorage.setItem('keenAuthToken', data.token);
+                }
+            } catch (e) { /* no token in response body */ }
             apiKeysLocked.classList.add('hidden');
             apiKeysUnlocked.classList.remove('hidden');
             inputMasterPassword.value = '';
