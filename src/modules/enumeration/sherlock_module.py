@@ -1,5 +1,15 @@
+import os
+import sys
+
 from src.utils.print_utils import error, info
 from src.core.base_module import BaseModule
+
+# Repo root (…/keen-py), four levels up from this file, used to locate the
+# vendored Sherlock submodule regardless of the process working directory.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_SHERLOCK_SCRIPT = os.path.join(
+    _REPO_ROOT, "vendors", "sherlock", "sherlock_project", "sherlock.py"
+)
 
 
 class SherlockModule(BaseModule):
@@ -7,7 +17,7 @@ class SherlockModule(BaseModule):
         "name": "Sherlock",
         "description": "Searches for a username on the internet, using the Sherlock tool.",
         "author": "Samuel Marques",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "magic_consumes": ["user-account"],
         "options": {
             "TARGET": [
@@ -29,9 +39,17 @@ class SherlockModule(BaseModule):
         )
 
     async def sherlock(self, target: str, timeout: str = "5"):
+        if not os.path.isfile(_SHERLOCK_SCRIPT):
+            error(
+                "Sherlock is not available: the vendored submodule is missing. "
+                "Fetch it with:\n"
+                "    git submodule update --init --recursive"
+            )
+            return
+
         cmd: list[str] = [
-            "python",
-            "vendors/sherlock/sherlock_project/sherlock.py",
+            sys.executable or "python",
+            _SHERLOCK_SCRIPT,
             target,
             "--timeout",
             timeout,
