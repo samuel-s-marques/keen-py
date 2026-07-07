@@ -1,17 +1,18 @@
 import argparse
+import os
 import subprocess
 import sys
-
-
 from pathlib import Path
-import os
 
 
 def check_dependencies():
     """Check and install missing Python dependencies."""
     import hashlib
-    import json
     import importlib.util
+    import json
+
+    if os.environ.get("KEEN_SKIP_DEP_CHECK") and "--check-deps" not in sys.argv:
+        return
 
     required_packages = {
         "bs4": "beautifulsoup4",
@@ -105,7 +106,8 @@ def check_dependencies():
             pass
 
 
-if __name__ == "__main__":
+def main():
+    """Console entry point."""
     check_dependencies()
 
     from src.core.shell import Shell
@@ -141,3 +143,7 @@ if __name__ == "__main__":
     else:
         shell = Shell(debug_mode=args.debug)
         shell.cmdloop()
+
+
+if __name__ == "__main__":
+    main()
