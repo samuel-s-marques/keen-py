@@ -40,9 +40,9 @@ If you cloned without `--recurse-submodules`, fetch Sherlock afterwards:
 git submodule update --init --recursive
 ```
 
-> Dependencies are declared in `pyproject.toml`. `keen.py` also ships a convenience
-> auto-installer that pip-installs anything missing on first launch; set
-> `KEEN_SKIP_DEP_CHECK=1` to disable it once the package is installed.
+> Dependencies are declared in `pyproject.toml`. There is no runtime auto-installer —
+> if you launch `keen`/`python keen.py` without installing first, you'll get a clear
+> `[X] Missing dependency: <name>` error telling you to `pip install -e .`.
 
 ## Usage
 
@@ -51,7 +51,6 @@ After `pip install -e .` a `keen` command is available (equivalently, run `pytho
 ```bash
 keen                       # interactive shell
 keen --debug               # verbose logging
-keen --check-deps          # force dependency verification/install
 
 # Web server (FastAPI + uvicorn, serves the SPA in web/ plus REST + WebSocket):
 keen --web --host 127.0.0.1 --port 8000
