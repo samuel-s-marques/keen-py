@@ -9,8 +9,7 @@
 
 ```
 
-Keen, as in keen observation, is a reconnaissance and OSINT framework for ethical hacking and penetration testing. It runs as an interactive Metasploit-style shell and, optionally, as a FastAPI web server backing a single-page graph UI. Module results are ingested into per-case
-SQLite graph databases (`.keen` files) as STIX 2.1 / MISP-annotated nodes and edges, and can be auto-chained via the built-in *magic* engine.
+Keen, as in keen observation, is a reconnaissance and OSINT framework for ethical hacking and penetration testing. It runs as an interactive Metasploit-style shell and, optionally, as a FastAPI web server backing a single-page graph UI. Module results are ingested into per-case SQLite graph databases (`.keen` files) as STIX 2.1 / MISP-annotated nodes and edges, and can be auto-chained via the built-in *magic* engine.
 
 > **Ethical use only.** Keen is intended for authorized security testing, research,
 > and educational use. You are responsible for complying with all applicable laws
