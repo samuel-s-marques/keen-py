@@ -1342,6 +1342,46 @@ async def detect_ai_models(req: AITestRequest) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+@app.get("/api/workspaces/{name}/jobs", response_model=None)
+def get_workspace_jobs(
+    wm: WorkspaceManager = Depends(get_workspace_manager),
+    status: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> Union[List[Dict[str, Any]], JSONResponse]:
+    """List job_history rows for a workspace (the Web UI task panel's data source)."""
+    try:
+        return wm.list_jobs(status=status, limit=limit)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/workspaces/{name}/jobs/{job_id}", response_model=None)
+def get_workspace_job(
+    job_id: str, wm: WorkspaceManager = Depends(get_workspace_manager)
+) -> Union[Dict[str, Any], JSONResponse]:
+    job = wm.get_job(job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"error": "Job not found"})
+    return job
+
+
+@app.post("/api/workspaces/{name}/jobs/{job_id}/cancel", response_model=None)
+def cancel_workspace_job(
+    job_id: str, wm: WorkspaceManager = Depends(get_workspace_manager)
+) -> Union[Dict[str, Any], JSONResponse]:
+    """Cancel a job: interrupts its task if this process is still running it
+    (see ``_ACTIVE_JOB_TASKS``), and always records the cancellation intent in
+    ``job_history`` even if the task isn't found (already finished, or the
+    server restarted since it started)."""
+    task = _ACTIVE_JOB_TASKS.get(job_id)
+    if task and not task.done():
+        task.cancel()
+
+    if not wm.cancel_job(job_id):
+        return JSONResponse(status_code=404, content={"error": "Job not found"})
+    return {"success": True}
+
+
 @app.get("/api/modules")
 def get_modules() -> Dict[str, Any]:
     """Get all available modules.
@@ -1359,7 +1399,25 @@ def get_modules() -> Dict[str, Any]:
     return result
 
 
-async def _stream_run(websocket: WebSocket, run_coro_factory) -> None:
+
+# In-memory registry of running jobs' asyncio Tasks, keyed by job_id. A live
+# Task can't be persisted to SQLite, so this is what actually lets `jobs
+# cancel <job_id>` / POST .../jobs/{job_id}/cancel interrupt a run; the
+# job_history row (see WorkspaceManager) is the persisted record of intent
+# and outcome, and survives a process restart even though this registry doesn't.
+_ACTIVE_JOB_TASKS: Dict[str, asyncio.Task] = {}
+
+
+async def _stream_run(
+    websocket: WebSocket,
+    run_coro_factory,
+    *,
+    workspace: Optional[WorkspaceManager] = None,
+    config: Optional[ConfigManager] = None,
+    module_instance: Any = None,
+    module_name: str = "",
+    target_value: str = "",
+) -> None:
     """Run ``run_coro_factory()`` while streaming its logs/stdout to ``websocket``.
 
     Shared by the module- and magic-run WebSocket endpoints (previously ~120
@@ -1368,6 +1426,17 @@ async def _stream_run(websocket: WebSocket, run_coro_factory) -> None:
     ``{"type": "status", "status": "completed"}``. Manages the per-run loguru
     sink (scoped to this run via ``ws_run_id`` so concurrent runs don't bleed
     logs into each other) and cancels the task if the client disconnects.
+
+    When ``workspace`` is given, this also persists the run as a row in
+    ``job_history`` (created ``pending``->``running``, updated as structured
+    ``progress``/``node_added``/``edge_added`` events arrive from
+    ``module_instance``, and finalized ``completed``/``failed``/``cancelled``),
+    registers its task in ``_ACTIVE_JOB_TASKS`` for external cancellation, and
+    fires the notification dispatcher on completion. Any structured event a
+    module pushes via its ``_event_sink`` rides the same queue as plain log
+    strings -- dicts are forwarded as-is; strings are wrapped as ``log``
+    messages -- so the wire format gains new message types without breaking
+    clients that only understand ``log``/``status``/``error``.
     """
     import uuid as _uuid
 
@@ -1382,6 +1451,16 @@ async def _stream_run(websocket: WebSocket, run_coro_factory) -> None:
     )
     stdout_redirector = QueueStdoutRedirector(log_queue)
 
+    job_id: Optional[str] = None
+    if workspace is not None:
+        job_id = workspace.create_job(module_name or "unknown", target_value or "")
+        workspace.update_job(job_id, status="running")
+
+    if module_instance is not None and job_id is not None:
+        module_instance._event_sink = log_queue.put_nowait
+
+    run_error: list = []
+
     async def _runner():
         with contextlib.redirect_stdout(stdout_redirector):
             with contextlib.redirect_stderr(stdout_redirector):
@@ -1389,6 +1468,10 @@ async def _stream_run(websocket: WebSocket, run_coro_factory) -> None:
                     await run_coro_factory()
                 except Exception as e:
                     logger.error(f"Execution failed: {e}")
+                    run_error.append(str(e))
+
+    nodes_added = 0
+    edges_added = 0
 
     try:
         # Create the task inside contextualize so it inherits ws_run_id, which the
@@ -1396,10 +1479,13 @@ async def _stream_run(websocket: WebSocket, run_coro_factory) -> None:
         with logger.contextualize(ws_run_id=run_id):
             task = asyncio.create_task(_runner())
 
+        if job_id is not None:
+            _ACTIVE_JOB_TASKS[job_id] = task
+            await websocket.send_json({"type": "job_started", "job_id": job_id})
+
         while not task.done() or not log_queue.empty():
             try:
-                log_msg = await asyncio.wait_for(log_queue.get(), timeout=0.1)
-                await websocket.send_json({"type": "log", "message": log_msg})
+                item = await asyncio.wait_for(log_queue.get(), timeout=0.1)
                 log_queue.task_done()
             except asyncio.TimeoutError:
                 continue
@@ -1408,12 +1494,47 @@ async def _stream_run(websocket: WebSocket, run_coro_factory) -> None:
                 task.cancel()
                 break
 
+            if isinstance(item, dict):
+                if job_id is not None and workspace is not None:
+                    if item.get("type") == "progress":
+                        workspace.update_job(job_id, progress=item.get("progress"))
+                    elif item.get("type") == "node_added":
+                        nodes_added += 1
+                        workspace.update_job(job_id, nodes_added=nodes_added)
+                    elif item.get("type") == "edge_added":
+                        edges_added += 1
+                        workspace.update_job(job_id, edges_added=edges_added)
+                await websocket.send_json(item)
+            else:
+                if job_id is not None and workspace is not None:
+                    workspace.append_job_log(job_id, str(item))
+                await websocket.send_json({"type": "log", "message": item})
+
         try:
             await task
+            if job_id is not None and workspace is not None:
+                if run_error:
+                    workspace.update_job(
+                        job_id, status="failed", error_message=run_error[0]
+                    )
+                else:
+                    workspace.update_job(job_id, status="completed", progress=1.0)
             await websocket.send_json({"type": "status", "status": "completed"})
         except asyncio.CancelledError:
-            pass
+            if job_id is not None and workspace is not None:
+                workspace.update_job(job_id, status="cancelled")
     finally:
+        if job_id is not None:
+            _ACTIVE_JOB_TASKS.pop(job_id, None)
+            if config is not None and workspace is not None:
+                try:
+                    from src.utils.notifications import dispatch_job_notification
+
+                    job = workspace.get_job(job_id)
+                    if job:
+                        await dispatch_job_notification(config, job)
+                except Exception:
+                    pass
         try:
             logger.remove(handler_id)
         except Exception:
@@ -1438,6 +1559,7 @@ async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
         data = await websocket.receive_json()
         options = data.get("options", {})
         workspace_name = data.get("workspace_name", "")
+        confirm_active = bool(data.get("confirm", False))
 
         # Setup workspace context
         if workspace_name:
@@ -1477,6 +1599,9 @@ async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
         for key, val in options.items():
             module_instance.set_option(key, val)
 
+        if confirm_active:
+            module_instance.confirm_execution()
+
         # Check requirements
         if not module_instance.pre_run():
             await websocket.send_json(
@@ -1489,7 +1614,17 @@ async def websocket_run_module(websocket: WebSocket, module_name: str) -> None:
             return
 
         # Stream the module run's logs/stdout to the WebSocket.
-        await _stream_run(websocket, module_instance.run)
+        await _stream_run(
+            websocket,
+            module_instance.run,
+            workspace=workspace,
+            config=config,
+            module_instance=module_instance,
+            module_name=getattr(target_module_class, "metadata", {}).get(
+                "name", module_name
+            ),
+            target_value=str(options.get(module_instance.target_option, "")),
+        )
 
     except WebSocketDisconnect:
         pass
@@ -1561,8 +1696,19 @@ async def websocket_run_magic(websocket: WebSocket) -> None:
 
         engine = MagicEngine(shell_adapter, config=config)
 
-        # Stream the magic chain's logs/stdout to the WebSocket.
-        await _stream_run(websocket, lambda: engine.run_chain(target, force=True))
+        # Stream the magic chain's logs/stdout to the WebSocket. A magic chain
+        # invokes many modules internally (see MagicEngine._run_module), so
+        # this is tracked as one coarse-grained "magic_chain" job rather than
+        # one row per sub-module -- no module_instance to wire a fine-grained
+        # event sink to.
+        await _stream_run(
+            websocket,
+            lambda: engine.run_chain(target, force=True),
+            workspace=workspace,
+            config=config,
+            module_name="magic_chain",
+            target_value=target,
+        )
 
     except WebSocketDisconnect:
         pass
