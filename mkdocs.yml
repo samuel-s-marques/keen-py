@@ -17,6 +17,10 @@ nav:
                   - API Keys Management: getting-started/api_keys_management.md
                   - Proxy Management: getting-started/proxy_management.md
                   - Magic Engine: getting-started/magic_engine.md
+                  - Playbooks: getting-started/playbooks.md
+                  - Scope & Execution Safety: getting-started/scope_and_safety.md
+                  - Job Tracking: getting-started/jobs.md
+                  - Notifications: getting-started/notifications.md
                   - Web Server: getting-started/web.md
                   - AI Partner: getting-started/ai_partner.md
         - Modules:
