@@ -1,0 +1,335 @@
+/*
+ * Module catalog: dropdown building, option handling, and execution over WS.
+ */
+import { moduleSelect, moduleForm } from "./dom.js";
+import { showSnackbar, termPrint, updateSnackbar } from "./notifications.js";
+import { selectWorkspace } from "./workspaces.js";
+import { pollAISuggestionsStatus } from "./settings.js";
+
+export const NODE_TO_VALIDATOR_MAP = {
+    'email-addr': ['email'],
+    'email-dst': ['email'],
+    'domain-name': ['domain', 'url'],
+    'ipv4-addr': ['ip'],
+    'ipv6-addr': ['ip'],
+    'x-phone-number': ['phone'],
+    'phone-number': ['phone'],
+    'x-url': ['url'],
+    'person': ['name', 'username'],
+    'user-account': ['username'],
+    'organization': ['name', 'domain'],
+};
+
+// Tracks "moduleName:targetValue" strings to prevent duplicates
+const activeRuns = new Set();
+
+export function getRunKey(modName, options) {
+    // Try to find the primary target value from options for dedup
+    const mod = KeenStore.modulesData[modName];
+    let targetValue = '';
+    if (mod && mod.options) {
+        for (const [key, optMeta] of Object.entries(mod.options)) {
+            const validator = optMeta[3];
+            if (validator && options[key]) {
+                targetValue = options[key];
+                break;
+            }
+        }
+    }
+    // Fallback: if no validator-matched value, use first non-empty option value
+    if (!targetValue) {
+        for (const val of Object.values(options)) {
+            if (val) { targetValue = val; break; }
+        }
+    }
+    return `${modName}:${targetValue}`;
+}
+
+export function getTargetLabel(options, modName) {
+    const mod = KeenStore.modulesData[modName];
+    if (mod && mod.options) {
+        for (const [key, optMeta] of Object.entries(mod.options)) {
+            const validator = optMeta[3];
+            if (validator && options[key]) {
+                return options[key];
+            }
+        }
+    }
+    return null;
+}
+
+export function executeModule(modName, options) {
+    const runKey = getRunKey(modName, options);
+    const targetLabel = getTargetLabel(options, modName);
+    const displayName = formatModuleName(modName, KeenStore.modulesData[modName] || {});
+
+    // Duplicate prevention
+    if (activeRuns.has(runKey)) {
+        const msg = targetLabel
+            ? `Already running on ${targetLabel}`
+            : 'Already running';
+        showSnackbar(displayName, msg, 'warning', 3000);
+        return;
+    }
+
+    activeRuns.add(runKey);
+    const snackbarId = 'run-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+    const runMsg = targetLabel ? `Running on ${targetLabel}...` : 'Running...';
+    showSnackbar(displayName, runMsg, 'info', 0, snackbarId);
+
+    termPrint(`[${modName}] Connecting...`, 'sys-msg');
+
+    const ws = new WebSocket(KeenAPI.wsUrl(`/modules/${modName}/run`));
+    KeenStore.activeSockets.push(ws);
+    KeenStore.activeSocketsMap.set(snackbarId, ws);
+    let gotResult = false;
+
+    ws.onopen = () => {
+        ws.send(JSON.stringify({
+            workspace_name: KeenStore.activeWorkspace || "",
+            options: options
+        }));
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'log') {
+                termPrint(`[${modName}] ${data.message}`);
+            } else if (data.type === 'status') {
+                gotResult = true;
+                termPrint(`[${modName}] Completed: ${data.status}`, 'success');
+                updateSnackbar(snackbarId, displayName, 'Completed successfully', 'success', 4000);
+            } else if (data.type === 'error') {
+                gotResult = true;
+                termPrint(`[${modName}] Error: ${data.message}`, 'error');
+                updateSnackbar(snackbarId, displayName, `Error: ${data.message}`, 'error', 5000);
+            }
+        } catch (e) {
+            termPrint(`[${modName}] ${event.data}`);
+        }
+    };
+
+    ws.onclose = () => {
+        KeenStore.activeSockets = KeenStore.activeSockets.filter(s => s !== ws);
+        KeenStore.activeSocketsMap.delete(snackbarId);
+        activeRuns.delete(runKey);
+        termPrint(`[${modName}] Connection closed.`, 'sys-msg');
+
+        if (!gotResult) {
+            updateSnackbar(snackbarId, displayName, 'Connection closed', 'warning', 4000);
+        }
+
+        // Refresh workspace to show new nodes
+        if (KeenStore.activeWorkspace) {
+            selectWorkspace(KeenStore.activeWorkspace);
+            pollAISuggestionsStatus(KeenStore.activeWorkspace);
+        }
+    };
+}
+
+export function formatModuleName(key, mod) {
+    let cat = mod.category ? mod.category : "Uncategorized";
+    cat = cat.charAt(0).toUpperCase() + cat.slice(1);
+    cat = cat.replace(/[_-]/g, ' ');
+    const name = mod.name ? mod.name.replace(/[_-]/g, ' ') : key;
+    return `${cat} - ${name}`;
+}
+
+export function runModuleImmediately(modName, node) {
+    if (!modName || !KeenStore.modulesData[modName]) return;
+
+    const mod = KeenStore.modulesData[modName];
+    const options = {};
+    const validators = NODE_TO_VALIDATOR_MAP[node.type] || [];
+
+    if (mod.options) {
+        for (const [key, value] of Object.entries(mod.options)) {
+            let defVal = (value[0] !== undefined && value[0] !== null) ? value[0] : '';
+
+            // Auto-pull API keys if unlocked
+            if (KeenStore.isConfigUnlocked && KeenStore.configKeys[key.toUpperCase()]) {
+                defVal = KeenStore.configKeys[key.toUpperCase()];
+            }
+
+            // Check if this option should take the node's value
+            const validator = value[3];
+            if (validator) {
+                const vals = Array.isArray(validator)
+                    ? validator
+                    : validator.split(',').map(v => v.trim());
+                if (vals.some(v => validators.includes(v))) {
+                    defVal = node.clean_value || node.value;
+                }
+            }
+
+            if (defVal !== undefined && defVal !== null && defVal !== '') {
+                options[key] = defVal.toString().trim();
+            }
+        }
+    }
+
+    executeModule(modName, options);
+}
+
+export function buildModuleDropdown(compatibleValidators = [], prefillValue = null, platform = null) {
+    moduleSelect.innerHTML = '<option value="" disabled selected>-- Choose a module --</option>';
+
+    const compatGroup = document.createElement('optgroup');
+    compatGroup.label = platform ? `${platform.charAt(0).toUpperCase() + platform.slice(1)} Modules` : 'Compatible Modules';
+
+    const allGroup = document.createElement('optgroup');
+    allGroup.label = 'All Modules';
+
+    let firstMatch = null;
+
+    for (const key of Object.keys(KeenStore.modulesData).sort()) {
+        const mod = KeenStore.modulesData[key];
+        let isMatch = false;
+
+        if (compatibleValidators.length > 0 && mod.options) {
+            for (const [optName, optValue] of Object.entries(mod.options)) {
+                const validator = optValue[3];
+                if (validator) {
+                    const vals = Array.isArray(validator)
+                        ? validator
+                        : validator.split(',').map(v => v.trim());
+                    if (vals.some(v => compatibleValidators.includes(v))) {
+                        isMatch = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Platform-specific filtering: prioritize modules matching the platform prefix
+        if (isMatch && platform) {
+            const lowerKey = key.toLowerCase();
+            const lowerName = (mod.name || '').toLowerCase();
+            const lowerDesc = (mod.description || '').toLowerCase();
+            const lowerPlatform = platform.toLowerCase();
+            const platformMatch = lowerKey.includes(lowerPlatform) || lowerName.includes(lowerPlatform) || lowerDesc.includes(lowerPlatform);
+            // If platform-specific modules exist, mark non-matching ones as general
+            if (!platformMatch) {
+                isMatch = 'general';  // Still compatible but not platform-specific
+            }
+        }
+
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = formatModuleName(key, mod);
+
+        if (isMatch === true) {
+            // Direct platform match or non-platform compatible
+            if (!firstMatch) firstMatch = key;
+            compatGroup.appendChild(opt.cloneNode(true));
+        } else if (isMatch === 'general') {
+            // Compatible but not platform-specific — still add to compat group
+            if (!firstMatch) firstMatch = key;
+            compatGroup.appendChild(opt.cloneNode(true));
+        }
+        allGroup.appendChild(opt);
+    }
+
+    if (compatGroup.children.length > 0) {
+        moduleSelect.appendChild(compatGroup);
+    }
+    moduleSelect.appendChild(allGroup);
+
+    if (firstMatch && prefillValue) {
+        moduleSelect.value = firstMatch;
+        moduleSelect.dispatchEvent(new Event('change'));
+
+        setTimeout(() => {
+            const inputs = moduleForm.querySelectorAll('input, select');
+            for (const input of inputs) {
+                const optVal = KeenStore.modulesData[firstMatch].options[input.name];
+                if (optVal) {
+                    const validator = optVal[3];
+                    if (validator) {
+                        const vals = Array.isArray(validator)
+                            ? validator
+                            : validator.split(',').map(v => v.trim());
+                        if (vals.some(v => compatibleValidators.includes(v))) {
+                            input.value = prefillValue;
+                        }
+                    }
+                }
+            }
+        }, 50);
+    }
+}
+
+export async function fetchModules() {
+    try {
+        const res = await KeenAPI.get(`/modules`);
+        KeenStore.modulesData = await res.json();
+        buildModuleDropdown();
+    } catch (e) {
+        console.error('Failed to fetch modules', e);
+    }
+}
+
+export function runMagicChainingImmediately(targetValue) {
+    const runKey = `magic:${targetValue}`;
+    const displayName = `✨ Magic Chaining`;
+
+    if (activeRuns.has(runKey)) {
+        showSnackbar(displayName, `Already running on ${targetValue}`, 'warning', 3000);
+        return;
+    }
+
+    activeRuns.add(runKey);
+    const snackbarId = 'magic-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+    showSnackbar(displayName, `Initializing on ${targetValue}...`, 'info', 0, snackbarId);
+
+    termPrint(`[magic] Connecting for target: ${targetValue}`, 'sys-msg');
+
+    const ws = new WebSocket(KeenAPI.wsUrl(`/magic/run`));
+    KeenStore.activeSockets.push(ws);
+    KeenStore.activeSocketsMap.set(snackbarId, ws);
+    let gotResult = false;
+
+    ws.onopen = () => {
+        ws.send(JSON.stringify({
+            target: targetValue,
+            workspace_name: KeenStore.activeWorkspace || ""
+        }));
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'log') {
+                termPrint(`[magic] ${data.message}`);
+            } else if (data.type === 'status') {
+                gotResult = true;
+                termPrint(`[magic] Completed: ${data.status}`, 'success');
+                updateSnackbar(snackbarId, displayName, 'Completed successfully', 'success', 4000);
+            } else if (data.type === 'error') {
+                gotResult = true;
+                termPrint(`[magic] Error: ${data.message}`, 'error');
+                updateSnackbar(snackbarId, displayName, `Error: ${data.message}`, 'error', 5000);
+            }
+        } catch (e) {
+            termPrint(`[magic] ${event.data}`);
+        }
+    };
+
+    ws.onclose = () => {
+        KeenStore.activeSockets = KeenStore.activeSockets.filter(s => s !== ws);
+        KeenStore.activeSocketsMap.delete(snackbarId);
+        activeRuns.delete(runKey);
+        termPrint(`[magic] Connection closed.`, 'sys-msg');
+
+        if (!gotResult) {
+            updateSnackbar(snackbarId, displayName, 'Connection closed', 'warning', 4000);
+        }
+
+        // Refresh workspace to show new nodes and edges
+        if (KeenStore.activeWorkspace) {
+            selectWorkspace(KeenStore.activeWorkspace);
+            pollAISuggestionsStatus(KeenStore.activeWorkspace);
+        }
+    };
+}
