@@ -30,6 +30,28 @@
         activeWorkspace: null,
         isConfigUnlocked: false,
 
+        // Shared mutable app state (formerly loose `let`s in the app.js closure).
+        // Feature modules read/write these as KeenStore.<name>.
+        modulesData: {},
+        network: null,
+        nodesDataSet: null,
+        edgesDataSet: null,
+        currentWorkspace: null,
+        lastSelection: { nodes: [], edges: [] },
+        minimap: null,
+        minimapNodesDataSet: null,
+        minimapEdgesDataSet: null,
+        configKeys: {},
+        currentNodes: [],
+        currentEdges: [],
+        activeSockets: [],
+        activeSocketsMap: new Map(),
+        currentWorkspaces: [],
+        timelineTimestamps: [],
+        isTimelinePlaying: false,
+        timelineTimer: null,
+        aiPollingInterval: null,
+
         // --- mutators (notify subscribers) ---
         setActiveWorkspace: function (name) {
             this.activeWorkspace = name || null;
