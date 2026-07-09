@@ -126,6 +126,21 @@ class BaseModule:
     target_option: str = "TARGET"
     lower_target: bool = True
 
+    @property
+    def execution_safety(self) -> str:
+        """PTES execution-safety classification: ``passive`` (default), ``active``, or ``intrusive``.
+
+        Declared via ``metadata["execution_safety"]``. This only exposes the
+        classification a module declares about itself -- enforcement (a
+        confirmation gate at the CLI/web/agent call sites before an
+        active/intrusive module runs) is separate follow-on work, not
+        performed here.
+        """
+        value = self.metadata.get("execution_safety", "passive")
+        if value not in ("passive", "active", "intrusive"):
+            return "passive"
+        return value
+
     def get_target(self) -> str:
         """Read and normalize the module's target option (see target_option/lower_target)."""
         raw = str(self.options.get(self.target_option, ""))
@@ -343,15 +358,24 @@ class BaseModule:
             if should_close and config:
                 config.close()
 
-    async def post_run(self, results: dict) -> None:
+    async def post_run(self, results: dict, raw: Any = None) -> None:
         """Post-processing pipeline run after a module finishes.
 
-        Three focused stages, each isolated in its own method for clarity and
+        Four focused stages, each isolated in its own method for clarity and
         testability:
-          1. :meth:`_ingest_results` — persist nodes/edges to the workspace.
-          2. :meth:`_run_magic_chaining` — auto-chain follow-up modules.
+          0. :meth:`_record_provenance` — append a hash-chained ledger entry.
+          1. :meth:`_ingest_results` — persist nodes/edges to the workspace,
+             quarantining any node outside the case's declared scope.
+          2. :meth:`_run_magic_chaining` — auto-chain follow-up modules,
+             skipping anything just quarantined by stage 1.
           3. :meth:`_trigger_thinking_partner` — schedule AI pivot suggestions.
-        Stages 2 and 3 are best-effort and never abort ingestion.
+        Stages 0, 2, and 3 are best-effort and never abort ingestion.
+
+        ``raw`` is an optional pre-parse payload (e.g. the raw API response)
+        to archive in the provenance ledger alongside the parsed results, per
+        the "Case Replayability" guardrail. Most modules don't pass this yet
+        --- wiring per-module raw capture is separate, mechanical follow-up
+        work, not a requirement of this pipeline.
         """
         workspace = self.workspace
         if not workspace:
@@ -360,16 +384,44 @@ class BaseModule:
             )
             return
 
-        self._ingest_results(workspace, results)
-        await self._run_magic_chaining(results)
+        self._record_provenance(workspace, results, raw)
+        quarantined = self._ingest_results(workspace, results)
+        await self._run_magic_chaining(results, quarantined)
         await self._trigger_thinking_partner(workspace)
 
-    def _ingest_results(self, workspace, results: dict) -> None:
+    def _record_provenance(self, workspace, results: dict, raw: Any = None) -> None:
+        """Stage 0: append a hash-chained provenance ledger entry for this run."""
+        try:
+            target = self.options.get(self.target_option, "")
+            payload = (
+                raw
+                if raw is not None
+                else {
+                    "nodes_added": len(results.get("nodes", [])),
+                    "edges_added": len(results.get("edges", [])),
+                }
+            )
+            workspace.append_ledger_entry(
+                actor=self.metadata.get("name", "module"),
+                action="run",
+                target_value=str(target),
+                raw_payload=payload,
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to record provenance ledger entry: {e}")
+
+    def _ingest_results(self, workspace, results: dict) -> set:
         """Stage 1: deduplicate and persist nodes and edges into the workspace.
 
         The whole graph is written inside a single ``workspace.batch()`` so all
         inserts share one transaction/commit instead of committing per row.
+        Nodes falling outside the case's declared scope (see
+        ``workspace.is_in_scope``) are still ingested -- so the investigator
+        can see what was found -- but flagged as quarantined rather than
+        silently treated as in-scope. Returns the set of quarantined values so
+        stage 2 can exclude them from auto-chaining.
         """
+        quarantined: set = set()
         with workspace.batch():
             node_map = {}
             for node in results.get("nodes", []):
@@ -379,6 +431,15 @@ class BaseModule:
                     metadata=node.get("metadata", {}),
                 )
                 node_map[node["value"]] = node_id
+
+                if node_id and not workspace.is_in_scope(
+                    node["value"], node.get("type")
+                ):
+                    workspace.quarantine_node(
+                        node_id,
+                        reason="Discovered value falls outside the case's declared scope.",
+                    )
+                    quarantined.add(node["value"])
 
             for edge in results.get("edges", []):
                 source_id = node_map.get(edge["source"]) or workspace.get_node_id(
@@ -394,16 +455,22 @@ class BaseModule:
                         target_id=target_id,
                         relationship=edge.get("relationship", "RELATED"),
                         metadata=edge.get("metadata", {}),
+                        confidence=edge.get("confidence"),
                     )
+        return quarantined
 
-    async def _run_magic_chaining(self, results: dict) -> None:
+    async def _run_magic_chaining(self, results: dict, quarantined: set | None = None) -> None:
         """Stage 2: auto-chain modules on discovered nodes, if enabled.
 
         Guarded by ``shell._magic_running`` so a chain triggered from within a
-        chain doesn't recurse into a second engine.
+        chain doesn't recurse into a second engine. Nodes stage 1 just
+        quarantined are excluded -- an out-of-scope discovery must stop the
+        crawl there, not silently continue expanding it.
         """
         if not self.shell or getattr(self.shell, "_magic_running", False) is True:
             return
+
+        quarantined = quarantined or set()
 
         with self._config_ctx() as config:
             if config.get_preference("magic_enabled") != "true":
@@ -415,7 +482,7 @@ class BaseModule:
                 engine = MagicEngine(self.shell, config=config)
                 for node in results.get("nodes", []):
                     val = node.get("value")
-                    if val:
+                    if val and val not in quarantined:
                         await engine.run_chain(
                             val, initial_type=node.get("type"), force=False
                         )

@@ -562,6 +562,15 @@ class WorkspaceManager(DatabaseEngine):
         # NOTE: no CURRENT_TIMESTAMP default — SQLite forbids it on ALTER ADD.
         db.add_column_if_missing("edge", "timestamp", "timestamp DATETIME")
 
+    @staticmethod
+    def _migrate_graph_v2(db) -> None:
+        """v1 -> v2: quarantine columns on nodes + confidence score on edges."""
+        db.add_column_if_missing(
+            "nodes", "is_quarantined", "is_quarantined INTEGER DEFAULT 0"
+        )
+        db.add_column_if_missing("nodes", "quarantine_reason", "quarantine_reason TEXT")
+        db.add_column_if_missing("edge", "confidence", "confidence REAL")
+
     def _initialize_schema(self) -> None:
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -591,7 +600,35 @@ class WorkspaceManager(DatabaseEngine):
         # Bring pre-existing databases (created before these columns were part of
         # the CREATE statements) up to date. Fresh DBs already have the columns,
         # so these are no-ops on them. Versioned so they run at most once.
-        self.run_migrations([self._migrate_graph_v1])
+        self.run_migrations([self._migrate_graph_v1, self._migrate_graph_v2])
+
+        # Case-level scope boundary (approved domains/IPs/CIDRs/orgs/persons).
+        # Empty table = scope enforcement is opted out (see is_in_scope()).
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scope (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope_type TEXT NOT NULL,
+                value TEXT NOT NULL,
+                consent_basis TEXT DEFAULT '',
+                added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Immutable, hash-chained provenance ledger: one row per module run /
+        # operator action. entry_hash covers prev_hash + the row's own fields,
+        # so any retroactive edit or deletion breaks the chain detectably.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS provenance_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prev_hash TEXT NOT NULL,
+                entry_hash TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                action TEXT NOT NULL,
+                target_value TEXT,
+                raw_payload TEXT,
+                timestamp TEXT NOT NULL
+            )
+        """)
 
         # Create AI suggestions table if it doesn't exist
         cursor.execute("""
@@ -662,6 +699,7 @@ class WorkspaceManager(DatabaseEngine):
         target_id: int,
         relationship: str,
         metadata: dict | None = None,
+        confidence: float | None = None,
     ) -> None:
         cursor = self.conn.cursor()
         meta_json = json.dumps(metadata or {})
@@ -674,8 +712,8 @@ class WorkspaceManager(DatabaseEngine):
             return
 
         cursor.execute(
-            "INSERT INTO edge (source_id, target_id, relationship, metadata) VALUES (?, ?, ?, ?)",
-            (source_id, target_id, relationship, meta_json),
+            "INSERT INTO edge (source_id, target_id, relationship, metadata, confidence) VALUES (?, ?, ?, ?, ?)",
+            (source_id, target_id, relationship, meta_json, confidence),
         )
         self._commit()
 
@@ -766,6 +804,277 @@ class WorkspaceManager(DatabaseEngine):
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM edge WHERE id = ?", (edge_id,))
         self.conn.commit()
+
+    # ------------------------------------------------------------------ #
+    # Scope: case-level boundary (approved domains/IPs/CIDRs/orgs/persons).
+    # An empty scope table means enforcement is opted out (see is_in_scope),
+    # so declaring no scope never breaks an existing or newly-created case.
+    # ------------------------------------------------------------------ #
+    def add_scope_entry(
+        self, scope_type: str, value: str, consent_basis: str = ""
+    ) -> int | None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT INTO scope (scope_type, value, consent_basis) VALUES (?, ?, ?)",
+            (scope_type, value, consent_basis),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def remove_scope_entry(self, entry_id: int) -> bool:
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM scope WHERE id = ?", (entry_id,))
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def list_scope(self) -> list[dict]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM scope ORDER BY added_at ASC, id ASC")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def is_in_scope(self, value: str, node_type: str | None = None) -> bool:
+        """Check whether ``value`` falls inside a declared scope entry.
+
+        If no scope entries exist, enforcement is opted out and everything
+        passes -- this is what keeps a case with no declared scope (the
+        default today) from having every discovery quarantined.
+        """
+        import ipaddress
+
+        entries = self.list_scope()
+        if not entries:
+            return True
+
+        value_norm = value.strip().lower()
+        for entry in entries:
+            scope_type = str(entry.get("scope_type", "")).lower()
+            scope_value = str(entry.get("value", "")).strip().lower()
+
+            if scope_type == "domain":
+                if value_norm == scope_value or value_norm.endswith("." + scope_value):
+                    return True
+            elif scope_type in ("ip", "cidr"):
+                try:
+                    network = ipaddress.ip_network(scope_value, strict=False)
+                    if ipaddress.ip_address(value_norm) in network:
+                        return True
+                except ValueError:
+                    if value_norm == scope_value:
+                        return True
+            else:  # organization, person, or any other declared type
+                if value_norm == scope_value:
+                    return True
+        return False
+
+    # ------------------------------------------------------------------ #
+    # Quarantine: nodes discovered outside the declared scope are still
+    # ingested (so the investigator can see what was found) but flagged
+    # rather than silently treated as in-scope.
+    # ------------------------------------------------------------------ #
+    def quarantine_node(self, node_id: int, reason: str = "") -> bool:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE nodes SET is_quarantined = 1, quarantine_reason = ? WHERE id = ?",
+            (reason, node_id),
+        )
+        self._commit()
+        return cursor.rowcount > 0
+
+    def unquarantine_node(self, node_id: int) -> bool:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE nodes SET is_quarantined = 0, quarantine_reason = NULL WHERE id = ?",
+            (node_id,),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def get_quarantined_nodes(self) -> list[dict]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM nodes WHERE is_quarantined = 1")
+        return [dict(row) for row in cursor.fetchall()]
+
+    # ------------------------------------------------------------------ #
+    # Entity resolution: the one shared merge primitive every "combine
+    # these into one identity" feature should call instead of growing its
+    # own bespoke merge logic. Never invoked automatically -- callers are
+    # expected to have already gotten an operator's explicit confirmation.
+    # ------------------------------------------------------------------ #
+    def merge_nodes(
+        self, canonical_id: int, absorbed_ids: list[int], actor: str = "operator"
+    ) -> bool:
+        """Merge ``absorbed_ids`` into ``canonical_id``, re-pointing all edges.
+
+        Absorbed nodes' metadata is unioned into the canonical node's
+        (canonical wins on key conflicts) under a ``merged_from`` lineage
+        list, their rows are removed, and any edge left duplicated or
+        self-looping by the re-point is cleaned up. Logs one provenance
+        ledger entry for the whole operation.
+        """
+        with self._db_lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT metadata FROM nodes WHERE id = ?", (canonical_id,))
+            canonical_row = cursor.fetchone()
+            if not canonical_row:
+                return False
+
+            canonical_meta = json.loads(canonical_row["metadata"] or "{}")
+            merged_from = canonical_meta.get("merged_from", [])
+            if not isinstance(merged_from, list):
+                merged_from = []
+
+            absorbed_values = []
+            for absorbed_id in absorbed_ids:
+                if absorbed_id == canonical_id:
+                    continue
+                cursor.execute(
+                    "SELECT value, metadata FROM nodes WHERE id = ?", (absorbed_id,)
+                )
+                absorbed_row = cursor.fetchone()
+                if not absorbed_row:
+                    continue
+
+                absorbed_meta = json.loads(absorbed_row["metadata"] or "{}")
+                canonical_meta = {**absorbed_meta, **canonical_meta}
+                merged_from.append(absorbed_row["value"])
+                absorbed_values.append(absorbed_row["value"])
+
+                cursor.execute(
+                    "UPDATE edge SET source_id = ? WHERE source_id = ?",
+                    (canonical_id, absorbed_id),
+                )
+                cursor.execute(
+                    "UPDATE edge SET target_id = ? WHERE target_id = ?",
+                    (canonical_id, absorbed_id),
+                )
+                cursor.execute("DELETE FROM nodes WHERE id = ?", (absorbed_id,))
+
+            if not absorbed_values:
+                return False
+
+            canonical_meta["merged_from"] = merged_from
+            cursor.execute(
+                "UPDATE nodes SET metadata = ? WHERE id = ?",
+                (json.dumps(canonical_meta), canonical_id),
+            )
+
+            # Clean up edges the re-point turned into self-loops or duplicates.
+            cursor.execute("DELETE FROM edge WHERE source_id = target_id")
+            cursor.execute("""
+                DELETE FROM edge WHERE id NOT IN (
+                    SELECT MIN(id) FROM edge GROUP BY source_id, target_id, relationship
+                )
+            """)
+            self.conn.commit()
+
+        self.append_ledger_entry(
+            actor=actor,
+            action="merge_nodes",
+            target_value=str(canonical_id),
+            raw_payload={"absorbed": absorbed_values},
+        )
+        return True
+
+    # ------------------------------------------------------------------ #
+    # Immutable provenance ledger. Hash-chained (Merkle-style, not a
+    # blockchain): each entry's hash covers the previous entry's hash, so
+    # a retroactively edited or deleted row breaks the chain detectably.
+    # ------------------------------------------------------------------ #
+    def append_ledger_entry(
+        self,
+        actor: str,
+        action: str,
+        target_value: str | None = None,
+        raw_payload: Any = None,
+    ) -> dict:
+        import hashlib
+        from datetime import datetime, timezone
+
+        with self._db_lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "SELECT entry_hash FROM provenance_ledger ORDER BY id DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            prev_hash = row["entry_hash"] if row else "0" * 64
+
+            timestamp = datetime.now(timezone.utc).isoformat()
+            raw_json = (
+                raw_payload
+                if isinstance(raw_payload, str)
+                else json.dumps(raw_payload if raw_payload is not None else {})
+            )
+            digest_input = (
+                f"{prev_hash}|{actor}|{action}|{target_value or ''}|"
+                f"{raw_json}|{timestamp}"
+            )
+            entry_hash = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
+
+            cursor.execute(
+                """INSERT INTO provenance_ledger
+                   (prev_hash, entry_hash, actor, action, target_value, raw_payload, timestamp)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    prev_hash,
+                    entry_hash,
+                    actor,
+                    action,
+                    target_value,
+                    raw_json,
+                    timestamp,
+                ),
+            )
+            self.conn.commit()
+            return {
+                "id": cursor.lastrowid,
+                "prev_hash": prev_hash,
+                "entry_hash": entry_hash,
+                "actor": actor,
+                "action": action,
+                "target_value": target_value,
+                "raw_payload": raw_json,
+                "timestamp": timestamp,
+            }
+
+    def get_ledger_entries(self, limit: int | None = None) -> list[dict]:
+        cursor = self.conn.cursor()
+        query = "SELECT * FROM provenance_ledger ORDER BY id ASC"
+        if limit:
+            query += f" LIMIT {limit}"
+        cursor.execute(query)
+        return [dict(row) for row in cursor.fetchall()]
+
+    def verify_ledger_integrity(self) -> bool:
+        """Recompute the hash chain end-to-end; False if any entry was tampered with."""
+        import hashlib
+
+        prev_hash = "0" * 64
+        for entry in self.get_ledger_entries():
+            digest_input = (
+                f"{prev_hash}|{entry['actor']}|{entry['action']}|"
+                f"{entry['target_value'] or ''}|{entry['raw_payload'] or ''}|"
+                f"{entry['timestamp']}"
+            )
+            expected_hash = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
+            if entry["prev_hash"] != prev_hash or entry["entry_hash"] != expected_hash:
+                return False
+            prev_hash = entry["entry_hash"]
+        return True
+
+    # ------------------------------------------------------------------ #
+    # Attachment storage. A non-breaking convention: a sibling directory
+    # next to the existing .keen file, rather than moving/renaming it into
+    # a directory-per-case layout (which would touch every cases/<name>.keen
+    # call site across the CLI and web server for no current consumer).
+    # ------------------------------------------------------------------ #
+    def attachments_dir(self, subtype: str = "") -> str:
+        """Return (creating if necessary) this workspace's attachments directory."""
+        base_dir = os.path.dirname(self.path) or "."
+        target = os.path.join(base_dir, f"{self.name}_attachments")
+        if subtype:
+            target = os.path.join(target, subtype)
+        os.makedirs(target, exist_ok=True)
+        return target
 
     def export(self, type: str, path: str) -> None:
         if type not in ["pdf", "html", "markdown", "json", "stix2"]:
