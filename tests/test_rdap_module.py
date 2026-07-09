@@ -3,6 +3,8 @@ import shutil
 import sys
 import asyncio
 
+import pytest
+
 # Ensure project root is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -16,6 +18,7 @@ class MockShell:
         self.workspace = workspace
 
 
+@pytest.mark.skip(reason="live network call against google.com's real RDAP endpoint — unsuitable for CI")
 async def test_rdap_direct():
     print("=== Testing Direct RDAP Query ===")
     domain = "google.com"
@@ -31,6 +34,7 @@ async def test_rdap_direct():
     assert data.get('registrar') is not None, "Registrar should not be None"
 
 
+@pytest.mark.skip(reason="live network call against google.com's real RDAP/WHOIS data — unsuitable for CI")
 async def test_module_integration():
     print("\n=== Testing WhoisModule with RDAP Integration ===")
     

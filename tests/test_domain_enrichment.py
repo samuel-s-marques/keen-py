@@ -3,6 +3,8 @@ import shutil
 import sys
 import asyncio
 
+import pytest
+
 # Ensure project root is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -145,6 +147,7 @@ class MockShell:
     def __init__(self, workspace):
         self.workspace = workspace
 
+@pytest.mark.asyncio
 async def test_module():
     print("=== Testing DomainEnrichmentModule Display and Save ===")
     
