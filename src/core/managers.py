@@ -111,8 +111,12 @@ class ConfigManager(DatabaseEngine):
             VALUES ('magic_interactive', 'false')
         """)
         cursor.execute("""
-            INSERT OR IGNORE INTO preferences (key, value) 
+            INSERT OR IGNORE INTO preferences (key, value)
             VALUES ('magic_exclude_modules', '')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value)
+            VALUES ('magic_allow_active_modules', 'false')
         """)
         cursor.execute("""
             INSERT OR IGNORE INTO preferences (key, value) 
@@ -139,8 +143,24 @@ class ConfigManager(DatabaseEngine):
             VALUES ('llm_base_url', '')
         """)
         cursor.execute("""
-            INSERT OR IGNORE INTO preferences (key, value) 
+            INSERT OR IGNORE INTO preferences (key, value)
             VALUES ('llm_thinking_partner_enabled', 'false')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value)
+            VALUES ('notify_channels', '')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value)
+            VALUES ('notify_on_job_failure', 'true')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value)
+            VALUES ('notify_on_job_complete', 'false')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO preferences (key, value)
+            VALUES ('notify_min_duration_seconds', '300')
         """)
 
         self.conn.commit()
@@ -630,6 +650,27 @@ class WorkspaceManager(DatabaseEngine):
             )
         """)
 
+        # Job/task history: one row per module or playbook run against this
+        # workspace, updated as it progresses. The single source of truth for
+        # `jobs list/history/cancel/logs` (CLI) and the Web UI task panel --
+        # both read this table instead of keeping their own in-memory state.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS job_history (
+                job_id TEXT PRIMARY KEY,
+                workspace_name TEXT NOT NULL,
+                module_name TEXT NOT NULL,
+                target_value TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                progress REAL DEFAULT 0.0,
+                started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ended_at DATETIME,
+                error_message TEXT,
+                nodes_added INTEGER DEFAULT 0,
+                edges_added INTEGER DEFAULT 0,
+                logs TEXT DEFAULT '[]'
+            )
+        """)
+
         # Create AI suggestions table if it doesn't exist
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS ai_suggestions (
@@ -1075,6 +1116,129 @@ class WorkspaceManager(DatabaseEngine):
             target = os.path.join(target, subtype)
         os.makedirs(target, exist_ok=True)
         return target
+
+    # ------------------------------------------------------------------ #
+    # Job/task persistence. Every long-running run (a module, a magic chain,
+    # a playbook step) creates one row here and updates it as it progresses,
+    # so CLI `jobs` commands, the Web UI task panel, and the notification
+    # dispatcher (src/utils/notifications.py) all read one source of truth
+    # instead of three different in-memory structures.
+    # ------------------------------------------------------------------ #
+    def create_job(self, module_name: str, target_value: str) -> str:
+        import uuid as _uuid
+
+        job_id = _uuid.uuid4().hex
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """INSERT INTO job_history
+               (job_id, workspace_name, module_name, target_value, status)
+               VALUES (?, ?, ?, ?, 'pending')""",
+            (job_id, self.name, module_name, target_value),
+        )
+        self.conn.commit()
+        return job_id
+
+    def update_job(
+        self,
+        job_id: str,
+        status: str | None = None,
+        progress: float | None = None,
+        error_message: str | None = None,
+        nodes_added: int | None = None,
+        edges_added: int | None = None,
+    ) -> bool:
+        cursor = self.conn.cursor()
+        updates = []
+        params: list[Any] = []
+        if status is not None:
+            updates.append("status = ?")
+            params.append(status)
+            if status in ("completed", "failed", "cancelled"):
+                updates.append("ended_at = CURRENT_TIMESTAMP")
+        if progress is not None:
+            updates.append("progress = ?")
+            params.append(progress)
+        if error_message is not None:
+            updates.append("error_message = ?")
+            params.append(error_message)
+        if nodes_added is not None:
+            updates.append("nodes_added = ?")
+            params.append(nodes_added)
+        if edges_added is not None:
+            updates.append("edges_added = ?")
+            params.append(edges_added)
+
+        if not updates:
+            return False
+
+        params.append(job_id)
+        cursor.execute(
+            f"UPDATE job_history SET {', '.join(updates)} WHERE job_id = ?", params
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def append_job_log(self, job_id: str, line: str, max_lines: int = 500) -> None:
+        """Append one captured log line to a job's rolling log buffer."""
+        with self._db_lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT logs FROM job_history WHERE job_id = ?", (job_id,))
+            row = cursor.fetchone()
+            if not row:
+                return
+            try:
+                lines = json.loads(row["logs"] or "[]")
+            except (json.JSONDecodeError, TypeError):
+                lines = []
+            lines.append(line)
+            if len(lines) > max_lines:
+                lines = lines[-max_lines:]
+            cursor.execute(
+                "UPDATE job_history SET logs = ? WHERE job_id = ?",
+                (json.dumps(lines), job_id),
+            )
+            self.conn.commit()
+
+    def get_job(self, job_id: str) -> dict | None:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM job_history WHERE job_id = ?", (job_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        job = dict(row)
+        try:
+            job["logs"] = json.loads(job["logs"] or "[]")
+        except (json.JSONDecodeError, TypeError):
+            job["logs"] = []
+        return job
+
+    def list_jobs(self, status: str | None = None, limit: int | None = None) -> list[dict]:
+        cursor = self.conn.cursor()
+        query = "SELECT * FROM job_history"
+        params: list[Any] = []
+        if status:
+            query += " WHERE status = ?"
+            params.append(status)
+        query += " ORDER BY started_at DESC, job_id DESC"
+        if limit:
+            query += f" LIMIT {limit}"
+        cursor.execute(query, params)
+        jobs = []
+        for row in cursor.fetchall():
+            job = dict(row)
+            job.pop("logs", None)  # omit the potentially large log buffer from list views
+            jobs.append(job)
+        return jobs
+
+    def cancel_job(self, job_id: str) -> bool:
+        """Mark a job cancelled in the database.
+
+        This only records intent; actually interrupting a running task
+        requires the caller to also cancel its in-memory asyncio Task (see
+        the ``_ACTIVE_JOB_TASKS`` registry in ``src/api/server.py``), since a
+        live Task object can't be persisted to SQLite.
+        """
+        return self.update_job(job_id, status="cancelled")
 
     def export(self, type: str, path: str) -> None:
         if type not in ["pdf", "html", "markdown", "json", "stix2"]:
