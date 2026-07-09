@@ -648,6 +648,58 @@ class Shell(Cmd):
         except Exception as e:
             error(f"Failed during Magic Chaining: {e}")
 
+    def do_playbook(self, arg: str) -> None:
+        """Run a YAML-defined playbook (see internal/BEYOND_MALTEGO.md §3.1) against a trigger value.
+
+        Usage:
+            playbook <path/to/playbook.yaml> <trigger_value>
+        """
+        try:
+            import shlex
+
+            args = shlex.split(arg.strip())
+        except ValueError as e:
+            error(f"Error parsing arguments: {e}")
+            return
+
+        if len(args) < 2:
+            error("Usage: playbook <path/to/playbook.yaml> <trigger_value>")
+            return
+
+        path, trigger_value = args[0], args[1]
+
+        if not self.workspace:
+            error("No active workspace. Use 'workspace select <name>' first.")
+            return
+
+        if self.config.has_api_keys() and not self.config.is_unlocked():
+            self.ensure_key_manager_unlocked()
+
+        from src.core.playbooks import PlaybookEngine, load_playbook
+
+        try:
+            playbook = load_playbook(path)
+        except (ValueError, OSError) as e:
+            error(f"Failed to load playbook: {e}")
+            return
+
+        engine = PlaybookEngine(self, self.config)
+        info(f"Running playbook '{playbook.get('name', path)}' on: {trigger_value}")
+        try:
+            results = asyncio.run(engine.run(playbook, trigger_value))
+        except KeyboardInterrupt:
+            error("\nExecution interrupted by user.")
+            return
+        except ValueError as e:
+            error(f"Invalid playbook: {e}")
+            return
+
+        total_nodes = sum(len(nodes) for nodes in results.values())
+        success(
+            f"Playbook completed: {len(results)} step(s) ran, "
+            f"{total_nodes} node(s) discovered."
+        )
+
     def do_use(self, arg: str):
         """Select a module to use. You can use the full path or just the module name (e.g. 'use whois')."""
         module_name: str = arg.strip().lower()
@@ -713,14 +765,50 @@ class Shell(Cmd):
             error("Usage: set <option> <value>")
 
     def do_run(self, arg: str):
-        """Execute the current module."""
+        """Execute the current module.
+
+        Usage:
+            run                    - Execute, prompting for confirmation if the
+                                      module is classified active/intrusive
+            run --i-understand     - Pre-confirm an active/intrusive module
+                                      (skips the interactive y/N prompt)
+        """
         if self.current_module:
             self.current_module.shell = self
+            flags = {tok.strip().lower() for tok in arg.split()}
+            if flags & {"--i-understand", "-y", "--yes"}:
+                self.current_module.confirm_execution()
             info("Executing...\n")
+
+            # Record this run in job_history (see `jobs` command) so CLI runs
+            # show up in the same history as web-initiated ones. The shell
+            # only ever catches KeyboardInterrupt here (per convention, modules
+            # are expected to catch/report their own errors) so any other
+            # exception still propagates uncaught -- the job just stays
+            # "running" in that edge case rather than the shell papering over it.
+            job_id = None
+            job_workspace = self.workspace
+            if job_workspace:
+                target = (
+                    self.current_module.get_target()
+                    if hasattr(self.current_module, "get_target")
+                    else ""
+                )
+                job_id = job_workspace.create_job(
+                    self.current_module.metadata.get("name", "module"), str(target)
+                )
+                job_workspace.update_job(job_id, status="running")
+
             try:
                 asyncio.run(self.current_module.run())
             except KeyboardInterrupt:
                 error("\nExecution interrupted by user.")
+                if job_id and job_workspace:
+                    job_workspace.update_job(job_id, status="cancelled")
+                return
+
+            if job_id and job_workspace:
+                job_workspace.update_job(job_id, status="completed", progress=1.0)
         else:
             error("No module selected.")
 
@@ -1097,6 +1185,114 @@ class Shell(Cmd):
                     info(
                         f"Created and switched to workspace: {stylize(name, Style(color=Color.GREEN))}."
                     )
+
+    def do_jobs(self, arg: str) -> None:
+        """Manage the active workspace's job history (job_history table).
+
+        Usage:
+            jobs list                 - Show pending/running jobs
+            jobs history [status]     - Show all jobs, optionally filtered by status
+            jobs cancel <job_id>      - Request cancellation of a running job
+            jobs logs <job_id>        - Show captured log lines for a job
+        """
+        if not self.workspace:
+            error("No active workspace. Use 'workspace select <name>' first.")
+            return
+
+        try:
+            import shlex
+
+            args = shlex.split(arg.strip())
+        except ValueError as e:
+            error(f"Error parsing arguments: {e}")
+            return
+
+        if not args:
+            error("Usage: jobs <list | history | cancel <job_id> | logs <job_id>>")
+            return
+
+        subcommand = args[0].lower()
+
+        def _print_jobs_table(jobs: list, title: str) -> None:
+            if not jobs:
+                info("No jobs found.")
+                return
+            table = Table(
+                show_header=True,
+                header_style="bold blue",
+                title=title,
+                title_style="bold cyan",
+                show_lines=True,
+                expand=True,
+            )
+            table.add_column("Job ID", justify="left", style="cyan", no_wrap=True)
+            table.add_column("Module", justify="left", style="white")
+            table.add_column("Target", justify="left", style="white")
+            table.add_column("Status", justify="center", style="magenta")
+            table.add_column("Progress", justify="right", style="yellow")
+            table.add_column("Started", justify="left", style="dim white")
+            for job in jobs:
+                table.add_row(
+                    job["job_id"][:8],
+                    job["module_name"],
+                    job["target_value"],
+                    job["status"],
+                    f"{job.get('progress') or 0.0:.0%}",
+                    str(job.get("started_at") or ""),
+                )
+            console = Console()
+            console.print(table)
+
+        if subcommand == "list":
+            jobs = [
+                j
+                for j in self.workspace.list_jobs()
+                if j["status"] in ("pending", "running")
+            ]
+            _print_jobs_table(jobs, "Active Jobs")
+        elif subcommand == "history":
+            status = args[1] if len(args) > 1 else None
+            jobs = self.workspace.list_jobs(status=status)
+            _print_jobs_table(jobs, "Job History")
+        elif subcommand == "cancel":
+            if len(args) < 2:
+                error("Usage: jobs cancel <job_id>")
+                return
+            job_id = self._resolve_job_id(args[1])
+            if not job_id:
+                error(f"No job found matching '{args[1]}'.")
+                return
+            if self.workspace.cancel_job(job_id):
+                info(f"Job {job_id} marked cancelled.")
+            else:
+                error(f"Job '{args[1]}' not found.")
+        elif subcommand == "logs":
+            if len(args) < 2:
+                error("Usage: jobs logs <job_id>")
+                return
+            job_id = self._resolve_job_id(args[1])
+            job = self.workspace.get_job(job_id) if job_id else None
+            if not job:
+                error(f"Job '{args[1]}' not found.")
+                return
+            info(f"Logs for job {job['job_id']} ({job['module_name']}):")
+            for line in job.get("logs", []):
+                print(line)
+            if job.get("error_message"):
+                error(f"Error: {job['error_message']}")
+        else:
+            error("Usage: jobs <list | history | cancel <job_id> | logs <job_id>>")
+
+    def _resolve_job_id(self, partial_id: str) -> str | None:
+        """Resolve a full or 8-char-prefix job id (as shown in the jobs table) to a full job_id."""
+        if not self.workspace:
+            return None
+        if self.workspace.get_job(partial_id):
+            return partial_id
+        for job in self.workspace.list_jobs():
+            if job["job_id"].startswith(partial_id):
+                return job["job_id"]
+        return None
 
     def do_web(self, arg: str) -> None:
         """Start the Keen API web server.
