@@ -118,16 +118,55 @@ class BaseModule:
             opt = as_option(value)
             required: Literal["Yes", "No"] = "Yes" if opt.required else "No"
             current_value = self.options.get(key, opt.default)
-            table.add_row(key, str(current_value), required, str(opt.description))
+            table.add_row(key, str(current_value), required, opt.description)
 
         console: Console = Console()
         console.print(table)
 
+    target_option: str = "TARGET"
+    lower_target: bool = True
+
+    def get_target(self) -> str:
+        """Read and normalize the module's target option (see target_option/lower_target)."""
+        raw = str(self.options.get(self.target_option, ""))
+        return raw.lower() if self.lower_target else raw.strip()
+
+    def loading_message(self, target: str) -> str:
+        """Spinner text shown while execute() runs. Override for a module-specific message."""
+        return f"Running {self.metadata.get('name', 'module')} on {target}..."
+
+    def validate_target(self, target: str) -> bool:
+        """Extra validation hook run after pre_run(), before execute(). Report via error() and return False to abort."""
+        return True
+
     async def run(self) -> None:
+        """Default opener: pre_run() -> get_target() -> validate_target() -> loading(execute).
+
+        Override this wholesale in modules whose flow doesn't fit the shape
+        above; otherwise just implement execute(target).
         """
-        This method should be implemented by each module.
+        if not self.pre_run():
+            return
+
+        target = self.get_target()
+
+        if not self.validate_target(target):
+            return
+
+        await self.loading(self.loading_message(target), self.execute, target)
+
+    async def execute(self, target: str, *args, **kwargs) -> Any:
         """
-        raise NotImplementedError("Each module must implement its own 'run' method.")
+        This method should be implemented by each module using the default run() opener.
+
+        Signature is deliberately loose (``*args, **kwargs`` / ``Any`` return)
+        so modules that override ``run()`` directly can keep an ``execute()``
+        with extra parameters or a non-``None`` return without a Liskov
+        violation against this stub.
+        """
+        raise NotImplementedError(
+            "Each module must implement its own 'execute' method."
+        )
 
     def check_required_options(self) -> bool:
         """Check if all required options are set."""
@@ -390,6 +429,7 @@ class BaseModule:
                 if config.get_preference("llm_thinking_partner_enabled") != "true":
                     return
                 import asyncio
+
                 from src.core.thinking_partner import ThinkingPartnerEngine
 
                 ws_name = workspace.name
