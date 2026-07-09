@@ -51,7 +51,9 @@ nav:
                   - License: about/license.md
                   - Roadmap: about/roadmap.md
                   - Changelog: about/changelog.md
-theme: readthedocs
+theme:
+        name: material
+
 markdown_extensions:
         - admonition
         - pymdownx.details
