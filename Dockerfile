@@ -16,8 +16,7 @@ COPY pyproject.toml README.md LICENSE ./
 COPY keen.py ./
 COPY src ./src
 
-ENV KEEN_SKIP_DEP_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
+ENV PIP_NO_CACHE_DIR=1
 
 RUN pip install --upgrade pip && pip install -e .
 
