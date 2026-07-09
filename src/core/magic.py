@@ -328,11 +328,11 @@ class MagicEngine:
         original_post_run = module_instance.post_run
         discovered_nodes = []
 
-        async def magic_post_run(results: dict):
+        async def magic_post_run(results: dict, raw=None):
             # Capture results for chaining
             discovered_nodes.extend(results.get("nodes", []))
             # Save results to the active workspace
-            await original_post_run(results)
+            await original_post_run(results, raw=raw)
 
         module_instance.post_run = magic_post_run
 
