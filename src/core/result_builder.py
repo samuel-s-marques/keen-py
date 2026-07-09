@@ -236,8 +236,15 @@ class ResultBuilder:
         target: str,
         relationship: str,
         metadata: dict | None = None,
+        confidence: float | None = None,
     ) -> "ResultBuilder":
         """Add an edge between two node values.
+
+        ``confidence`` (0.0-1.0) marks the edge as an automated suggestion
+        rather than an operator-asserted fact — leave it ``None`` for edges a
+        module is directly reporting (e.g. "this domain resolves to this IP"),
+        and set it when the edge is itself a correlation guess (e.g. "these
+        two accounts probably belong to the same person").
 
         Returns self for chaining.
         """
@@ -248,6 +255,8 @@ class ResultBuilder:
         }
         if metadata:
             edge["metadata"] = metadata
+        if confidence is not None:
+            edge["confidence"] = confidence
         self._edges.append(edge)
         return self
 
