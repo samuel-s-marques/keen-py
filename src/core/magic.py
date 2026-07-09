@@ -293,54 +293,106 @@ class MagicEngine:
 
     async def _run_module(self, mod_class, target_value: str, depth: int) -> list:
         """Instantiates and executes a module class, intercepting and returning its post_run results."""
-        friendly_name = getattr(mod_class, "metadata", {}).get("name", "")
-        msg = f"Magic chaining depth {depth}: running '{friendly_name}' on '{target_value}'"
-        info(msg)
-        print(f"[magic] {msg}")
+        auto_confirm_active = self.config.get_preference(
+            "magic_allow_active_modules"
+        ) == "true"
+        return await run_module_on_target(
+            mod_class,
+            target_value,
+            self.shell,
+            self.config,
+            log_prefix=f"[magic] Magic chaining depth {depth}",
+            auto_confirm_active=auto_confirm_active,
+        )
 
-        module_instance = mod_class()
-        module_instance.shell = self.shell
-        module_instance.is_web_context = getattr(self.shell, "is_web_context", False)
 
-        if self.config.is_unlocked():
-            module_instance.load_api_keys(self.config)
+async def run_module_on_target(
+    mod_class,
+    target_value: str,
+    shell,
+    config,
+    log_prefix: str = "[engine]",
+    auto_confirm_active: bool = False,
+    extra_options: dict | None = None,
+) -> list:
+    """Instantiate and execute ``mod_class`` against ``target_value``, returning its discovered nodes.
 
-        # Set target option
-        target_option = None
-        for opt_key, opt_val in (
-            getattr(mod_class, "metadata", {}).get("options", {}).items()
-        ):
-            if as_option(opt_val).validator:
-                target_option = opt_key
-                break
-        if not target_option:
-            target_option = "TARGET"
+    This is the one shared "run a module on a value" execution path -- both
+    :class:`MagicEngine` and the playbook interpreter (``src/core/playbooks.py``)
+    call this instead of each growing their own module-instantiation logic, so
+    the execution-safety gate (``BaseModule.pre_run`` / ``execution_safety``)
+    and API-key loading only need to be implemented once and are enforced
+    identically regardless of which engine is driving execution.
 
-        module_instance.set_option(target_option, target_value)
+    ``auto_confirm_active`` is the caller's explicit opt-in for running
+    ``active``/``intrusive`` modules unattended (e.g. the ``magic_allow_active_modules``
+    preference). Without it, a module classified as anything but ``passive``
+    is skipped rather than silently executed in a non-interactive context.
+    """
+    friendly_name = getattr(mod_class, "metadata", {}).get("name", "")
+    msg = f"{log_prefix}: running '{friendly_name}' on '{target_value}'"
+    info(msg)
+    print(msg)
 
-        # Validate options
-        if not module_instance.pre_run():
-            warn(
-                f"Pre-run validation failed for module '{getattr(mod_class, 'metadata', {}).get('name')}' on target '{target_value}'"
+    module_instance = mod_class()
+    module_instance.shell = shell
+    module_instance.is_web_context = getattr(shell, "is_web_context", False)
+
+    if config.is_unlocked():
+        module_instance.load_api_keys(config)
+
+    # Set target option
+    target_option = None
+    for opt_key, opt_val in (
+        getattr(mod_class, "metadata", {}).get("options", {}).items()
+    ):
+        if as_option(opt_val).validator:
+            target_option = opt_key
+            break
+    if not target_option:
+        target_option = "TARGET"
+
+    module_instance.set_option(target_option, target_value)
+    for opt_key, opt_val in (extra_options or {}).items():
+        if opt_key != target_option:
+            module_instance.set_option(opt_key, opt_val)
+
+    if module_instance.execution_safety != "passive":
+        if auto_confirm_active:
+            module_instance.confirm_execution()
+        else:
+            msg = (
+                f"{log_prefix}: skipping '{friendly_name}' on '{target_value}' -- "
+                f"classified as {module_instance.execution_safety}; automated chaining "
+                "does not auto-run active/intrusive modules unless explicitly allowed."
             )
+            warn(msg)
+            print(msg)
             return []
 
-        original_post_run = module_instance.post_run
-        discovered_nodes = []
+    # Validate options
+    if not module_instance.pre_run():
+        warn(
+            f"Pre-run validation failed for module '{getattr(mod_class, 'metadata', {}).get('name')}' on target '{target_value}'"
+        )
+        return []
 
-        async def magic_post_run(results: dict, raw=None):
-            # Capture results for chaining
-            discovered_nodes.extend(results.get("nodes", []))
-            # Save results to the active workspace
-            await original_post_run(results, raw=raw)
+    original_post_run = module_instance.post_run
+    discovered_nodes = []
 
-        module_instance.post_run = magic_post_run
+    async def _capturing_post_run(results: dict, raw=None):
+        # Capture results for chaining
+        discovered_nodes.extend(results.get("nodes", []))
+        # Save results to the active workspace
+        await original_post_run(results, raw=raw)
 
-        try:
-            # Execute
-            await module_instance.run()
-        finally:
-            if hasattr(module_instance, "cleanup"):
-                module_instance.cleanup()
+    module_instance.post_run = _capturing_post_run
 
-        return discovered_nodes
+    try:
+        # Execute
+        await module_instance.run()
+    finally:
+        if hasattr(module_instance, "cleanup"):
+            module_instance.cleanup()
+
+    return discovered_nodes
