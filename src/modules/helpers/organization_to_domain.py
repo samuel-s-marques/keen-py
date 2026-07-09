@@ -88,12 +88,12 @@ class OrgToDomain(BaseModule):
         else:
             error("No verified domain could be found for this organization.")
 
-    async def execute(self, name: str) -> str | None:
+    async def execute(self, target: str) -> str | None:
         # Strip common legal suffixes to clean up the search query
         clean_name = re.sub(
             r"\b(llc|inc|corp|corporation|ltd|gmbh|sa)\b",
             "",
-            name,
+            target,
             flags=re.IGNORECASE,
         ).strip()
 
