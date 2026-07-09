@@ -29,10 +29,10 @@ class EmailToUsername(BaseModule):
 
         await self._save_results(email, username)
 
-    async def execute(self, email: str) -> str:
-        if "@" in email:
-            return email.split("@")[0]
-        return email
+    async def execute(self, target: str) -> str:
+        if "@" in target:
+            return target.split("@")[0]
+        return target
 
     async def _save_results(self, email: str, username: str) -> None:
         if not email or not username:

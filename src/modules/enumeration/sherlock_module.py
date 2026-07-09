@@ -29,16 +29,12 @@ class SherlockModule(BaseModule):
         },
     }
 
-    async def run(self) -> None:
-        if not self.pre_run():
-            return
+    lower_target = False
 
-        target: str = str(self.options.get("TARGET"))
-        await self.loading(
-            f"Executing Sherlock scan on {target}...", self.sherlock, target
-        )
+    def loading_message(self, target: str) -> str:
+        return f"Executing Sherlock scan on {target}..."
 
-    async def sherlock(self, target: str, timeout: str = "5"):
+    async def execute(self, target: str, timeout: str = "5") -> None:
         if not os.path.isfile(_SHERLOCK_SCRIPT):
             error(
                 "Sherlock is not available: the vendored submodule is missing. "

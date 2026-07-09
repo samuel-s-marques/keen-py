@@ -46,7 +46,8 @@ class PhoneVerificationModule(BaseModule):
             f"Verifying phone number {target}...", self.execute, target, timeout
         )
 
-    async def execute(self, phone: str, timeout: int) -> None:
+    async def execute(self, target: str, timeout: int) -> None:
+        phone = target
         if not InputValidator.is_valid_phone_number(phone):
             error(f"Invalid phone number format: {phone}")
             return

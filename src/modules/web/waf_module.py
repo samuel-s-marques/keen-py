@@ -23,15 +23,8 @@ class WafModule(BaseModule):
         },
     }
 
-    async def run(self) -> None:
-        if not self.pre_run():
-            return
-
-        target: str = str(self.options.get("TARGET")).lower()
-
-        await self.loading(
-            f"Executing WAF/CDN detection on {target}...", self.execute, target
-        )
+    def loading_message(self, target: str) -> str:
+        return f"Executing WAF/CDN detection on {target}..."
 
     async def execute(self, target: str) -> None:
         signatures = {

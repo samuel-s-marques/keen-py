@@ -37,21 +37,11 @@ class HistoricalDnsModule(BaseModule):
         },
     }
 
-    async def run(self) -> None:
-        if not self.pre_run():
-            return
+    def loading_message(self, target: str) -> str:
+        return f"Gathering historical DNS data for {target}..."
 
-        target: str = str(self.options.get("TARGET")).lower()
+    async def execute(self, target: str) -> None:
         api_key: str = str(self.options.get("SECURITYTRAILS_API_KEY")).strip()
-
-        await self.loading(
-            f"Gathering historical DNS data for {target}...",
-            self.execute,
-            target,
-            api_key,
-        )
-
-    async def execute(self, target: str, api_key: str) -> None:
         historical_ips = set()
         ip_history_data = []  # List of dicts: {'ip': ip, 'date': date, 'source': source}
         subdomains = set()

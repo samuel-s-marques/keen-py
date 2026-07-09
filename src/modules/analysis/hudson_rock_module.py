@@ -14,15 +14,11 @@ class HudsonRockModule(BaseModule):
         },
     }
 
-    async def run(self) -> None:
-        if not self.pre_run():
-            return
+    def loading_message(self, target: str) -> str:
+        return f"Checking {target}..."
 
-        target: str = str(self.options.get("TARGET")).lower()
-
-        await self.loading(f"Checking {target}...", self.execute, target)
-
-    async def execute(self, email: str) -> None:
+    async def execute(self, target: str) -> None:
+        email = target
         try:
             async with self.get_http_client() as client:
                 r = await client.get(

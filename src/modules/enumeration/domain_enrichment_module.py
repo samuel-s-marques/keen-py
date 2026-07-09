@@ -19,21 +19,15 @@ class DomainEnrichmentModule(BaseModule):
         super().__init__()
         self.results = {}
 
-    async def run(self) -> None:
-        if not self.pre_run():
-            return
-
-        target: str = str(self.options.get("TARGET")).lower()
-
-        await self.loading(f"Enriching {target}...", self.execute, target)
-
-        await self._save_results(target)
+    def loading_message(self, target: str) -> str:
+        return f"Enriching {target}..."
 
     async def execute(self, target: str) -> None:
         company = await self.check_hunter_io(target)
         self.results = company if company else {}
         if company:
             self.display_hunter_results(target, company)
+        await self._save_results(target)
 
     async def check_hunter_io(self, domain: str) -> dict | None:
         api_key = self.options.get("HUNTER_IO_APIKEY")

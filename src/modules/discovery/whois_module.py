@@ -21,13 +21,8 @@ class WhoisModule(BaseModule):
         },
     }
 
-    async def run(self) -> None:
-        if not self.pre_run():
-            return
-
-        target: str = str(self.options.get("TARGET")).lower()
-
-        await self.loading(f"Executing RDAP query on {target}...", self.execute, target)
+    def loading_message(self, target: str) -> str:
+        return f"Executing RDAP query on {target}..."
 
     async def execute(self, target: str) -> None:
         try:

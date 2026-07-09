@@ -24,14 +24,10 @@ class UserScannerModule(BaseModule):
         },
     }
 
-    async def run(self) -> None:
-        if not self.pre_run():
-            return
+    lower_target = False
 
-        target: str = str(self.options.get("TARGET"))
-        await self.loading(
-            f"Executing user_scanner scan on {target}...", self.execute, target
-        )
+    def loading_message(self, target: str) -> str:
+        return f"Executing user_scanner scan on {target}..."
 
     async def execute(self, target: str) -> None:
         is_email: bool = InputValidator.is_valid_email(target)

@@ -15,15 +15,11 @@ class EmailEnrichmentModule(BaseModule):
         },
     }
 
-    async def run(self) -> None:
-        if not self.pre_run():
-            return
+    def loading_message(self, target: str) -> str:
+        return f"Enriching email {target}..."
 
-        target: str = str(self.options.get("TARGET")).lower()
-
-        await self.loading(f"Enriching email {target}...", self.execute, target)
-
-    async def execute(self, email: str) -> None:
+    async def execute(self, target: str) -> None:
+        email = target
         person = await self.check_hunter_io(email)
         if person:
             await self._save_results(email, person)

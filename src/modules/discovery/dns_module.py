@@ -49,15 +49,8 @@ class DnsModule(BaseModule):
         },
     }
 
-    async def run(self) -> None:
-        if not self.pre_run():
-            return
-
-        target: str = str(self.options.get("TARGET")).lower()
-
-        await self.loading(
-            f"Enumerating DNS records for {target}...", self.execute, target
-        )
+    def loading_message(self, target: str) -> str:
+        return f"Enumerating DNS records for {target}..."
 
     async def execute(self, target: str) -> None:
         await self.get_wildcard_records(target)

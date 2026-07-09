@@ -118,7 +118,8 @@ class EmailVerificationModule(BaseModule):
 
         await self._save_results(target, res)
 
-    async def execute(self, email: str, timeout: int) -> dict:
+    async def execute(self, target: str, timeout: int) -> dict:
+        email = target
         if not InputValidator.is_valid_email(email):
             error(f"Invalid email format: {email}")
             return {}
