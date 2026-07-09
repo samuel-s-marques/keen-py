@@ -147,6 +147,19 @@ class InputValidator:
         value = value.strip().lower()
         return value in ["true", "false", "1", "0", "yes", "no"]
 
+    @staticmethod
+    def is_valid_hash(value: str) -> bool:
+        """Validate a hex-encoded MD5/SHA-1/SHA-256/SHA-512 hash.
+
+        Args:
+            value (str): Hash string to validate.
+
+        Returns:
+            bool: True if value matches a known hash length in hex, False otherwise.
+        """
+        pattern = r"^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{128}$"
+        return re.match(pattern, value.strip()) is not None
+
     VALIDATORS = {
         "domain": is_valid_domain,
         "ip": is_valid_ip,
@@ -157,4 +170,5 @@ class InputValidator:
         "username": is_valid_username,
         "name": is_valid_name,
         "bool": is_valid_boolean,
+        "hash": is_valid_hash,
     }
