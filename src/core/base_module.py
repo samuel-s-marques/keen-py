@@ -55,6 +55,8 @@ class BaseModule:
         self.shell = None
         self.is_web_context = False
         self.active_processes = set()
+        self._safety_confirmed = False
+        self._event_sink: Callable[[dict], None] | None = None
 
     def set_option(self, key: str, value) -> bool:
         # Search for the key in a case-insensitive way
@@ -233,7 +235,62 @@ class BaseModule:
         if not self.validate_options():
             return False
 
+        if not self._check_execution_safety():
+            return False
+
         return True
+
+    def confirm_execution(self) -> None:
+        """Explicitly acknowledge running a non-``passive`` module.
+
+        A caller that isn't an interactive human at a terminal (a web
+        request, an automated chain, an agent) must call this -- after
+        getting its own confirmation from whatever source is appropriate for
+        that context -- before ``pre_run()`` will let an ``active``/``intrusive``
+        module proceed. There is no default "just run it" path for anything
+        but a ``passive`` module.
+        """
+        self._safety_confirmed = True
+
+    def _check_execution_safety(self) -> bool:
+        """Gate ``active``/``intrusive`` modules behind explicit confirmation.
+
+        This is the one chokepoint every call site (CLI ``do_run``, the web
+        run endpoints, magic chaining, the playbook interpreter, a future
+        agent loop) goes through via ``pre_run()``, so none of them can
+        silently bypass the PTES passive/active/intrusive guardrail (see
+        internal/BEYOND_MALTEGO.md §1.2) just by calling a module a different way.
+        """
+        if self.execution_safety == "passive" or self._safety_confirmed:
+            return True
+
+        # An interactive CLI session (not the web server, not a background
+        # magic/agent run) can prompt the operator directly.
+        interactive = not getattr(self, "is_web_context", False) and not getattr(
+            self.shell, "_magic_running", False
+        )
+        if interactive:
+            target = self.get_target() if hasattr(self, "get_target") else ""
+            try:
+                answer = input(
+                    f"[!] '{self.metadata.get('name', 'module')}' is classified as "
+                    f"{self.execution_safety}. Run it against '{target}'? [y/N]: "
+                )
+            except (KeyboardInterrupt, EOFError):
+                print()
+                return False
+            if answer.strip().lower() in ("y", "yes"):
+                self._safety_confirmed = True
+                return True
+            error(f"Execution of '{self.metadata.get('name', 'module')}' was not confirmed.")
+            return False
+
+        error(
+            f"'{self.metadata.get('name', 'module')}' is classified as "
+            f"{self.execution_safety} and requires explicit confirmation "
+            "(confirm_execution()) before it can run in a non-interactive context."
+        )
+        return False
 
     # Option-name suffixes that mark a stored-credential option eligible for
     # automatic loading from the config manager.
@@ -328,6 +385,20 @@ class BaseModule:
 
         return result_panel(content, title=title, kind=kind)
 
+    def _emit(self, event: dict) -> None:
+        """Push a structured event (``progress``/``node_added``/``edge_added``)
+        to ``self._event_sink`` if a caller (e.g. the web server's WebSocket
+        streaming) has set one. Best-effort: a broken sink must never break
+        ingestion.
+        """
+        sink = getattr(self, "_event_sink", None)
+        if not sink:
+            return
+        try:
+            sink(event)
+        except Exception:
+            pass
+
     @property
     def workspace(self) -> WorkspaceManager | None:
         """Helper property to easily access the active workspace from shell."""
@@ -384,10 +455,19 @@ class BaseModule:
             )
             return
 
+        self._emit({"type": "progress", "progress": 0.1, "stage": "provenance"})
         self._record_provenance(workspace, results, raw)
+
+        self._emit({"type": "progress", "progress": 0.4, "stage": "ingest"})
         quarantined = self._ingest_results(workspace, results)
+
+        self._emit({"type": "progress", "progress": 0.7, "stage": "magic"})
         await self._run_magic_chaining(results, quarantined)
+
+        self._emit({"type": "progress", "progress": 0.9, "stage": "thinking_partner"})
         await self._trigger_thinking_partner(workspace)
+
+        self._emit({"type": "progress", "progress": 1.0, "stage": "done"})
 
     def _record_provenance(self, workspace, results: dict, raw: Any = None) -> None:
         """Stage 0: append a hash-chained provenance ledger entry for this run."""
@@ -431,6 +511,12 @@ class BaseModule:
                     metadata=node.get("metadata", {}),
                 )
                 node_map[node["value"]] = node_id
+                self._emit(
+                    {
+                        "type": "node_added",
+                        "node": {"id": node_id, "type": node["type"], "value": node["value"]},
+                    }
+                )
 
                 if node_id and not workspace.is_in_scope(
                     node["value"], node.get("type")
@@ -456,6 +542,16 @@ class BaseModule:
                         relationship=edge.get("relationship", "RELATED"),
                         metadata=edge.get("metadata", {}),
                         confidence=edge.get("confidence"),
+                    )
+                    self._emit(
+                        {
+                            "type": "edge_added",
+                            "edge": {
+                                "source_id": source_id,
+                                "target_id": target_id,
+                                "relationship": edge.get("relationship", "RELATED"),
+                            },
+                        }
                     )
         return quarantined
 
