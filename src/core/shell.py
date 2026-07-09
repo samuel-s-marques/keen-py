@@ -1294,6 +1294,118 @@ class Shell(Cmd):
                 return job["job_id"]
         return None
 
+    def do_scope(self, arg: str) -> None:
+        """Manage the active workspace's declared scope (see internal/BEYOND_MALTEGO.md §1.1).
+
+        A case with no declared scope has enforcement opted out -- every
+        discovery is treated as in-scope. Declaring at least one entry turns
+        enforcement on: any discovered node that doesn't match a declared
+        domain/IP/CIDR/organization/person is still ingested, but flagged as
+        quarantined (see 'scope quarantined') rather than silently trusted.
+
+        Usage:
+            scope list                                - List declared scope entries
+            scope add <type> <value> [consent_basis]  - Add an entry (type: domain|ip|cidr|organization|person)
+            scope remove <id>                         - Remove a scope entry
+            scope quarantined                         - List nodes quarantined as out-of-scope
+        """
+        if not self.workspace:
+            error("No active workspace. Use 'workspace select <name>' first.")
+            return
+
+        try:
+            import shlex
+
+            args = shlex.split(arg.strip())
+        except ValueError as e:
+            error(f"Error parsing arguments: {e}")
+            return
+
+        if not args:
+            error(
+                "Usage: scope <list | add <type> <value> [consent_basis] | remove <id> | quarantined>"
+            )
+            return
+
+        subcommand = args[0].lower()
+
+        if subcommand == "list":
+            entries = self.workspace.list_scope()
+            if not entries:
+                info(
+                    "No scope declared -- enforcement is opted out; every discovery is treated as in-scope."
+                )
+                return
+            table = Table(
+                show_header=True,
+                header_style="bold blue",
+                title="Declared Scope",
+                title_style="bold cyan",
+                show_lines=True,
+                expand=True,
+            )
+            table.add_column("ID", justify="right", style="cyan")
+            table.add_column("Type", justify="left", style="magenta")
+            table.add_column("Value", justify="left", style="white")
+            table.add_column("Consent Basis", justify="left", style="dim white")
+            for e in entries:
+                table.add_row(
+                    str(e["id"]), e["scope_type"], e["value"], e.get("consent_basis") or ""
+                )
+            console = Console()
+            console.print(table)
+        elif subcommand == "add":
+            if len(args) < 3:
+                error("Usage: scope add <type> <value> [consent_basis]")
+                return
+            scope_type, value = args[1].lower(), args[2]
+            if scope_type not in ("domain", "ip", "cidr", "organization", "person"):
+                error("Type must be one of: domain, ip, cidr, organization, person")
+                return
+            consent_basis = " ".join(args[3:]) if len(args) > 3 else ""
+            entry_id = self.workspace.add_scope_entry(scope_type, value, consent_basis)
+            success(f"Added scope entry #{entry_id}: {scope_type} '{value}'.")
+        elif subcommand == "remove":
+            if len(args) < 2:
+                error("Usage: scope remove <id>")
+                return
+            try:
+                entry_id = int(args[1])
+            except ValueError:
+                error("Scope entry id must be a number (see 'scope list').")
+                return
+            if self.workspace.remove_scope_entry(entry_id):
+                success(f"Removed scope entry #{entry_id}.")
+            else:
+                error(f"No scope entry with id {entry_id}.")
+        elif subcommand == "quarantined":
+            nodes = self.workspace.get_quarantined_nodes()
+            if not nodes:
+                info("No quarantined nodes.")
+                return
+            table = Table(
+                show_header=True,
+                header_style="bold blue",
+                title="Quarantined Nodes",
+                title_style="bold cyan",
+                show_lines=True,
+                expand=True,
+            )
+            table.add_column("ID", justify="right", style="cyan")
+            table.add_column("Type", justify="left", style="magenta")
+            table.add_column("Value", justify="left", style="white")
+            table.add_column("Reason", justify="left", style="yellow")
+            for n in nodes:
+                table.add_row(
+                    str(n["id"]), n["type"], n["value"], n.get("quarantine_reason") or ""
+                )
+            console = Console()
+            console.print(table)
+        else:
+            error(
+                "Usage: scope <list | add <type> <value> [consent_basis] | remove <id> | quarantined>"
+            )
+
     def do_web(self, arg: str) -> None:
         """Start the Keen API web server.
 
