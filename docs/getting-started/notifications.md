@@ -60,3 +60,13 @@ Workspace: John Doe
 Nodes added: 0 | Edges added: 0
 Error: Connection timed out
 ```
+
+## Web UI
+
+Open **Settings → Integrations** to configure everything above from the browser instead of the CLI: a checkbox per channel (Telegram/Discord/Slack/Email), the channel's secret fields, and the *when to notify* preferences, all in one form.
+
+!!! note "Secrets need the key manager unlocked"
+
+    Channel secrets (bot token, webhook URLs, SMTP username/password) are saved through the same encrypted store as module API keys. If the key manager is locked when you click **Save Integrations**, the non-secret preferences still save, but you'll get a warning that the secrets weren't stored -- unlock the key manager (API Keys tab) and save again.
+
+Click **Send Test** to immediately dispatch a test message to every enabled channel, bypassing the normal failure/duration gating. Each channel reports back independently -- "Missing telegram_chat_id preference" reads very differently from "Sent successfully", so you can tell a channel that's simply unconfigured apart from one that's configured but actually failing (e.g. a revoked webhook).
