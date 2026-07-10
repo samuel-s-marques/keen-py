@@ -4,6 +4,7 @@ from collections import deque
 
 from src.core.loader import load_modules
 from src.core.options import as_option
+from src.utils.notifications import notify_job_completion
 from src.utils.print_utils import error, info, warn
 from src.utils.utils import clean_node_value
 from src.utils.validator import InputValidator
@@ -386,6 +387,7 @@ async def run_module_on_target(
                         "not auto-confirmed"
                     ),
                 )
+                await notify_job_completion(config, job_workspace, job_id)
             return []
 
     if job_id and job_workspace:
@@ -400,6 +402,7 @@ async def run_module_on_target(
             job_workspace.update_job(
                 job_id, status="failed", error_message="pre_run validation failed"
             )
+            await notify_job_completion(config, job_workspace, job_id)
         return []
 
     original_post_run = module_instance.post_run
@@ -419,6 +422,7 @@ async def run_module_on_target(
     except Exception as e:
         if job_id and job_workspace:
             job_workspace.update_job(job_id, status="failed", error_message=str(e))
+            await notify_job_completion(config, job_workspace, job_id)
         raise
     finally:
         if hasattr(module_instance, "cleanup"):
@@ -428,5 +432,6 @@ async def run_module_on_target(
         job_workspace.update_job(
             job_id, status="completed", progress=1.0, nodes_added=len(discovered_nodes)
         )
+        await notify_job_completion(config, job_workspace, job_id)
 
     return discovered_nodes
