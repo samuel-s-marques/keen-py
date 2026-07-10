@@ -26,6 +26,12 @@ INFO     | Created and switched to workspace: John Doe
 keen[John Doe] >
 ```
 
+You can also declare the case's scope right at creation time with a repeatable `--scope <type>:<value>` flag, so the case never exists without a declared boundary -- see **[Scope & Execution Safety](scope_and_safety.md)** for the full guardrail model and how to edit scope later.
+
+```
+keen > workspace create "John Doe" "Investigation of John Doe" --scope domain:example.com
+```
+
 ### Listing workspaces
 
 To list all available workspaces, use the `workspace list` command. The active workspace is marked with a `●`.
