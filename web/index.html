@@ -216,6 +216,9 @@
                         <button class="tab right-tab" data-target="tab-thinking-partner"
                             style="padding: 10px 16px; position: relative;"><i class="fa-solid fa-brain"></i>
                             Partner<span id="partner-tab-pulse" class="pulse-dot hidden"></span></button>
+                        <button class="tab right-tab" data-target="tab-jobs"
+                            style="padding: 10px 16px; position: relative;"><i class="fa-solid fa-list-check"></i>
+                            Jobs<span id="jobs-tab-pulse" class="pulse-dot hidden"></span></button>
                     </div>
                 </div>
 
@@ -334,6 +337,32 @@
                             </div>
                         </div>
                     </div>
+
+                    <div id="tab-jobs" class="tab-content right-tab-content"
+                        style="padding: 16px; flex-direction: column; height: 100%;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-shrink: 0;">
+                            <h4 style="margin: 0; font-size: 1rem; color: var(--text-primary);"><i
+                                    class="fa-solid fa-list-check"
+                                    style="color: var(--accent-cyan); margin-right: 6px;"></i> Jobs</h4>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <label
+                                    style="display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; user-select: none;">
+                                    <input type="checkbox" id="jobs-show-all" style="width: auto; cursor: pointer;">
+                                    Show all
+                                </label>
+                                <button id="btn-refresh-jobs" class="icon-btn" title="Refresh">
+                                    <i class="fa-solid fa-rotate"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="jobs-empty"
+                            style="color: var(--text-secondary); text-align: center; margin-top: 20px;">
+                            No jobs yet. Run a module or Magic Chain to see it here.
+                        </div>
+                        <div id="jobs-list" style="flex: 1; overflow-y: auto;"></div>
+                    </div>
                 </div>
 
                 <div class="resizer-vertical" id="terminal-resizer"></div>
@@ -374,6 +403,23 @@
                     <label>Description</label>
                     <input type="text" id="input-ws-desc" placeholder="Optional description">
                 </div>
+
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="margin-bottom: 0;">Scope <span
+                                style="color: var(--text-secondary); font-weight: 400;">(optional)</span></label>
+                        <button type="button" id="btn-add-ws-scope-row" class="icon-btn" title="Add scope entry"
+                            style="color: var(--accent-cyan);">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 8px;">
+                        Declare approved domains/IPs/orgs/persons now, or add them later from the workspace's scope
+                        panel. Leaving this empty means scope enforcement stays opted out for this case.
+                    </span>
+                    <div id="ws-scope-rows"></div>
+                </div>
+
                 <button id="btn-create-ws" class="btn-primary full-width">Create</button>
             </div>
         </div>
@@ -391,6 +437,50 @@
                     <input type="text" id="input-rename-ws" placeholder="New workspace name">
                 </div>
                 <button id="btn-confirm-rename-ws" class="btn-primary full-width">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-workspace-scope">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-shield-halved"></i> Scope: <span id="scope-modal-ws-name"></span></h3>
+                <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="section-desc" style="margin-bottom: 12px;">Nodes discovered outside this scope are still
+                    ingested, but flagged as quarantined rather than treated as in-scope. Leaving this empty opts the
+                    workspace out of enforcement entirely.</p>
+
+                <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+                    <select id="scope-modal-type" style="flex: 0 0 130px;">
+                        <option value="domain">Domain</option>
+                        <option value="ip">IP</option>
+                        <option value="cidr">CIDR</option>
+                        <option value="organization">Organization</option>
+                        <option value="person">Person</option>
+                    </select>
+                    <input type="text" id="scope-modal-value" placeholder="Value" style="flex: 1;"
+                        autocomplete="off">
+                    <input type="text" id="scope-modal-consent" placeholder="Consent basis (person)" style="flex: 1;"
+                        autocomplete="off">
+                    <button id="btn-scope-modal-add" class="icon-btn" title="Add entry"
+                        style="color: var(--accent-cyan);">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+
+                <div id="scope-modal-list" style="margin-bottom: 16px;"></div>
+
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 12px 0;">
+
+                <h5 style="font-size: 0.85rem; color: var(--text-primary); margin-bottom: 8px;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color: var(--warning); margin-right: 6px;"></i>
+                    Quarantined Nodes
+                </h5>
+                <div id="scope-modal-quarantined"
+                    style="font-size: 0.8rem; color: var(--text-secondary); max-height: 200px; overflow-y: auto;">
+                </div>
             </div>
         </div>
     </div>
@@ -415,6 +505,9 @@
                     </button>
                     <button class="settings-tab" data-target="settings-ai-partner">
                         <i class="fa-solid fa-brain"></i> AI Partner
+                    </button>
+                    <button class="settings-tab" data-target="settings-integrations">
+                        <i class="fa-solid fa-plug"></i> Integrations
                     </button>
                 </div>
                 <!-- Right Panel: Content -->
@@ -715,6 +808,167 @@
                             <i class="fa-solid fa-floppy-disk"></i> Save AI Settings
                         </button>
                     </div>
+
+                    <div id="settings-integrations" class="settings-section">
+                        <h4>Integrations</h4>
+                        <p class="section-desc">Get notified via Telegram, Discord, Slack, or Email when a job completes
+                            or fails.</p>
+
+                        <h5
+                            style="color: var(--text-primary); font-size: 0.95rem; margin: 20px 0 12px; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-bell" style="color: var(--accent-cyan);"></i> Channels
+                        </h5>
+
+                        <!-- Telegram Integration Card -->
+                        <div class="integration-card">
+                            <div class="integration-card-header">
+                                <div class="integration-card-title telegram">
+                                    <i class="fa-brands fa-telegram"></i> Telegram
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="integration-enable-telegram">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="integration-card-body">
+                                <div class="integration-grid-2">
+                                    <div class="form-group">
+                                        <label for="integration-telegram-token">Bot Token</label>
+                                        <input type="password" id="integration-telegram-token" placeholder="Bot Token"
+                                            autocomplete="off">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="integration-telegram-chat-id">Chat ID</label>
+                                        <input type="text" id="integration-telegram-chat-id" placeholder="Chat ID"
+                                            autocomplete="off">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Discord Integration Card -->
+                        <div class="integration-card">
+                            <div class="integration-card-header">
+                                <div class="integration-card-title discord">
+                                    <i class="fa-brands fa-discord"></i> Discord
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="integration-enable-discord">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="integration-card-body">
+                                <div class="form-group">
+                                    <label for="integration-discord-webhook">Webhook URL</label>
+                                    <input type="password" id="integration-discord-webhook"
+                                        placeholder="Discord Webhook URL" autocomplete="off">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Slack Integration Card -->
+                        <div class="integration-card">
+                            <div class="integration-card-header">
+                                <div class="integration-card-title slack">
+                                    <i class="fa-brands fa-slack"></i> Slack
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="integration-enable-slack">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="integration-card-body">
+                                <div class="form-group">
+                                    <label for="integration-slack-webhook">Webhook URL</label>
+                                    <input type="password" id="integration-slack-webhook"
+                                        placeholder="Slack Webhook URL" autocomplete="off">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Email Integration Card -->
+                        <div class="integration-card">
+                            <div class="integration-card-header">
+                                <div class="integration-card-title email">
+                                    <i class="fa-solid fa-envelope"></i> Email
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="integration-enable-email">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="integration-card-body">
+                                <div class="integration-grid-3">
+                                    <div class="form-group">
+                                        <label for="integration-smtp-host">SMTP Host</label>
+                                        <input type="text" id="integration-smtp-host" placeholder="smtp.example.com"
+                                            autocomplete="off">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="integration-smtp-port">Port</label>
+                                        <input type="number" id="integration-smtp-port" placeholder="587"
+                                            autocomplete="off">
+                                    </div>
+                                </div>
+                                <div class="integration-grid-2">
+                                    <div class="form-group">
+                                        <label for="integration-smtp-username">Username</label>
+                                        <input type="text" id="integration-smtp-username" placeholder="Username"
+                                            autocomplete="off">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="integration-smtp-password">Password</label>
+                                        <input type="password" id="integration-smtp-password" placeholder="Password"
+                                            autocomplete="off">
+                                    </div>
+                                </div>
+                                <div class="integration-grid-2">
+                                    <div class="form-group">
+                                        <label for="integration-smtp-from">From Address</label>
+                                        <input type="text" id="integration-smtp-from" placeholder="sender@example.com"
+                                            autocomplete="off">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="integration-smtp-to">To Address</label>
+                                        <input type="text" id="integration-smtp-to" placeholder="recipient@example.com"
+                                            autocomplete="off">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 20px 0;">
+
+                        <h5
+                            style="color: var(--text-primary); font-size: 0.95rem; margin-bottom: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-filter" style="color: var(--accent-cyan);"></i> When to notify
+                        </h5>
+
+                        <div class="form-checkbox-row">
+                            <input type="checkbox" id="integration-notify-on-failure">
+                            <label for="integration-notify-on-failure">Notify on job failure</label>
+                        </div>
+                        <div class="form-checkbox-row">
+                            <input type="checkbox" id="integration-notify-on-complete">
+                            <label for="integration-notify-on-complete">Notify on every successful completion</label>
+                        </div>
+                        <div class="form-group" style="margin-top: 14px; margin-bottom: 20px;">
+                            <label for="integration-min-duration">Always notify if a successful job runs at least this
+                                long (seconds)</label>
+                            <input type="number" id="integration-min-duration" min="0" placeholder="300">
+                        </div>
+
+                        <div style="display: flex; gap: 12px;">
+                            <button id="btn-save-integrations" class="btn-primary" style="flex: 1;">
+                                <i class="fa-solid fa-floppy-disk"></i> Save Integrations
+                            </button>
+                            <button id="btn-test-integrations" class="btn-secondary" style="flex: 1;">
+                                <i class="fa-solid fa-paper-plane"></i> Send Test
+                            </button>
+                        </div>
+
+                        <div id="integration-test-results" style="margin-top: 12px;"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -888,6 +1142,22 @@
                 <button id="btn-confirm-edit-edge" class="btn-primary full-width" style="margin-top: 16px;">
                     <i class="fa-solid fa-floppy-disk"></i> Save Changes
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-job-logs">
+        <div class="modal" style="max-width: 560px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-list-check"></i> Job Logs</h3>
+                <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="job-logs-meta" style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 10px;">
+                </div>
+                <div id="job-logs-body"
+                    style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 400px; overflow-y: auto; font-family: var(--font-mono); font-size: 0.78rem; white-space: pre-wrap;">
+                </div>
             </div>
         </div>
     </div>
