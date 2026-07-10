@@ -42,7 +42,7 @@ Once at least one entry exists, any newly discovered node whose value doesn't ma
 
 !!! warning "person scope requires consent, not just a name"
 
-    A `person` scope entry should always carry a `consent_basis` describing why that individual is a legitimate target (e.g. a signed engagement, informed consent, public-interest journalism basis) -- this is what BEYOND_MALTEGO's guardrails call out as the difference between an OSINT framework and a surveillance/stalking tool. Don't add a `person` entry just because a name showed up in results.
+    A `person` scope entry should always carry a `consent_basis` describing why that individual is a legitimate target (e.g. a signed engagement, informed consent, public-interest journalism basis).
 
 ### Listing scope
 
