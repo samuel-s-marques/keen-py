@@ -159,5 +159,140 @@ def test_endpoints():
     )
 
 
+def test_workspace_scope_endpoints():
+    """Scope can be declared at workspace-creation time (POST /api/workspaces
+    with a `scope` list) and edited afterward via the dedicated scope endpoints."""
+    config_db = os.path.expanduser("~/.keen_test_server_scope_config.db")
+    if os.path.exists(config_db):
+        try:
+            os.remove(config_db)
+        except OSError:
+            pass
+
+    def get_config_override():
+        config = ConfigManager(config_db)
+        try:
+            yield config
+        finally:
+            config.close()
+
+    app.dependency_overrides[get_config] = get_config_override
+    client = TestClient(app)
+
+    try:
+        # Create a workspace with scope declared inline.
+        response = client.post(
+            "/api/workspaces",
+            json={
+                "name": "scope_test_ws",
+                "description": "Scope endpoint test",
+                "scope": [
+                    {"scope_type": "domain", "value": "example.com", "consent_basis": "signed SOW"}
+                ],
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+        # The declared entry should already be visible.
+        response = client.get("/api/workspaces/scope_test_ws/scope")
+        assert response.status_code == 200
+        entries = response.json()
+        assert len(entries) == 1
+        assert entries[0]["scope_type"] == "domain"
+        assert entries[0]["value"] == "example.com"
+
+        # Add a second entry directly via POST.
+        response = client.post(
+            "/api/workspaces/scope_test_ws/scope",
+            json={"scope_type": "ip", "value": "1.2.3.4"},
+        )
+        assert response.status_code == 200
+        new_id = response.json()["id"]
+
+        response = client.get("/api/workspaces/scope_test_ws/scope")
+        assert len(response.json()) == 2
+
+        # Invalid scope_type is rejected.
+        response = client.post(
+            "/api/workspaces/scope_test_ws/scope",
+            json={"scope_type": "not-a-real-type", "value": "x"},
+        )
+        assert response.status_code == 422
+
+        # Remove the second entry.
+        response = client.delete(f"/api/workspaces/scope_test_ws/scope/{new_id}")
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+        response = client.get("/api/workspaces/scope_test_ws/scope")
+        assert len(response.json()) == 1
+
+        # Add an out-of-scope node directly, then quarantine it the way
+        # BaseModule._ingest_results would, and confirm it's surfaced.
+        from src.core.managers import WorkspaceManager
+
+        wm = WorkspaceManager("cases/scope_test_ws.keen", name="scope_test_ws")
+        node_id = wm.get_or_add_node("domain-name", "evil.com")
+        assert not wm.is_in_scope("evil.com")
+        wm.quarantine_node(node_id, reason="out of scope")
+        wm.close()
+
+        response = client.get("/api/workspaces/scope_test_ws/quarantined-nodes")
+        assert response.status_code == 200
+        quarantined = response.json()
+        assert len(quarantined) == 1
+        assert quarantined[0]["value"] == "evil.com"
+
+        print("[OK] Workspace scope endpoints verified successfully!")
+    finally:
+        if os.path.exists(config_db):
+            try:
+                os.remove(config_db)
+            except OSError:
+                pass
+        if os.path.exists("cases/scope_test_ws.keen"):
+            try:
+                os.remove("cases/scope_test_ws.keen")
+            except OSError:
+                pass
+
+
+def test_notifications_test_endpoint():
+    """No channels configured -> success with an empty results map (not an error)."""
+    config_db = os.path.expanduser("~/.keen_test_server_notify_config.db")
+    if os.path.exists(config_db):
+        try:
+            os.remove(config_db)
+        except OSError:
+            pass
+
+    def get_config_override():
+        config = ConfigManager(config_db)
+        try:
+            yield config
+        finally:
+            config.close()
+
+    app.dependency_overrides[get_config] = get_config_override
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/notifications/test")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["results"] == {}
+        print("[OK] Notifications test endpoint verified successfully!")
+    finally:
+        if os.path.exists(config_db):
+            try:
+                os.remove(config_db)
+            except OSError:
+                pass
+
+
 if __name__ == "__main__":
     test_endpoints()
+    test_workspace_scope_endpoints()
+    test_notifications_test_endpoint()
