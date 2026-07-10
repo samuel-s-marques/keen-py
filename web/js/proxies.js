@@ -137,7 +137,7 @@ export function initProxyListeners() {
                     inputProxyUrl.value = '';
                     fetchProxies();
                 } else {
-                    alert(data.error || 'Failed to add proxy');
+                    showSnackbar('Proxies', data.error || 'Failed to add proxy', 'error', 5000);
                 }
             }
         });
@@ -188,13 +188,13 @@ export function initProxyListeners() {
         const uploadFile = async (file) => {
             // Prevent uploading non-TXT files
             if (!file.name.toLowerCase().endsWith('.txt')) {
-                alert('Only .txt files are allowed.');
+                showSnackbar('Proxies', 'Only .txt files are allowed.', 'error', 5000);
                 return;
             }
 
             // Check file MIME type (if present)
             if (file.type && !file.type.startsWith('text/')) {
-                alert('Selected file is not a valid text file.');
+                showSnackbar('Proxies', 'Selected file is not a valid text file.', 'error', 5000);
                 return;
             }
 
@@ -204,14 +204,14 @@ export function initProxyListeners() {
 
                 // Content-based heuristic check for binary files (e.g., check for null bytes or control characters)
                 if (text.includes('\0') || /[\x00-\x08\x0E-\x1F\x7F]/.test(text)) {
-                    alert('Error: The file contains binary data and does not appear to be a real text file.');
+                    showSnackbar('Proxies', 'Error: The file contains binary data and does not appear to be a real text file.', 'error', 5000);
                     return;
                 }
 
                 const res = await KeenAPI.post(`/proxies/load`, { content: text });
                 if (res.ok) {
                     const data = await res.json();
-                    alert(`Successfully loaded ${data.loaded} proxies!`);
+                    showSnackbar('Proxies', `Successfully loaded ${data.loaded} proxies!`, 'success', 5000);
                     fetchProxies();
                 }
             };

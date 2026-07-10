@@ -247,7 +247,7 @@ export function drawGraph(nodes, edges) {
                         callback(data);
                         selectWorkspace(KeenStore.activeWorkspace);
                     }).catch(e => {
-                        alert("Failed to delete nodes.");
+                        showSnackbar('Nodes', 'Failed to delete nodes.', 'error', 5000);
                         callback(null);
                     });
                 } else {
@@ -261,7 +261,7 @@ export function drawGraph(nodes, edges) {
                         callback(data);
                         selectWorkspace(KeenStore.activeWorkspace);
                     }).catch(e => {
-                        alert("Failed to delete edges.");
+                        showSnackbar('Edges', 'Failed to delete edges.', 'error', 5000);
                         callback(null);
                     });
                 } else {
@@ -276,15 +276,15 @@ export function drawGraph(nodes, edges) {
                 if (rel) {
                     edgeData.label = rel;
                     KeenAPI.post(`/workspaces/${KeenStore.activeWorkspace}/edges`, {
-                            source_id: String(edgeData.from),
-                            target_id: String(edgeData.to),
-                            relationship: rel
-                        }).then(res => {
+                        source_id: String(edgeData.from),
+                        target_id: String(edgeData.to),
+                        relationship: rel
+                    }).then(res => {
                         if (res.ok) {
                             callback(edgeData);
                             selectWorkspace(KeenStore.activeWorkspace);
                         } else {
-                            alert("Failed to save edge.");
+                            showSnackbar('Edges', 'Failed to save edge.', 'error', 5000);
                             callback(null);
                         }
                     });
@@ -799,7 +799,7 @@ export function showContextMenu(x, y, node, edgeId = null) {
             if (confirm("Delete this edge?")) {
                 KeenAPI.del(`/workspaces/${KeenStore.activeWorkspace}/edges/${edgeId}`)
                     .then(() => selectWorkspace(KeenStore.activeWorkspace))
-                    .catch(() => alert("Failed to delete edge."));
+                    .catch(() => showSnackbar('Edges', 'Failed to delete edge.', 'error', 5000));
             }
         };
         contextMenuItems.appendChild(deleteEdgeItem);
@@ -915,7 +915,7 @@ export function showContextMenu(x, y, node, edgeId = null) {
         if (confirm("Delete this node? This will also cascade delete any connected edges.")) {
             KeenAPI.del(`/workspaces/${KeenStore.activeWorkspace}/nodes/${node.id || node.value}`)
                 .then(() => selectWorkspace(KeenStore.activeWorkspace))
-                .catch(() => alert("Failed to delete node."));
+                .catch(() => showSnackbar('Nodes', 'Failed to delete node.', 'error', 5000));
         }
     };
     contextMenuItems.appendChild(deleteItem);
