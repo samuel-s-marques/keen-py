@@ -273,3 +273,32 @@ async def test_playbook_unknown_module_skips_step_without_crashing(monkeypatch):
         assert results["a"] == []
     finally:
         _teardown(ws, config)
+
+
+@pytest.mark.asyncio
+async def test_playbook_step_runs_record_job_history(monkeypatch):
+    """Playbook steps execute via the shared run_module_on_target() helper,
+    so they must show up in job_history just like CLI `run` and magic
+    chaining do -- previously the playbook interpreter was invisible to
+    `jobs list`/the Web UI task panel."""
+    ws, config = _setup(monkeypatch)
+    try:
+        shell = MockShell(ws, config)
+        engine = PlaybookEngine(shell, config)
+        playbook = {
+            "steps": [
+                {
+                    "id": "dns_sweep",
+                    "module": "discovery/dns_sweep",
+                    "inputs": {"TARGET": "{{ trigger.value }}"},
+                }
+            ]
+        }
+        await engine.run(playbook, "example.com")
+
+        jobs = ws.list_jobs()
+        assert len(jobs) == 1
+        assert jobs[0]["target_value"] == "example.com"
+        assert jobs[0]["status"] == "completed"
+    finally:
+        _teardown(ws, config)
