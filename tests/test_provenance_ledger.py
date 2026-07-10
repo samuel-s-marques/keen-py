@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import sys
@@ -75,6 +76,41 @@ def test_non_string_raw_payload_is_json_encoded():
         entries = ws.get_ledger_entries()
         assert "22" in entries[0]["raw_payload"]
         assert entry["raw_payload"] == entries[0]["raw_payload"]
+    finally:
+        ws.close()
+        shutil.rmtree(TEST_DIR)
+
+
+def test_large_raw_payload_is_archived_to_file_not_stored_inline():
+    ws = _make_workspace("raw_archive")
+    try:
+        big_payload = {"body": "x" * (ws.RAW_INLINE_THRESHOLD_BYTES + 1000)}
+        entry = ws.append_ledger_entry("shodan", "run", "1.2.3.4", raw_payload=big_payload)
+
+        # The ledger row itself only holds a short reference, not the blob.
+        assert entry["raw_payload"].startswith("raw_ref:")
+        assert len(entry["raw_payload"]) < 100
+        assert ws.verify_ledger_integrity() is True
+
+        # The reference resolves back to the real content, read from a file
+        # under attachments_dir("raw") rather than the .keen SQLite file.
+        resolved = ws.read_raw_payload(entry["raw_payload"])
+        assert json.loads(resolved) == big_payload
+
+        raw_dir = ws.attachments_dir("raw")
+        archived_files = os.listdir(raw_dir)
+        assert len(archived_files) == 1
+    finally:
+        ws.close()
+        shutil.rmtree(TEST_DIR)
+
+
+def test_small_raw_payload_stays_inline():
+    ws = _make_workspace("raw_inline")
+    try:
+        entry = ws.append_ledger_entry("whois", "run", "example.com", raw_payload={"a": 1})
+        assert not entry["raw_payload"].startswith("raw_ref:")
+        assert ws.read_raw_payload(entry["raw_payload"]) == entry["raw_payload"]
     finally:
         ws.close()
         shutil.rmtree(TEST_DIR)
