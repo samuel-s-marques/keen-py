@@ -86,6 +86,9 @@ import {
     btnAnalyzeGraph,
     btnTestAiConn,
     btnDetectAiModel,
+    btnPlaybooks,
+    modalPlaybooks,
+    btnNewPlaybook,
 } from "./dom.js";
 import { makeResizable } from "./layout.js";
 import { fetchWorkspaces, selectWorkspace, renderWorkspaces } from "./workspaces.js";
@@ -106,6 +109,7 @@ import { termPrint, showSnackbar, updateSnackbar } from "./notifications.js";
 import { addPropertyField, createEditPropField, parseMetaValue } from "./modals.js";
 import { toggleTimelinePlay, updateTimelineFilter } from "./timeline.js";
 import { renderTables } from "./graph.js";
+import { fetchPlaybooksList, newPlaybook } from "./playbooks.js";
 
 // Theme setup
 const themeIcon = btnThemeToggle ? btnThemeToggle.querySelector('i') : null;
@@ -198,6 +202,13 @@ btnSettings.addEventListener('click', () => {
     fetchIntegrationSettings();
 });
 
+btnPlaybooks.addEventListener('click', () => {
+    modalPlaybooks.classList.add('active');
+    fetchPlaybooksList();
+});
+
+btnNewPlaybook.addEventListener('click', () => newPlaybook());
+
 closeModals.forEach(btn => btn.addEventListener('click', () => {
     modalNewWs.classList.remove('active');
     modalSettings.classList.remove('active');
@@ -207,6 +218,7 @@ closeModals.forEach(btn => btn.addEventListener('click', () => {
     document.getElementById('modal-edit-edge').classList.remove('active');
     document.getElementById('modal-job-logs').classList.remove('active');
     document.getElementById('modal-workspace-scope').classList.remove('active');
+    modalPlaybooks.classList.remove('active');
     wsNameWarning.style.display = 'none';
 }));
 

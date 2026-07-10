@@ -80,6 +80,31 @@ export const ratelimitHibpRps = document.getElementById("ratelimit-hibp-rps");
 export const ratelimitMalshareRps = document.getElementById("ratelimit-malshare-rps");
 export const btnSaveRateLimits = document.getElementById("btn-save-rate-limits");
 
+// Playbooks modal
+export const btnPlaybooks = document.getElementById("btn-playbooks");
+export const modalPlaybooks = document.getElementById("modal-playbooks");
+export const playbooksList = document.getElementById("playbooks-list");
+export const btnNewPlaybook = document.getElementById("btn-new-playbook");
+export const playbookEmptyState = document.getElementById("playbook-empty-state");
+export const playbookEditor = document.getElementById("playbook-editor");
+export const playbookNameInput = document.getElementById("playbook-name-input");
+export const btnSavePlaybook = document.getElementById("btn-save-playbook");
+export const btnDeletePlaybook = document.getElementById("btn-delete-playbook");
+export const playbookDagCanvas = document.getElementById("playbook-dag-canvas");
+export const playbookStepPanel = document.getElementById("playbook-step-panel");
+export const pbStepIdInput = document.getElementById("pb-step-id-input");
+export const pbStepModuleSelect = document.getElementById("pb-step-module-select");
+export const pbStepInputsFields = document.getElementById("pb-step-inputs-fields");
+export const pbStepConditionInput = document.getElementById("pb-step-condition-input");
+export const btnPbStepConfirm = document.getElementById("btn-pb-step-confirm");
+export const btnPbStepCancel = document.getElementById("btn-pb-step-cancel");
+export const playbookYamlEditor = document.getElementById("playbook-yaml-editor");
+export const playbookYamlMessages = document.getElementById("playbook-yaml-messages");
+export const playbookTriggerValue = document.getElementById("playbook-trigger-value");
+export const btnRunPlaybook = document.getElementById("btn-run-playbook");
+export const playbookRunStatus = document.getElementById("playbook-run-status");
+export const playbookRunLog = document.getElementById("playbook-run-log");
+
 // Create-node modal
 export const modalCreateNode = document.getElementById("modal-create-node");
 export const nodeTypeSelect = document.getElementById("node-type-select");
