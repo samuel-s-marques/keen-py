@@ -1,4 +1,4 @@
-"""YAML-defined playbook interpreter (BEYOND_MALTEGO §3.1, "Magic 2.0").
+"""YAML-defined playbook interpreter.
 
 A playbook is a small DAG of steps, each invoking one Keen module:
 
@@ -24,7 +24,7 @@ mirroring MagicEngine's per-depth concurrency.
 Execution itself goes through :func:`src.core.magic.run_module_on_target` --
 the same shared, safety-gated module-execution path MagicEngine uses -- so a
 playbook cannot run an active/intrusive module any more freely than a human
-`run` or an auto-chained magic pivot can (see BEYOND_MALTEGO §1.2/§2.2).
+`run` or an auto-chained magic pivot can.
 
 Condition expressions are evaluated by a small whitelisted AST interpreter
 (:func:`safe_eval_condition`), never Python's `eval()` -- playbooks are
@@ -148,7 +148,11 @@ def render_template(template: str, context: dict) -> str:
     def _replace(match: "re.Match[str]") -> str:
         value: Any = context
         for part in match.group(1).split("."):
-            value = value.get(part) if isinstance(value, dict) else getattr(value, part, None)
+            value = (
+                value.get(part)
+                if isinstance(value, dict)
+                else getattr(value, part, None)
+            )
             if value is None:
                 return ""
         return str(value)
@@ -197,9 +201,9 @@ class PlaybookEngine:
 
     @staticmethod
     def _target_option(mod_class) -> str:
-        for opt_key, opt_val in getattr(mod_class, "metadata", {}).get(
-            "options", {}
-        ).items():
+        for opt_key, opt_val in (
+            getattr(mod_class, "metadata", {}).get("options", {}).items()
+        ):
             if as_option(opt_val).validator:
                 return opt_key
         return "TARGET"
@@ -208,7 +212,7 @@ class PlaybookEngine:
         rendered = {}
         for key, template in (step.get("inputs") or {}).items():
             rendered[key] = (
-                render_template(str(template), context)
+                render_template(template, context)
                 if isinstance(template, str)
                 else template
             )

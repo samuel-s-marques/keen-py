@@ -1,4 +1,4 @@
-"""Pluggable notification dispatcher for job lifecycle events (BEYOND_MALTEGO §7.3).
+"""Pluggable notification dispatcher for job lifecycle events.
 
 Channels (Telegram, Discord, Slack, Email) are independent best-effort senders --
 a broken/misconfigured channel must never raise out of ``dispatch_job_notification``

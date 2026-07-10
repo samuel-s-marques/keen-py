@@ -649,7 +649,7 @@ class Shell(Cmd):
             error(f"Failed during Magic Chaining: {e}")
 
     def do_playbook(self, arg: str) -> None:
-        """Run a YAML-defined playbook (see internal/BEYOND_MALTEGO.md §3.1) against a trigger value.
+        """Run a YAML-defined playbook against a trigger value.
 
         Usage:
             playbook <path/to/playbook.yaml> <trigger_value>
@@ -807,7 +807,9 @@ class Shell(Cmd):
                 error("\nExecution interrupted by user.")
                 if job_id and job_workspace:
                     job_workspace.update_job(job_id, status="cancelled")
-                    asyncio.run(notify_job_completion(self.config, job_workspace, job_id))
+                    asyncio.run(
+                        notify_job_completion(self.config, job_workspace, job_id)
+                    )
                 return
 
             if job_id and job_workspace:
@@ -930,7 +932,9 @@ class Shell(Cmd):
                 )
                 info("Available commands:")
                 info("\tworkspace list")
-                info("\tworkspace create <name> [description] [--scope <type>:<value>]...")
+                info(
+                    "\tworkspace create <name> [description] [--scope <type>:<value>]..."
+                )
                 info("\tworkspace select <name>")
                 info("\tworkspace set-desc <description>")
                 info("\tworkspace delete <name>")
@@ -1049,7 +1053,9 @@ class Shell(Cmd):
                         return
                     spec = rest[i + 1]
                     if ":" not in spec:
-                        error(f"Invalid --scope value '{spec}'. Expected <type>:<value>.")
+                        error(
+                            f"Invalid --scope value '{spec}'. Expected <type>:<value>."
+                        )
                         return
                     scope_type, value = spec.split(":", 1)
                     scope_type = scope_type.lower()
@@ -1369,7 +1375,7 @@ class Shell(Cmd):
         return None
 
     def do_scope(self, arg: str) -> None:
-        """Manage the active workspace's declared scope (see internal/BEYOND_MALTEGO.md §1.1).
+        """Manage the active workspace's declared scope.
 
         A case with no declared scope has enforcement opted out -- every
         discovery is treated as in-scope. Declaring at least one entry turns
@@ -1424,7 +1430,10 @@ class Shell(Cmd):
             table.add_column("Consent Basis", justify="left", style="dim white")
             for e in entries:
                 table.add_row(
-                    str(e["id"]), e["scope_type"], e["value"], e.get("consent_basis") or ""
+                    str(e["id"]),
+                    e["scope_type"],
+                    e["value"],
+                    e.get("consent_basis") or "",
                 )
             console = Console()
             console.print(table)
@@ -1471,7 +1480,10 @@ class Shell(Cmd):
             table.add_column("Reason", justify="left", style="yellow")
             for n in nodes:
                 table.add_row(
-                    str(n["id"]), n["type"], n["value"], n.get("quarantine_reason") or ""
+                    str(n["id"]),
+                    n["type"],
+                    n["value"],
+                    n.get("quarantine_reason") or "",
                 )
             console = Console()
             console.print(table)
@@ -1481,7 +1493,7 @@ class Shell(Cmd):
             )
 
     def do_merge(self, arg: str) -> None:
-        """Merge nodes into one identity (Entity Resolution, see internal/BEYOND_MALTEGO.md §2.4).
+        """Merge nodes into one identity.
 
         Re-points every edge from the absorbed node(s) onto the canonical
         node, unions their metadata, and logs one provenance ledger entry.
@@ -1525,7 +1537,9 @@ class Shell(Cmd):
         if self.workspace.merge_nodes(canonical_id, absorbed_ids, actor="operator"):
             success(f"Merged {len(absorbed_ids)} node(s) into '{canonical_value}'.")
         else:
-            error("Merge failed -- canonical node not found or no absorbed nodes matched.")
+            error(
+                "Merge failed -- canonical node not found or no absorbed nodes matched."
+            )
 
     def do_web(self, arg: str) -> None:
         """Start the Keen API web server.

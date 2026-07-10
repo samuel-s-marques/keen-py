@@ -5,7 +5,7 @@ endpoint for a single email (needs an API key). This is the missing
 *domain*-level view: HIBP's public ``breaches?domain=`` endpoint needs no
 key at all and answers "which breaches is this domain's own service
 associated with" -- exposure metadata only (name/date/data-classes), never
-raw credentials, per BEYOND_MALTEGO §5.1's own framing.
+raw credentials.
 
 Breach nodes intentionally reuse the exact node shape (``x-data-breach``,
 ``STIXNamespaces.BREACH``, ``f"HIBP:{name}"`` value) that

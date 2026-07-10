@@ -258,8 +258,8 @@ class BaseModule:
         This is the one chokepoint every call site (CLI ``do_run``, the web
         run endpoints, magic chaining, the playbook interpreter, a future
         agent loop) goes through via ``pre_run()``, so none of them can
-        silently bypass the PTES passive/active/intrusive guardrail (see
-        internal/BEYOND_MALTEGO.md §1.2) just by calling a module a different way.
+        silently bypass the PTES passive/active/intrusive guardrail
+        just by calling a module a different way.
         """
         if self.execution_safety == "passive" or self._safety_confirmed:
             return True
@@ -282,7 +282,9 @@ class BaseModule:
             if answer.strip().lower() in ("y", "yes"):
                 self._safety_confirmed = True
                 return True
-            error(f"Execution of '{self.metadata.get('name', 'module')}' was not confirmed.")
+            error(
+                f"Execution of '{self.metadata.get('name', 'module')}' was not confirmed."
+            )
             return False
 
         error(
@@ -514,7 +516,11 @@ class BaseModule:
                 self._emit(
                     {
                         "type": "node_added",
-                        "node": {"id": node_id, "type": node["type"], "value": node["value"]},
+                        "node": {
+                            "id": node_id,
+                            "type": node["type"],
+                            "value": node["value"],
+                        },
                     }
                 )
 
@@ -555,7 +561,9 @@ class BaseModule:
                     )
         return quarantined
 
-    async def _run_magic_chaining(self, results: dict, quarantined: set | None = None) -> None:
+    async def _run_magic_chaining(
+        self, results: dict, quarantined: set | None = None
+    ) -> None:
         """Stage 2: auto-chain modules on discovered nodes, if enabled.
 
         Guarded by ``shell._magic_running`` so a chain triggered from within a

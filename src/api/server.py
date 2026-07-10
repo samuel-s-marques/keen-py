@@ -85,9 +85,7 @@ async def auth_middleware(request: Request, call_next):
             header = request.headers.get("Authorization", "")
             token = header[7:] if header.startswith("Bearer ") else ""
             if token not in _SESSION_TOKENS:
-                return JSONResponse(
-                    status_code=401, content={"error": "Unauthorized"}
-                )
+                return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     return await call_next(request)
 
 
@@ -1046,7 +1044,7 @@ def update_workspace_edge(
 def merge_workspace_nodes(
     req: NodeMergeRequest, wm: WorkspaceManager = Depends(get_workspace_manager)
 ) -> Union[Dict[str, Any], JSONResponse]:
-    """Merge nodes into one identity (Entity Resolution, BEYOND_MALTEGO §2.4).
+    """Merge nodes into one identity.
 
     Re-points every edge from ``absorbed_ids`` onto ``canonical_id``, unions
     their metadata, and logs one provenance ledger entry. This is always an
@@ -1057,7 +1055,9 @@ def merge_workspace_nodes(
         if not merged:
             return JSONResponse(
                 status_code=404,
-                content={"error": "Canonical node not found or no absorbed nodes matched"},
+                content={
+                    "error": "Canonical node not found or no absorbed nodes matched"
+                },
             )
         return {"success": True}
     except Exception as e:
@@ -1200,7 +1200,9 @@ def submit_suggestion_feedback(
 
 
 @app.post("/api/notifications/test")
-async def test_notifications(config: ConfigManager = Depends(get_config)) -> Dict[str, Any]:
+async def test_notifications(
+    config: ConfigManager = Depends(get_config),
+) -> Dict[str, Any]:
     """Send a synthetic test message to every channel in ``notify_channels``.
 
     Distinguishes "not configured" from "configured but failed" per channel
@@ -1506,7 +1508,6 @@ def get_modules() -> Dict[str, Any]:
             metadata["category"] = key.split("/")[0]
             result[key] = metadata
     return result
-
 
 
 # In-memory registry of running jobs' asyncio Tasks, keyed by job_id. A live
