@@ -22,6 +22,15 @@
     <!-- Markdown renderer -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
+    <!-- CodeMirror (Playbooks YAML editor) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/dracula.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/yaml/yaml.min.js"></script>
+
+    <!-- js-yaml (Playbooks visual builder <-> YAML conversion) -->
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+
     <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -36,6 +45,8 @@
             <div style="display:flex; align-items:center; gap: 16px;">
                 <button id="btn-theme-toggle" class="icon-btn" title="Toggle Light/Dark Theme"><i
                         class="fa-solid fa-sun"></i></button>
+                <button id="btn-playbooks" class="icon-btn" title="Playbooks"><i
+                        class="fa-solid fa-diagram-project"></i></button>
                 <button id="btn-settings" class="icon-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>
                 <div class="server-status">
                     <div class="status-indicator online"></div>
@@ -1201,6 +1212,100 @@
                 </div>
                 <div id="job-logs-body"
                     style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 400px; overflow-y: auto; font-family: var(--font-mono); font-size: 0.78rem; white-space: pre-wrap;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-playbooks">
+        <div class="modal modal-xl">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-diagram-project"></i> Playbooks</h3>
+                <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body playbooks-layout">
+                <div class="playbooks-sidebar">
+                    <button id="btn-new-playbook" class="btn-primary full-width" style="margin-bottom: 12px;">
+                        <i class="fa-solid fa-plus"></i> New Playbook
+                    </button>
+                    <div id="playbooks-list"></div>
+                </div>
+                <div class="playbooks-content">
+                    <div id="playbook-empty-state"
+                        style="flex:1; display:flex; align-items:center; justify-content:center; color: var(--text-secondary); font-size: 0.9rem; text-align:center;">
+                        Select a playbook on the left, or create a new one.
+                    </div>
+                    <div id="playbook-editor" class="hidden" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+                        <div class="playbook-editor-header">
+                            <input type="text" id="playbook-name-input" placeholder="Playbook name">
+                            <div class="pb-tabs" style="border-bottom:none; margin-bottom:0;">
+                                <button class="pb-tab active" data-target="pb-tab-visual">
+                                    <i class="fa-solid fa-diagram-project"></i> Visual Builder
+                                </button>
+                                <button class="pb-tab" data-target="pb-tab-yaml">
+                                    <i class="fa-solid fa-file-code"></i> YAML
+                                </button>
+                                <button class="pb-tab" data-target="pb-tab-run">
+                                    <i class="fa-solid fa-play"></i> Run
+                                </button>
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <button id="btn-save-playbook" class="btn-primary" style="padding: 8px 16px;">Save</button>
+                                <button id="btn-delete-playbook" class="icon-btn" title="Delete Playbook">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="pb-tab-visual" class="pb-tab-content active">
+                            <div class="playbook-visual-body">
+                                <div id="playbook-dag-canvas" class="playbook-dag-canvas"></div>
+                                <div id="playbook-step-panel" class="playbook-step-panel hidden">
+                                    <h5 style="margin-bottom: 12px;">Step</h5>
+                                    <div class="form-group">
+                                        <label>Step ID</label>
+                                        <input type="text" id="pb-step-id-input">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Module</label>
+                                        <select id="pb-step-module-select" style="width:100%;"></select>
+                                    </div>
+                                    <div id="pb-step-inputs-fields"></div>
+                                    <div class="form-group">
+                                        <label>Condition <span style="color:var(--text-secondary); font-weight:400;">(optional, only used if this step depends on another)</span></label>
+                                        <input type="text" id="pb-step-condition-input" placeholder="node.type == 'ipv4-addr'">
+                                    </div>
+                                    <div style="display:flex; gap:8px; margin-top:12px;">
+                                        <button id="btn-pb-step-confirm" class="btn-primary full-width">Confirm</button>
+                                        <button id="btn-pb-step-cancel" class="btn-secondary full-width">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="font-size:0.75rem; color: var(--text-secondary); margin-top:8px;">
+                                <i class="fa-solid fa-circle-info" style="color: var(--accent-cyan); margin-right:4px;"></i>
+                                Use the canvas toolbar to add steps and drag between them to set dependencies (an arrow from A to B means "B depends_on A").
+                            </div>
+                        </div>
+
+                        <div id="pb-tab-yaml" class="pb-tab-content">
+                            <div class="playbook-yaml-wrap">
+                                <textarea id="playbook-yaml-editor"></textarea>
+                            </div>
+                            <div id="playbook-yaml-messages" class="playbook-yaml-messages"></div>
+                        </div>
+
+                        <div id="pb-tab-run" class="pb-tab-content">
+                            <div class="form-group">
+                                <label for="playbook-trigger-value">Trigger Value</label>
+                                <input type="text" id="playbook-trigger-value" placeholder="e.g. example.com">
+                            </div>
+                            <button id="btn-run-playbook" class="btn-primary" style="align-self:flex-start; padding: 8px 20px;">
+                                <i class="fa-solid fa-play"></i> Run
+                            </button>
+                            <div id="playbook-run-status" style="margin-top:10px; font-size:0.85rem;"></div>
+                            <div id="playbook-run-log" class="playbook-run-log"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
