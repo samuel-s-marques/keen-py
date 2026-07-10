@@ -895,14 +895,18 @@ class Shell(Cmd):
         """Manage workspaces.
 
         Usage:
-            workspace                           - Show active workspace
-            workspace list                      - List all workspaces & active metrics
-            workspace select <name>             - Switch/use an existing workspace
-            workspace create <name> [desc]      - Create & register a workspace
-            workspace set-desc <description>    - Update current workspace's description
-            workspace delete <name>             - Unregister a workspace (retains database)
-            workspace rename <name> <new_name>  - Rename a workspace
-            workspace export <type> <path>      - Export current workspace (PDF, HTML, Markdown, JSON/STIX2)
+            workspace                                            - Show active workspace
+            workspace list                                       - List all workspaces & active metrics
+            workspace select <name>                              - Switch/use an existing workspace
+            workspace create <name> [desc] [--scope T:V]...      - Create & register a workspace,
+                                                                    optionally declaring scope entries
+                                                                    (T: domain|ip|cidr|organization|person)
+            workspace set-desc <description>                     - Update current workspace's description
+            workspace delete <name>                              - Unregister a workspace (retains database)
+            workspace rename <name> <new_name>                   - Rename a workspace
+            workspace export <type> <path>                       - Export current workspace (PDF, HTML, Markdown, JSON/STIX2)
+
+        See also the 'scope' command for viewing/editing an existing workspace's scope.
         """
         try:
             import shlex
@@ -922,7 +926,7 @@ class Shell(Cmd):
                 )
                 info("Available commands:")
                 info("\tworkspace list")
-                info("\tworkspace create <name> [description]")
+                info("\tworkspace create <name> [description] [--scope <type>:<value>]...")
                 info("\tworkspace select <name>")
                 info("\tworkspace set-desc <description>")
                 info("\tworkspace delete <name>")
@@ -970,6 +974,7 @@ class Shell(Cmd):
             table.add_column("Name", justify="left", style="cyan", no_wrap=True)
             table.add_column("Nodes", justify="right", style="yellow")
             table.add_column("Edges", justify="right", style="magenta")
+            table.add_column("Scope", justify="right", style="magenta")
             table.add_column("Description", justify="left", style="white")
             table.add_column("Path", justify="left", style="dim white")
 
@@ -983,23 +988,33 @@ class Shell(Cmd):
                     "●" if self.workspace and self.workspace.name == name else ""
                 )
 
-                # Count nodes/edges from the db file
+                # Count nodes/edges/scope entries from the db file
                 nodes_count = 0
                 edges_count = 0
+                scope_count = 0
                 try:
                     if self.workspace and self.workspace.name == name:
                         nodes_count = self.workspace.get_node_count()
                         edges_count = self.workspace.get_edge_count()
+                        scope_count = len(self.workspace.list_scope())
                     elif os.path.exists(path):
                         temp_wm = WorkspaceManager(path, name=name)
                         nodes_count = temp_wm.get_node_count()
                         edges_count = temp_wm.get_edge_count()
+                        scope_count = len(temp_wm.list_scope())
                         temp_wm.conn.close()
                 except Exception as e:
                     desc += f" (Error: {e})"
 
+                scope_display = str(scope_count) if scope_count else "-"
                 table.add_row(
-                    is_active, name, str(nodes_count), str(edges_count), desc, path
+                    is_active,
+                    name,
+                    str(nodes_count),
+                    str(edges_count),
+                    scope_display,
+                    desc,
+                    path,
                 )
 
             console = Console()
@@ -1007,10 +1022,51 @@ class Shell(Cmd):
             return
         elif subcommand == "create":
             if len(args) < 2:
-                error("Usage: workspace create <name> [description]")
+                error(
+                    "Usage: workspace create <name> [description] [--scope <type>:<value>]..."
+                )
                 return
             name = args[1]
-            desc = " ".join(args[2:]) if len(args) > 2 else ""
+
+            # Pull out repeatable --scope <type>:<value> flags (type is one of
+            # domain/ip/cidr/organization/person) before treating whatever's
+            # left as the free-text description.
+            desc_parts: list[str] = []
+            scope_specs: list[tuple[str, str]] = []
+            rest = args[2:]
+            i = 0
+            while i < len(rest):
+                if rest[i] == "--scope":
+                    if i + 1 >= len(rest):
+                        error(
+                            "--scope requires a value: --scope <type>:<value> "
+                            "(type: domain|ip|cidr|organization|person)"
+                        )
+                        return
+                    spec = rest[i + 1]
+                    if ":" not in spec:
+                        error(f"Invalid --scope value '{spec}'. Expected <type>:<value>.")
+                        return
+                    scope_type, value = spec.split(":", 1)
+                    scope_type = scope_type.lower()
+                    if scope_type not in (
+                        "domain",
+                        "ip",
+                        "cidr",
+                        "organization",
+                        "person",
+                    ):
+                        error(
+                            f"Invalid scope type '{scope_type}' in '--scope {spec}'. "
+                            "Must be one of: domain, ip, cidr, organization, person."
+                        )
+                        return
+                    scope_specs.append((scope_type, value))
+                    i += 2
+                else:
+                    desc_parts.append(rest[i])
+                    i += 1
+            desc = " ".join(desc_parts)
 
             if not all(c.isalnum() or c in " _-" for c in name):
                 error(
@@ -1032,11 +1088,25 @@ class Shell(Cmd):
             self.config.set_preference("last_workspace", name)
             self._update_prompt()
 
+            for scope_type, value in scope_specs:
+                self.workspace.add_scope_entry(scope_type, value)
+
             info(
                 f"Created and switched to workspace: {stylize(name, Style(color=Color.GREEN))}"
             )
             if desc:
                 info(f"Description: {desc}")
+            if scope_specs:
+                info(
+                    f"Declared {len(scope_specs)} scope entr{'y' if len(scope_specs) == 1 else 'ies'}."
+                )
+                if any(t == "person" for t, _ in scope_specs):
+                    from src.utils.print_utils import warn
+
+                    warn(
+                        "Person scope entries added this way have no consent basis recorded -- "
+                        'add one with \'scope add person "<name>" "<consent basis>"\'.'
+                    )
             return
         elif subcommand in ("select", "use"):
             if len(args) < 2:
