@@ -799,16 +799,20 @@ class Shell(Cmd):
                 )
                 job_workspace.update_job(job_id, status="running")
 
+            from src.utils.notifications import notify_job_completion
+
             try:
                 asyncio.run(self.current_module.run())
             except KeyboardInterrupt:
                 error("\nExecution interrupted by user.")
                 if job_id and job_workspace:
                     job_workspace.update_job(job_id, status="cancelled")
+                    asyncio.run(notify_job_completion(self.config, job_workspace, job_id))
                 return
 
             if job_id and job_workspace:
                 job_workspace.update_job(job_id, status="completed", progress=1.0)
+                asyncio.run(notify_job_completion(self.config, job_workspace, job_id))
         else:
             error("No module selected.")
 
