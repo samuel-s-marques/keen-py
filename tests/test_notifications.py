@@ -132,3 +132,52 @@ async def test_send_telegram_noop_without_token_or_chat_id():
 async def test_send_discord_noop_without_webhook():
     config = FakeConfig()
     await notifications._send_discord(config, "hello")
+
+
+class FakeWorkspace:
+    def __init__(self, job=None):
+        self._job = job
+
+    def get_job(self, job_id):
+        return self._job if self._job and self._job.get("job_id") == job_id else None
+
+
+@pytest.mark.asyncio
+async def test_notify_job_completion_dispatches_for_known_job(monkeypatch):
+    config = FakeConfig(preferences={"notify_channels": "discord"})
+    workspace = FakeWorkspace({**BASE_JOB, "status": "failed"})
+    dispatched = []
+
+    async def fake_dispatch(cfg, job):
+        dispatched.append(job["job_id"])
+
+    monkeypatch.setattr(notifications, "dispatch_job_notification", fake_dispatch)
+    await notifications.notify_job_completion(config, workspace, "abc123")
+    assert dispatched == ["abc123"]
+
+
+@pytest.mark.asyncio
+async def test_notify_job_completion_is_noop_for_unknown_job():
+    config = FakeConfig(preferences={"notify_channels": "discord"})
+    workspace = FakeWorkspace(job=None)
+    # Must not raise even though the job lookup returns nothing.
+    await notifications.notify_job_completion(config, workspace, "does-not-exist")
+
+
+@pytest.mark.asyncio
+async def test_notify_job_completion_swallows_dispatch_errors(monkeypatch):
+    config = FakeConfig(preferences={"notify_channels": "discord"})
+    workspace = FakeWorkspace({**BASE_JOB, "status": "failed"})
+
+    async def broken_dispatch(cfg, job):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(notifications, "dispatch_job_notification", broken_dispatch)
+    # Must not raise -- a broken notification channel can't break the run.
+    await notifications.notify_job_completion(config, workspace, "abc123")
+
+
+@pytest.mark.asyncio
+async def test_notify_job_completion_is_noop_without_workspace():
+    config = FakeConfig()
+    await notifications.notify_job_completion(config, None, "abc123")
