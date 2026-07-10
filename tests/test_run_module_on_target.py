@@ -165,6 +165,29 @@ async def test_skipped_active_module_records_skipped_job():
 
 
 @pytest.mark.asyncio
+async def test_completed_run_dispatches_notification(monkeypatch):
+    ws, config = _setup()
+    try:
+        notified = []
+
+        async def fake_notify(cfg, workspace, job_id):
+            notified.append((workspace is ws, job_id))
+
+        import src.core.magic as magic_module
+
+        monkeypatch.setattr(magic_module, "notify_job_completion", fake_notify)
+
+        shell = MockShell(ws, config)
+        await run_module_on_target(PassiveMod, "example.com", shell, config)
+
+        jobs = ws.list_jobs()
+        assert len(notified) == 1
+        assert notified[0] == (True, jobs[0]["job_id"])
+    finally:
+        _teardown(ws, config)
+
+
+@pytest.mark.asyncio
 async def test_failing_module_records_failed_job_and_still_raises():
     class BoomMod(BaseModule):
         metadata = {
