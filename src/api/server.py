@@ -171,6 +171,11 @@ class EdgeUpdate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+class NodeMergeRequest(BaseModel):
+    canonical_id: int
+    absorbed_ids: List[int]
+
+
 class FeedbackSubmit(BaseModel):
     status: str
     feedback: Optional[str] = None
@@ -1031,6 +1036,28 @@ def update_workspace_edge(
         if not updated:
             return JSONResponse(
                 status_code=404, content={"error": "Edge not found or no changes made"}
+            )
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/workspaces/{name}/nodes/merge", response_model=None)
+def merge_workspace_nodes(
+    req: NodeMergeRequest, wm: WorkspaceManager = Depends(get_workspace_manager)
+) -> Union[Dict[str, Any], JSONResponse]:
+    """Merge nodes into one identity (Entity Resolution, BEYOND_MALTEGO §2.4).
+
+    Re-points every edge from ``absorbed_ids`` onto ``canonical_id``, unions
+    their metadata, and logs one provenance ledger entry. This is always an
+    explicit operator action -- nothing in Keen merges nodes automatically.
+    """
+    try:
+        merged = wm.merge_nodes(req.canonical_id, req.absorbed_ids, actor="web")
+        if not merged:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "Canonical node not found or no absorbed nodes matched"},
             )
         return {"success": True}
     except Exception as e:
