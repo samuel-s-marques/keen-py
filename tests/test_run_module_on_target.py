@@ -127,3 +127,64 @@ async def test_active_module_runs_with_auto_confirm():
         assert "example.com" in values
     finally:
         _teardown(ws, config)
+
+
+@pytest.mark.asyncio
+async def test_successful_run_records_completed_job():
+    """Every module run through the shared engine leaves a job_history row --
+    this is what makes magic-chained and playbook-driven runs show up in
+    `jobs list`/the Web UI task panel, not just direct top-level `run`."""
+    ws, config = _setup()
+    try:
+        shell = MockShell(ws, config)
+        await run_module_on_target(PassiveMod, "example.com", shell, config)
+
+        jobs = ws.list_jobs()
+        assert len(jobs) == 1
+        assert jobs[0]["module_name"] == "Passive Mod"
+        assert jobs[0]["target_value"] == "example.com"
+        assert jobs[0]["status"] == "completed"
+        assert jobs[0]["nodes_added"] == 2
+    finally:
+        _teardown(ws, config)
+
+
+@pytest.mark.asyncio
+async def test_skipped_active_module_records_skipped_job():
+    ws, config = _setup()
+    try:
+        shell = MockShell(ws, config)
+        await run_module_on_target(ActiveMod, "example.com", shell, config)
+
+        jobs = ws.list_jobs()
+        assert len(jobs) == 1
+        assert jobs[0]["status"] == "skipped"
+        assert jobs[0]["ended_at"] is not None
+    finally:
+        _teardown(ws, config)
+
+
+@pytest.mark.asyncio
+async def test_failing_module_records_failed_job_and_still_raises():
+    class BoomMod(BaseModule):
+        metadata = {
+            "name": "Boom Mod",
+            "description": "",
+            "options": {"TARGET": ["", True, "Target", "domain"]},
+        }
+
+        async def run(self):
+            raise RuntimeError("boom")
+
+    ws, config = _setup()
+    try:
+        shell = MockShell(ws, config)
+        with pytest.raises(RuntimeError, match="boom"):
+            await run_module_on_target(BoomMod, "example.com", shell, config)
+
+        jobs = ws.list_jobs()
+        assert len(jobs) == 1
+        assert jobs[0]["status"] == "failed"
+        assert jobs[0]["error_message"] == "boom"
+    finally:
+        _teardown(ws, config)
