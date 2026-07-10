@@ -9,9 +9,25 @@ Neither guardrail is on by default for scope (a case with no declared scope enfo
 
 ## Scope
 
-### Declaring scope
+### Declaring scope at workspace creation
 
-Use the `scope add` command to declare an entry. `<type>` is one of `domain`, `ip`, `cidr`, `organization`, or `person`.
+The most natural place to declare scope is when you create the case -- `workspace create` accepts a repeatable `--scope <type>:<value>` flag, so the case never exists without a declared boundary in the first place:
+
+```
+keen > workspace create "John Doe" "Investigation of John Doe" --scope domain:example.com --scope ip:203.0.113.10
+INFO     | Created and switched to workspace: John Doe
+INFO     | Declared 2 scope entries.
+```
+
+This shorthand doesn't carry a consent basis (see the warning below) -- for a `person` entry, follow up with `scope add` so the consent basis is actually recorded:
+
+```
+keen[John Doe] > scope add person "Jane Smith" "Signed consent form, engagement #4471"
+```
+
+### Editing an existing workspace's scope
+
+Use `scope add`/`scope remove` against whichever workspace is currently active. `<type>` is one of `domain`, `ip`, `cidr`, `organization`, or `person`.
 
 ```
 keen[John Doe] > scope add domain example.com "Client engagement, signed SOW #4471"
@@ -65,6 +81,27 @@ keen[John Doe] > scope quarantined
 ```
 
 Quarantined nodes are also excluded from Magic Chaining and playbook auto-pivoting -- an out-of-scope discovery stops the crawl there instead of silently expanding it further.
+
+### Web UI / REST API
+
+Scope can be declared inline when creating a workspace via `POST /api/workspaces`, by including a `scope` list alongside `name`/`description`:
+
+```json
+{
+  "name": "John Doe",
+  "description": "Investigation of John Doe",
+  "scope": [
+    {"scope_type": "domain", "value": "example.com", "consent_basis": "Signed SOW #4471"}
+  ]
+}
+```
+
+To view or edit an existing workspace's scope:
+
+- `GET /api/workspaces/{name}/scope` -- list declared entries.
+- `POST /api/workspaces/{name}/scope` -- add an entry (`scope_type`, `value`, `consent_basis`).
+- `DELETE /api/workspaces/{name}/scope/{entry_id}` -- remove an entry.
+- `GET /api/workspaces/{name}/quarantined-nodes` -- list nodes flagged as out-of-scope.
 
 ## Execution Safety
 
