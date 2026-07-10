@@ -723,6 +723,17 @@ class BaseModule:
         with self._config_ctx() as config:
             config.cache_set(key, value, ttl)
 
+    async def rate_limit(self, service: str) -> None:
+        """Pace requests to ``service`` (see ``src/utils/rate_limiter.py``).
+
+        Call once before a module's first request per run to a rate-limited
+        third-party provider (e.g. ``await self.rate_limit("shodan")``).
+        """
+        from src.utils.rate_limiter import acquire
+
+        with self._config_ctx() as config:
+            await acquire(service, config)
+
     async def request(
         self,
         client,
