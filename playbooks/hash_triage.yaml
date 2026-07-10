@@ -1,0 +1,16 @@
+name: Hash Triage
+description: >
+  Identifies a hex-encoded hash's algorithm, then checks it against Malshare
+  for a known-malware-sample match.
+trigger_type: x-hash
+steps:
+  - id: identify_hash
+    module: helpers/hash_lookup
+    inputs:
+      TARGET: "{{ trigger.value }}"
+
+  - id: malshare_lookup
+    module: intel/malshare
+    depends_on: identify_hash
+    inputs:
+      TARGET: "{{ identify_hash.node_value }}"

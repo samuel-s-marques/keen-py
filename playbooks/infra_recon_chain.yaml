@@ -1,0 +1,35 @@
+name: Infrastructure Recon Chain
+description: >
+  DNS + subdomain + certificate-transparency sweep on a domain, then pivots
+  any IPv4 addresses DNS resolution discovered into Shodan and Censys host
+  lookups.
+trigger_type: domain-name
+steps:
+  - id: dns_sweep
+    module: discovery/dns_enum
+    inputs:
+      TARGET: "{{ trigger.value }}"
+
+  - id: subdomain_sweep
+    module: discovery/subdomain_enum
+    inputs:
+      TARGET: "{{ trigger.value }}"
+
+  - id: cert_sweep
+    module: discovery/cert_transparency
+    inputs:
+      TARGET: "{{ trigger.value }}"
+
+  - id: shodan_scan
+    module: intel/shodan_host
+    depends_on: dns_sweep
+    inputs:
+      TARGET: "{{ dns_sweep.node_value }}"
+    condition: "node.type == 'ipv4-addr'"
+
+  - id: censys_scan
+    module: intel/censys_host
+    depends_on: dns_sweep
+    inputs:
+      TARGET: "{{ dns_sweep.node_value }}"
+    condition: "node.type == 'ipv4-addr'"

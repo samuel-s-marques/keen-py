@@ -1,0 +1,16 @@
+name: Domain Intel Sweep
+description: >
+  Independent, concurrent domain enrichment: WHOIS registration data and a
+  public HIBP breach-catalog check for the domain. No step depends on
+  another, so both run in parallel.
+trigger_type: domain-name
+steps:
+  - id: whois_lookup
+    module: discovery/whois
+    inputs:
+      TARGET: "{{ trigger.value }}"
+
+  - id: breach_check
+    module: intel/hibp_domain
+    inputs:
+      TARGET: "{{ trigger.value }}"
