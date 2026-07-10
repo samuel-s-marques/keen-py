@@ -36,7 +36,7 @@ execution from a condition string is not an acceptable risk.
 import ast
 import asyncio
 import re
-from typing import Any
+from typing import Any, Callable, Optional
 
 from src.core.loader import load_modules
 from src.core.magic import run_module_on_target
@@ -171,6 +171,103 @@ def load_playbook(path: str) -> dict:
     return playbook
 
 
+def _depends_on_list(step: dict) -> list:
+    dep = step.get("depends_on")
+    if not dep:
+        return []
+    return [dep] if isinstance(dep, str) else list(dep)
+
+
+def _detect_cycle(steps_by_id: dict) -> Optional[list]:
+    """Return one cyclic path (list of step ids) if the DAG has a cycle, else None."""
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {step_id: WHITE for step_id in steps_by_id}
+    path: list = []
+
+    def visit(step_id: str) -> Optional[list]:
+        color[step_id] = GRAY
+        path.append(step_id)
+        for dep in _depends_on_list(steps_by_id[step_id]):
+            if dep not in steps_by_id:
+                continue
+            if color[dep] == GRAY:
+                return path[path.index(dep):] + [dep]
+            if color[dep] == WHITE:
+                found = visit(dep)
+                if found:
+                    return found
+        path.pop()
+        color[step_id] = BLACK
+        return None
+
+    for step_id in steps_by_id:
+        if color[step_id] == WHITE:
+            found = visit(step_id)
+            if found:
+                return found
+    return None
+
+
+def validate_playbook(playbook: Any) -> dict:
+    """Structurally validate a playbook without executing it.
+
+    Returns ``{"errors": [...], "warnings": [...]}``. Errors mean the
+    playbook can't run at all (bad shape, unknown ``depends_on``, a
+    dependency cycle, duplicate step ids); warnings flag things that won't
+    crash a run but likely aren't what the author intended (an unresolvable
+    module reference, a ``condition`` with invalid syntax). Used by the web
+    API's save/validate endpoints so authoring mistakes surface immediately
+    instead of only at run time.
+    """
+    errors: list = []
+    warnings: list = []
+
+    if not isinstance(playbook, dict):
+        return {"errors": ["Playbook must be a YAML mapping"], "warnings": []}
+
+    steps = playbook.get("steps")
+    if not isinstance(steps, list) or not steps:
+        return {"errors": ["Playbook must have a non-empty 'steps' list"], "warnings": []}
+
+    steps_by_id: dict = {}
+    for i, step in enumerate(steps):
+        if not isinstance(step, dict) or not step.get("id") or not step.get("module"):
+            errors.append(f"Step #{i + 1} must be a mapping with 'id' and 'module'")
+            continue
+        if step["id"] in steps_by_id:
+            errors.append(f"Duplicate step id '{step['id']}'")
+            continue
+        steps_by_id[step["id"]] = step
+
+    if errors:
+        return {"errors": errors, "warnings": warnings}
+
+    for step_id, step in steps_by_id.items():
+        for dep in _depends_on_list(step):
+            if dep not in steps_by_id:
+                errors.append(f"Step '{step_id}' depends_on unknown step '{dep}'")
+
+    if not errors:
+        cycle = _detect_cycle(steps_by_id)
+        if cycle:
+            errors.append(f"Dependency cycle: {' -> '.join(cycle)}")
+
+    if not errors:
+        modules = load_modules()
+        for step_id, step in steps_by_id.items():
+            module_key = step["module"]
+            if module_key not in modules and module_key.split("/")[-1] not in modules:
+                warnings.append(f"Step '{step_id}' references unknown module '{module_key}'")
+            condition = step.get("condition")
+            if condition:
+                try:
+                    ast.parse(condition, mode="eval")
+                except SyntaxError as e:
+                    warnings.append(f"Step '{step_id}' has an invalid condition: {e}")
+
+    return {"errors": errors, "warnings": warnings}
+
+
 class PlaybookEngine:
     """Executes a parsed playbook's step DAG against a trigger value."""
 
@@ -178,13 +275,25 @@ class PlaybookEngine:
         self.shell = shell
         self.config = config
         self.modules = load_modules()
+        self._event_sink: Optional[Callable[[dict], None]] = None
+
+    def _emit(self, event: dict) -> None:
+        """Push a structured event (``playbook_started``/``step_started``/
+        ``step_completed``) to ``self._event_sink`` if a caller (the web
+        server's WebSocket streaming, mirroring ``BaseModule._emit``) has set
+        one. Best-effort: a broken sink must never break a playbook run.
+        """
+        sink = self._event_sink
+        if not sink:
+            return
+        try:
+            sink(event)
+        except Exception:
+            pass
 
     @staticmethod
     def _depends_on(step: dict) -> list:
-        dep = step.get("depends_on")
-        if not dep:
-            return []
-        return [dep] if isinstance(dep, str) else list(dep)
+        return _depends_on_list(step)
 
     def _validate_dag(self, steps_by_id: dict) -> None:
         for step_id, step in steps_by_id.items():
@@ -275,6 +384,7 @@ class PlaybookEngine:
         steps = playbook.get("steps", [])
         steps_by_id = {s["id"]: s for s in steps}
         self._validate_dag(steps_by_id)
+        self._emit({"type": "playbook_started", "step_ids": list(steps_by_id.keys())})
 
         context: dict = {"trigger": {"value": trigger_value}}
         results: dict = {}
@@ -294,13 +404,18 @@ class PlaybookEngine:
                 )
                 break
 
+            for s in ready:
+                self._emit({"type": "step_started", "step_id": s["id"]})
+
             batch = await asyncio.gather(
                 *(self._run_step(s, context, results) for s in ready),
                 return_exceptions=True,
             )
             for step, outcome in zip(ready, batch):
+                status = "completed"
                 if isinstance(outcome, BaseException):
                     warn(f"[playbook] Step '{step['id']}' failed: {outcome}")
+                    status = "failed"
                     outcome = []
                 results[step["id"]] = outcome
                 if outcome:
@@ -310,5 +425,15 @@ class PlaybookEngine:
                     }
                 done.add(step["id"])
                 remaining.pop(step["id"], None)
+                self._emit(
+                    {
+                        "type": "step_completed",
+                        "step_id": step["id"],
+                        "status": status,
+                        "node_count": len(outcome),
+                        "nodes": outcome,
+                    }
+                )
 
+        self._emit({"type": "playbook_finished", "step_count": len(done)})
         return results
