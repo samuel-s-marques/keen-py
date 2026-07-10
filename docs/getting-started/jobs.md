@@ -50,7 +50,14 @@ If the job is still actively running in this process, cancelling it also interru
 
 ## Web UI
 
-The Web UI's task manager panel reads from the same `job_history` table via `GET /api/workspaces/{name}/jobs`. Running a module or a Magic Chain over WebSocket automatically creates and updates a job row as it progresses (including live `progress`, `node_added`, and `edge_added` events, not just log text), and the panel's **Cancel** button calls `POST /api/workspaces/{name}/jobs/{job_id}/cancel`.
+The right panel (next to **Runner**, **Info**, and **Partner**) has a **Jobs** tab reading from the same `job_history` table via `GET /api/workspaces/{name}/jobs`. By default it shows only active jobs; check **Show all** to include completed/failed/cancelled ones too. A small pulse dot on the tab itself indicates a job is currently running, even while you're looking at another tab.
+
+Running a module or a Magic Chain over WebSocket automatically creates and updates a job row as it progresses (including live `progress`, `node_added`, and `edge_added` events, not just log text). Each job card shows a progress bar, a status badge, and:
+
+- A **stop** button (active jobs only) -- calls `POST /api/workspaces/{name}/jobs/{job_id}/cancel`.
+- A **logs** button -- opens a modal with the job's captured log lines and error message (if any), via `GET /api/workspaces/{name}/jobs/{job_id}`.
+
+The panel polls every 4 seconds, but only while the Jobs tab is actually the visible one -- switching to another tab stops the polling rather than running it in the background indefinitely.
 
 ## Notes for automation
 
