@@ -328,11 +328,20 @@ async def run_module_on_target(
     ``active``/``intrusive`` modules unattended (e.g. the ``magic_allow_active_modules``
     preference). Without it, a module classified as anything but ``passive``
     is skipped rather than silently executed in a non-interactive context.
+
+    Also records one row per invocation in the active workspace's
+    ``job_history`` table (see ``WorkspaceManager.create_job``/``update_job``)
+    -- the same table the CLI ``run`` command writes to -- so magic-chained
+    and playbook-driven module runs show up in `jobs list`/the Web UI task
+    panel too, not just direct top-level `run` invocations.
     """
-    friendly_name = getattr(mod_class, "metadata", {}).get("name", "")
+    friendly_name = getattr(mod_class, "metadata", {}).get("name", "") or mod_class.__name__
     msg = f"{log_prefix}: running '{friendly_name}' on '{target_value}'"
     info(msg)
     print(msg)
+
+    job_workspace = getattr(shell, "workspace", None)
+    job_id = job_workspace.create_job(friendly_name, target_value) if job_workspace else None
 
     module_instance = mod_class()
     module_instance.shell = shell
@@ -368,13 +377,29 @@ async def run_module_on_target(
             )
             warn(msg)
             print(msg)
+            if job_id and job_workspace:
+                job_workspace.update_job(
+                    job_id,
+                    status="skipped",
+                    error_message=(
+                        f"classified as {module_instance.execution_safety}; "
+                        "not auto-confirmed"
+                    ),
+                )
             return []
+
+    if job_id and job_workspace:
+        job_workspace.update_job(job_id, status="running")
 
     # Validate options
     if not module_instance.pre_run():
         warn(
             f"Pre-run validation failed for module '{getattr(mod_class, 'metadata', {}).get('name')}' on target '{target_value}'"
         )
+        if job_id and job_workspace:
+            job_workspace.update_job(
+                job_id, status="failed", error_message="pre_run validation failed"
+            )
         return []
 
     original_post_run = module_instance.post_run
@@ -391,8 +416,17 @@ async def run_module_on_target(
     try:
         # Execute
         await module_instance.run()
+    except Exception as e:
+        if job_id and job_workspace:
+            job_workspace.update_job(job_id, status="failed", error_message=str(e))
+        raise
     finally:
         if hasattr(module_instance, "cleanup"):
             module_instance.cleanup()
+
+    if job_id and job_workspace:
+        job_workspace.update_job(
+            job_id, status="completed", progress=1.0, nodes_added=len(discovered_nodes)
+        )
 
     return discovered_nodes
