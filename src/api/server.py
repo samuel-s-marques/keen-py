@@ -1636,14 +1636,9 @@ async def _stream_run(
         if job_id is not None:
             _ACTIVE_JOB_TASKS.pop(job_id, None)
             if config is not None and workspace is not None:
-                try:
-                    from src.utils.notifications import dispatch_job_notification
+                from src.utils.notifications import notify_job_completion
 
-                    job = workspace.get_job(job_id)
-                    if job:
-                        await dispatch_job_notification(config, job)
-                except Exception:
-                    pass
+                await notify_job_completion(config, workspace, job_id)
         try:
             logger.remove(handler_id)
         except Exception:
