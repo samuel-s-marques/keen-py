@@ -28,6 +28,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.core.loader import load_modules
 from src.core.managers import ConfigManager, WorkspaceManager
+from src.core.playbooks import PlaybookEngine, load_playbook, validate_playbook
 from src.utils.config_util import get_valid_name
 
 app = FastAPI(title="Keen API Web Server")
@@ -191,6 +192,15 @@ class SuggestionGenerateRequest(BaseModel):
     selected_nodes: Optional[List[Dict[str, Any]]] = None
 
 
+class PlaybookSaveRequest(BaseModel):
+    """Either ``yaml_content`` (raw text, from the YAML editor) or ``playbook``
+    (a structured dict, from the visual DAG builder) must be given -- never
+    both. Exactly one wire format in, one canonical YAML file out."""
+
+    yaml_content: Optional[str] = None
+    playbook: Optional[Dict[str, Any]] = None
+
+
 class WebShellAdapter:
     def __init__(
         self, workspace: Optional[WorkspaceManager], config: ConfigManager
@@ -256,6 +266,61 @@ def validate_workspace_name(raw_name: str) -> str:
             detail="Workspace name must be alphanumeric (underscores/hyphens/spaces allowed).",
         )
     return name
+
+
+PLAYBOOKS_DIR = "playbooks"
+_PLAYBOOK_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _playbook_path(playbook_id: str) -> str:
+    """Resolve ``playbook_id`` to a file under ``PLAYBOOKS_DIR``."""
+    if not _PLAYBOOK_ID_RE.match(playbook_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Playbook id must be alphanumeric (underscores/hyphens allowed).",
+        )
+    os.makedirs(PLAYBOOKS_DIR, exist_ok=True)
+    return os.path.join(PLAYBOOKS_DIR, f"{playbook_id}.yaml")
+
+
+def _parse_playbook_body(body: "PlaybookSaveRequest"):
+    """Normalize a save/validate request body to a playbook dict.
+
+    Returns ``(playbook, error_message)`` -- exactly one is ``None``.
+    """
+    import yaml
+
+    if body.yaml_content is not None:
+        try:
+            return yaml.safe_load(body.yaml_content), None
+        except yaml.YAMLError as e:
+            return None, f"Invalid YAML: {e}"
+    if body.playbook is not None:
+        return body.playbook, None
+    return None, "Either 'yaml_content' or 'playbook' must be provided"
+
+
+def _save_playbook(path: str, body: "PlaybookSaveRequest") -> JSONResponse:
+    import yaml
+
+    playbook, error = _parse_playbook_body(body)
+    if error:
+        return JSONResponse(status_code=400, content={"error": error})
+
+    result = validate_playbook(playbook)
+    if result["errors"]:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Invalid playbook",
+                "errors": result["errors"],
+                "warnings": result["warnings"],
+            },
+        )
+
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(playbook, f, sort_keys=False)
+    return JSONResponse(content={"success": True, "warnings": result["warnings"]})
 
 
 class WorkspaceNotFoundException(Exception):
@@ -1510,6 +1575,104 @@ def get_modules() -> Dict[str, Any]:
     return result
 
 
+@app.get("/api/playbooks")
+def list_playbooks() -> List[Dict[str, Any]]:
+    """List playbooks stored under ``playbooks/*.yaml``.
+
+    A playbook that fails to parse is still listed (so it shows up for the
+    user to fix or delete) with an ``error`` field instead of being silently
+    dropped.
+    """
+    os.makedirs(PLAYBOOKS_DIR, exist_ok=True)
+    result = []
+    for fname in sorted(os.listdir(PLAYBOOKS_DIR)):
+        if not fname.endswith((".yaml", ".yml")):
+            continue
+        playbook_id = os.path.splitext(fname)[0]
+        try:
+            pb = load_playbook(os.path.join(PLAYBOOKS_DIR, fname))
+            result.append(
+                {
+                    "id": playbook_id,
+                    "name": pb.get("name", playbook_id),
+                    "description": pb.get("description", ""),
+                    "trigger_type": pb.get("trigger_type", ""),
+                    "step_count": len(pb.get("steps", [])),
+                }
+            )
+        except Exception as e:
+            result.append(
+                {
+                    "id": playbook_id,
+                    "name": playbook_id,
+                    "description": "",
+                    "trigger_type": "",
+                    "step_count": 0,
+                    "error": str(e),
+                }
+            )
+    return result
+
+
+@app.get("/api/playbooks/{playbook_id}", response_model=None)
+def get_playbook(playbook_id: str) -> Union[Dict[str, Any], JSONResponse]:
+    """Return both the raw YAML text (for the YAML editor) and the parsed
+    dict (for the visual DAG builder) so either view can be populated
+    without re-parsing client-side."""
+    path = _playbook_path(playbook_id)
+    if not os.path.exists(path):
+        return JSONResponse(status_code=404, content={"error": "Playbook not found"})
+
+    with open(path, "r", encoding="utf-8") as f:
+        raw = f.read()
+    try:
+        parsed: Optional[Dict[str, Any]] = load_playbook(path)
+    except Exception:
+        parsed = None
+    return {"id": playbook_id, "yaml": raw, "playbook": parsed}
+
+
+@app.post("/api/playbooks/validate")
+def validate_playbook_endpoint(body: PlaybookSaveRequest) -> Dict[str, Any]:
+    """Validate a playbook (from either wire format) without writing anything."""
+    playbook, error = _parse_playbook_body(body)
+    if error:
+        return {"valid": False, "errors": [error], "warnings": []}
+    result = validate_playbook(playbook)
+    return {
+        "valid": not result["errors"],
+        "errors": result["errors"],
+        "warnings": result["warnings"],
+    }
+
+
+@app.post("/api/playbooks/{playbook_id}", response_model=None)
+def create_playbook(playbook_id: str, body: PlaybookSaveRequest) -> JSONResponse:
+    path = _playbook_path(playbook_id)
+    if os.path.exists(path):
+        return JSONResponse(
+            status_code=409, content={"error": "A playbook with this id already exists"}
+        )
+    return _save_playbook(path, body)
+
+
+@app.put("/api/playbooks/{playbook_id}", response_model=None)
+def update_playbook(playbook_id: str, body: PlaybookSaveRequest) -> JSONResponse:
+    path = _playbook_path(playbook_id)
+    if not os.path.exists(path):
+        return JSONResponse(status_code=404, content={"error": "Playbook not found"})
+    return _save_playbook(path, body)
+
+
+@app.delete("/api/playbooks/{playbook_id}", response_model=None)
+def delete_playbook(playbook_id: str) -> Union[Dict[str, Any], JSONResponse]:
+    path = _playbook_path(playbook_id)
+    if not os.path.exists(path):
+        return JSONResponse(status_code=404, content={"error": "Playbook not found"})
+    os.remove(path)
+    return {"success": True}
+
+
 # In-memory registry of running jobs' asyncio Tasks, keyed by job_id. A live
 # Task can't be persisted to SQLite, so this is what actually lets `jobs
 # cancel <job_id>` / POST .../jobs/{job_id}/cancel interrupt a run; the
@@ -1813,6 +1976,105 @@ async def websocket_run_magic(websocket: WebSocket) -> None:
             config=config,
             module_name="magic_chain",
             target_value=target,
+        )
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
+    finally:
+        try:
+            config.close()
+        except Exception:
+            pass
+        if workspace:
+            try:
+                workspace.close()
+            except Exception:
+                pass
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+@app.websocket("/ws/playbooks/{playbook_id}/run")
+async def websocket_run_playbook(websocket: WebSocket, playbook_id: str) -> None:
+    """Run a playbook asynchronously via WebSocket."""
+    await websocket.accept()
+
+    config = ConfigManager("~/.keen/config.db")
+    workspace = None
+
+    try:
+        try:
+            path = _playbook_path(playbook_id)
+        except HTTPException as e:
+            await websocket.send_json({"type": "error", "message": e.detail})
+            await websocket.close()
+            return
+
+        if not os.path.exists(path):
+            await websocket.send_json(
+                {"type": "error", "message": "Playbook not found"}
+            )
+            await websocket.close()
+            return
+
+        try:
+            playbook = load_playbook(path)
+        except Exception as e:
+            await websocket.send_json(
+                {"type": "error", "message": f"Invalid playbook: {e}"}
+            )
+            await websocket.close()
+            return
+
+        data = await websocket.receive_json()
+        trigger_value = str(data.get("trigger_value", "")).strip()
+        workspace_name = data.get("workspace_name", "")
+
+        if not trigger_value:
+            await websocket.send_json(
+                {"type": "error", "message": "trigger_value is required"}
+            )
+            await websocket.close()
+            return
+
+        # Setup workspace context
+        if workspace_name:
+            w = config.get_workspace(workspace_name)
+            if w:
+                workspace = WorkspaceManager(w["path"], name=workspace_name)
+
+        if not workspace:
+            last_ws = config.get_preference("last_workspace")
+            if last_ws:
+                w = config.get_workspace(last_ws)
+                if w:
+                    workspace = WorkspaceManager(w["path"], name=last_ws)
+            if not workspace:
+                db_file = "cases/playbooks.keen"
+                os.makedirs("cases", exist_ok=True)
+                config.add_workspace(
+                    "playbooks", db_file, "Default playbook-run workspace"
+                )
+                workspace = WorkspaceManager(db_file, name="playbooks")
+
+        shell_adapter = WebShellAdapter(workspace, config)
+        engine = PlaybookEngine(shell_adapter, config)
+
+        await _stream_run(
+            websocket,
+            lambda: engine.run(playbook, trigger_value),
+            workspace=workspace,
+            config=config,
+            module_instance=engine,
+            module_name=f"playbook:{playbook_id}",
+            target_value=trigger_value,
         )
 
     except WebSocketDisconnect:
