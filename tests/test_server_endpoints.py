@@ -258,6 +258,76 @@ def test_workspace_scope_endpoints():
                 pass
 
 
+def test_workspace_merge_nodes_endpoint():
+    """POST /api/workspaces/{name}/nodes/merge is the operator-facing entry
+    point for WorkspaceManager.merge_nodes -- otherwise the primitive is
+    unreachable from the running product (see internal/ARCHITECTURE_ROADMAP.md §1.3)."""
+    config_db = os.path.expanduser("~/.keen_test_server_merge_config.db")
+    if os.path.exists(config_db):
+        try:
+            os.remove(config_db)
+        except OSError:
+            pass
+
+    def get_config_override():
+        config = ConfigManager(config_db)
+        try:
+            yield config
+        finally:
+            config.close()
+
+    app.dependency_overrides[get_config] = get_config_override
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/workspaces",
+            json={"name": "merge_test_ws", "description": "Merge endpoint test"},
+        )
+        assert response.status_code == 200
+
+        from src.core.managers import WorkspaceManager
+
+        wm = WorkspaceManager("cases/merge_test_ws.keen", name="merge_test_ws")
+        canonical_id = wm.get_or_add_node("person", "John Doe")
+        absorbed_id = wm.get_or_add_node("person", "j.doe")
+        wm.close()
+
+        response = client.post(
+            "/api/workspaces/merge_test_ws/nodes/merge",
+            json={"canonical_id": canonical_id, "absorbed_ids": [absorbed_id]},
+        )
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+        wm = WorkspaceManager("cases/merge_test_ws.keen", name="merge_test_ws")
+        assert wm.get_node_id("j.doe") is None
+        assert wm.get_node_id("John Doe") == canonical_id
+        entries = wm.get_ledger_entries()
+        assert any(e["action"] == "merge_nodes" for e in entries)
+        wm.close()
+
+        # A merge referencing a nonexistent canonical node is reported, not silently OK'd.
+        response = client.post(
+            "/api/workspaces/merge_test_ws/nodes/merge",
+            json={"canonical_id": 999999, "absorbed_ids": [canonical_id]},
+        )
+        assert response.status_code == 404
+
+        print("[OK] Workspace merge endpoint verified successfully!")
+    finally:
+        if os.path.exists(config_db):
+            try:
+                os.remove(config_db)
+            except OSError:
+                pass
+        if os.path.exists("cases/merge_test_ws.keen"):
+            try:
+                os.remove("cases/merge_test_ws.keen")
+            except OSError:
+                pass
+
+
 def test_notifications_test_endpoint():
     """No channels configured -> success with an empty results map (not an error)."""
     config_db = os.path.expanduser("~/.keen_test_server_notify_config.db")
