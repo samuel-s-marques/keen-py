@@ -503,6 +503,9 @@
                     <button class="settings-tab" data-target="settings-proxies">
                         <i class="fa-solid fa-route"></i> Proxies
                     </button>
+                    <button class="settings-tab" data-target="settings-rate-limits">
+                        <i class="fa-solid fa-gauge-high"></i> Rate Limits
+                    </button>
                     <button class="settings-tab" data-target="settings-ai-partner">
                         <i class="fa-solid fa-brain"></i> AI Partner
                     </button>
@@ -721,6 +724,47 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+
+                    <div id="settings-rate-limits" class="settings-section">
+                        <h4>Rate Limits</h4>
+                        <p class="section-desc">Pace outgoing requests to external APIs so a module run doesn't trip a
+                            provider's rate limit. Applies per-service, before a module's first request each run.</p>
+
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.4;">
+                            <i class="fa-solid fa-circle-info" style="color: var(--accent-cyan); margin-right: 4px;"></i>
+                            Value is <strong>requests per second</strong>. Set to <code>0</code> to disable pacing for
+                            that service.
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 12px;">
+                            <label for="ratelimit-shodan-rps">Shodan (req/s)</label>
+                            <input type="number" id="ratelimit-shodan-rps" min="0" step="0.1" placeholder="1"
+                                style="width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 12px;">
+                            <label for="ratelimit-censys-rps">Censys (req/s)</label>
+                            <input type="number" id="ratelimit-censys-rps" min="0" step="0.1" placeholder="2"
+                                style="width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 12px;">
+                            <label for="ratelimit-crtsh-rps">crt.sh / Certificate Transparency (req/s)</label>
+                            <input type="number" id="ratelimit-crtsh-rps" min="0" step="0.1" placeholder="1"
+                                style="width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 12px;">
+                            <label for="ratelimit-hibp-rps">Have I Been Pwned (req/s)</label>
+                            <input type="number" id="ratelimit-hibp-rps" min="0" step="0.1" placeholder="1.5"
+                                style="width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label for="ratelimit-malshare-rps">MalShare (req/s)</label>
+                            <input type="number" id="ratelimit-malshare-rps" min="0" step="0.1" placeholder="2"
+                                style="width: 100%;">
+                        </div>
+
+                        <button id="btn-save-rate-limits" class="btn-primary full-width">Save Rate
+                            Limits</button>
                     </div>
 
                     <div id="settings-ai-partner" class="settings-section">

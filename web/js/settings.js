@@ -19,9 +19,24 @@ import {
     suggestionsList,
     statusIndicator,
     statusText,
+    ratelimitShodanRps,
+    ratelimitCensysRps,
+    ratelimitCrtshRps,
+    ratelimitHibpRps,
+    ratelimitMalshareRps,
 } from "./dom.js";
 import { fetchProxies } from "./proxies.js";
 import { showSnackbar } from "./notifications.js";
+
+// Mirrors src/utils/rate_limiter.py DEFAULT_RPS, shown when a service has no
+// rate_limit_<service>_rps preference set yet.
+const DEFAULT_RATE_LIMITS = {
+    shodan: 1.0,
+    censys: 2.0,
+    crtsh: 1.0,
+    hibp: 1.5,
+    malshare: 2.0,
+};
 
 export async function fetchApiKeys() {
     if (!KeenStore.isConfigUnlocked) return;
@@ -104,6 +119,23 @@ export async function fetchPreferences() {
 
         // Also reload the proxy table contents
         fetchProxies();
+
+        // Load rate limit settings into the UI
+        if (ratelimitShodanRps) {
+            ratelimitShodanRps.value = prefs.rate_limit_shodan_rps || DEFAULT_RATE_LIMITS.shodan;
+        }
+        if (ratelimitCensysRps) {
+            ratelimitCensysRps.value = prefs.rate_limit_censys_rps || DEFAULT_RATE_LIMITS.censys;
+        }
+        if (ratelimitCrtshRps) {
+            ratelimitCrtshRps.value = prefs.rate_limit_crtsh_rps || DEFAULT_RATE_LIMITS.crtsh;
+        }
+        if (ratelimitHibpRps) {
+            ratelimitHibpRps.value = prefs.rate_limit_hibp_rps || DEFAULT_RATE_LIMITS.hibp;
+        }
+        if (ratelimitMalshareRps) {
+            ratelimitMalshareRps.value = prefs.rate_limit_malshare_rps || DEFAULT_RATE_LIMITS.malshare;
+        }
     }
 }
 

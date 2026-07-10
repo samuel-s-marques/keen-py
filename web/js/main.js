@@ -40,6 +40,12 @@ import {
     prefMagicInteractive,
     prefMagicExcludeModules,
     btnSavePreferences,
+    ratelimitShodanRps,
+    ratelimitCensysRps,
+    ratelimitCrtshRps,
+    ratelimitHibpRps,
+    ratelimitMalshareRps,
+    btnSaveRateLimits,
     btnCreateWs,
     btnConfirmRenameWs,
     inputRenameWs,
@@ -225,7 +231,7 @@ inputWsName.addEventListener('input', () => {
 // Node Creation Modal
 document.getElementById('btn-add-node').addEventListener('click', () => {
     if (!KeenStore.activeWorkspace) {
-        alert('Please select a workspace first.');
+        showSnackbar('Nodes', 'Please select a workspace first.', 'error', 5000);
         return;
     }
     // Reset form
@@ -262,7 +268,7 @@ btnConfirmCreateNode.addEventListener('click', async () => {
     const type = nodeTypeSelect.value;
     const value = nodeValueInput.value.trim();
     if (!type || !value) {
-        alert('Please select a type and enter a value.');
+        showSnackbar('Nodes', 'Please select a type and enter a value.', 'error', 5000);
         return;
     }
 
@@ -286,10 +292,10 @@ btnConfirmCreateNode.addEventListener('click', async () => {
             termPrint(`Node created: ${value} (${type})`, 'sys-msg');
         } else {
             const err = await res.json();
-            alert(`Failed to create node: ${err.error || 'Unknown error'}`);
+            showSnackbar('Nodes', `Failed to create node: ${err.error || 'Unknown error'}`, 'error', 5000);
         }
     } catch (e) {
-        alert('Failed to create node. Check server connection.');
+        showSnackbar('Nodes', 'Failed to create node. Check server connection.', 'error', 5000);
     }
 });
 
@@ -314,7 +320,7 @@ btnUnlockSettings.addEventListener('click', async () => {
         inputMasterPassword.value = '';
         fetchApiKeys();
     } else {
-        alert('Invalid master password');
+        showSnackbar('Settings', 'Invalid master password', 'error', 5000);
     }
 });
 
@@ -339,7 +345,19 @@ btnSavePreferences.addEventListener('click', async () => {
         magic_exclude_modules: prefMagicExcludeModules.value.trim()
     };
     await KeenAPI.post(`/config/preferences`, payload);
-    alert('Preferences saved!');
+    showSnackbar('Preferences', 'Settings saved.', 'success', 3000);
+});
+
+btnSaveRateLimits.addEventListener('click', async () => {
+    const payload = {
+        rate_limit_shodan_rps: String(ratelimitShodanRps.value),
+        rate_limit_censys_rps: String(ratelimitCensysRps.value),
+        rate_limit_crtsh_rps: String(ratelimitCrtshRps.value),
+        rate_limit_hibp_rps: String(ratelimitHibpRps.value),
+        rate_limit_malshare_rps: String(ratelimitMalshareRps.value),
+    };
+    await KeenAPI.post(`/config/preferences`, payload);
+    showSnackbar('Rate Limits', 'Rate limit settings saved.', 'success', 3000);
 });
 
 // Call init listeners when loaded
@@ -368,7 +386,7 @@ btnCreateWs.addEventListener('click', async () => {
             selectWorkspace(name);
         } else {
             const err = await res.json();
-            alert(`Failed to create workspace: ${err.detail || err.error || 'Unknown error'}`);
+            showSnackbar('Workspaces', `Failed to create workspace: ${err.detail || err.error || 'Unknown error'}`, 'error', 5000);
         }
     } catch (e) {
         console.error('Failed to create workspace', e);
@@ -388,7 +406,7 @@ btnConfirmRenameWs.addEventListener('click', async () => {
         await fetchWorkspaces();
         if (KeenStore.activeWorkspace === newName) selectWorkspace(newName);
     } else {
-        alert("Failed to rename workspace. Ensure no other instances are locking it.");
+        showSnackbar('Workspaces', 'Failed to rename workspace. Ensure no other instances are locking it.', 'error', 5000);
     }
 });
 
@@ -577,7 +595,7 @@ if (btnConfirmEditNode) {
         const value = editNodeValueInput.value.trim();
 
         if (!value) {
-            alert('Please enter a value.');
+            showSnackbar('Nodes', 'Please enter a value.', 'error', 5000);
             return;
         }
 
@@ -600,10 +618,10 @@ if (btnConfirmEditNode) {
                 termPrint(`Node updated: ${value}`, 'sys-msg');
             } else {
                 const err = await res.json();
-                alert(`Failed to update node: ${err.error || 'Unknown error'}`);
+                showSnackbar('Nodes', `Failed to update node: ${err.error || 'Unknown error'}`, 'error', 5000);
             }
         } catch (e) {
-            alert('Failed to update node. Check server connection.');
+            showSnackbar('Nodes', 'Failed to update node. Check server connection.', 'error', 5000);
         }
     });
 }
@@ -614,7 +632,7 @@ if (btnConfirmEditEdge) {
         const relationship = editEdgeRelationshipInput.value.trim();
 
         if (!relationship) {
-            alert('Please enter a relationship.');
+            showSnackbar('Edges', 'Please enter a relationship.', 'error', 5000);
             return;
         }
 
@@ -637,10 +655,10 @@ if (btnConfirmEditEdge) {
                 termPrint(`Edge updated: ${relationship}`, 'sys-msg');
             } else {
                 const err = await res.json();
-                alert(`Failed to update edge: ${err.error || 'Unknown error'}`);
+                showSnackbar('Edges', `Failed to update edge: ${err.error || 'Unknown error'}`, 'error', 5000);
             }
         } catch (e) {
-            alert('Failed to update edge. Check server connection.');
+            showSnackbar('Edges', 'Failed to update edge. Check server connection.', 'error', 5000);
         }
     });
 }
@@ -677,7 +695,7 @@ if (btnExportWs && exportMenu) {
             exportMenu.classList.remove('show');
 
             if (!KeenStore.activeWorkspace) {
-                alert('No active workspace to export.');
+                showSnackbar('Workspaces', 'No active workspace to export.', 'error', 5000);
                 return;
             }
 
@@ -821,10 +839,10 @@ if (btnSaveAiSettings) {
                 fetchApiKeys(); // Refresh keys list
             }
 
-            alert('AI Thinking Partner settings saved!');
+            showSnackbar('AI Thinking Partner', 'Settings saved.', 'success', 3000);
         } catch (err) {
             console.error('Failed to save AI settings', err);
-            alert('Error saving settings.');
+            showSnackbar('AI Thinking Partner', 'Error saving settings.', 'error', 5000);
         } finally {
             btnSaveAiSettings.disabled = false;
             btnSaveAiSettings.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save AI Settings';
@@ -835,7 +853,7 @@ if (btnSaveAiSettings) {
 if (btnAnalyzeGraph) {
     btnAnalyzeGraph.addEventListener('click', async () => {
         if (!KeenStore.activeWorkspace) {
-            alert('Please select a workspace first.');
+            showSnackbar('Workspaces', 'Please select a workspace first.', 'error', 5000);
             return;
         }
 
@@ -931,7 +949,7 @@ document.querySelectorAll('.btn-quick-prompt').forEach(btn => {
                 }
                 queryInput.focus();
             } else {
-                alert('Please select one or more nodes in the visualizer graph first to trace.');
+                showSnackbar('Nodes', 'Please select one or more nodes in the visualizer graph first to trace.', 'error', 5000);
             }
         } else if (promptType === 'Next best step') {
             queryInput.value = 'What is the next best investigative step to take based on the current evidence?';

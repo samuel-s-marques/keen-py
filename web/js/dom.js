@@ -72,6 +72,14 @@ export const prefMagicExcludeModules = document.getElementById("pref-magic-exclu
 export const btnSavePreferences = document.getElementById("btn-save-preferences");
 export const closeModals = document.querySelectorAll(".close-modal");
 
+// Rate limit settings
+export const ratelimitShodanRps = document.getElementById("ratelimit-shodan-rps");
+export const ratelimitCensysRps = document.getElementById("ratelimit-censys-rps");
+export const ratelimitCrtshRps = document.getElementById("ratelimit-crtsh-rps");
+export const ratelimitHibpRps = document.getElementById("ratelimit-hibp-rps");
+export const ratelimitMalshareRps = document.getElementById("ratelimit-malshare-rps");
+export const btnSaveRateLimits = document.getElementById("btn-save-rate-limits");
+
 // Create-node modal
 export const modalCreateNode = document.getElementById("modal-create-node");
 export const nodeTypeSelect = document.getElementById("node-type-select");
