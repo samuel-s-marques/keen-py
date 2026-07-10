@@ -49,6 +49,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.6",
     "types-reportlab>=4.5.1.20260521",
+    "types-pyyaml>=6.0.3"
 ]
 docs = [
     "mkdocs-material>=9.5",

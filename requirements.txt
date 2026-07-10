@@ -14,3 +14,4 @@ ddgs>=9.14.4
 reportlab>=4.5.1
 python-whois>=0.9.5
 types-reportlab>=4.5.1.20260521
+pyyaml>=6.0.3
