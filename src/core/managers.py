@@ -568,6 +568,11 @@ class ConfigManager(DatabaseEngine):
 
 
 class WorkspaceManager(DatabaseEngine):
+    # Ledger raw_payload entries larger than this are archived to a file
+    # under attachments_dir("raw") instead of stored inline, so a single
+    # bulky API response doesn't bloat the .keen SQLite file.
+    RAW_INLINE_THRESHOLD_BYTES = 2048
+
     def __init__(self, db_path: str, name: str | None = None) -> None:
         super().__init__(db_path)
         self.name = name or os.path.splitext(os.path.basename(db_path))[0]
@@ -1045,9 +1050,24 @@ class WorkspaceManager(DatabaseEngine):
                 if isinstance(raw_payload, str)
                 else json.dumps(raw_payload if raw_payload is not None else {})
             )
+
+            # Large payloads (a full Shodan host record, a repo listing) are
+            # archived as a file, content-addressed by their own hash, and
+            # only a short "raw_ref:<hash>.json" reference is stored/hashed
+            # in the ledger row itself -- keeping the chain's own invariant
+            # ("hash covers exactly what's in this row") unchanged.
+            stored_payload = raw_json
+            if len(raw_json.encode("utf-8")) > self.RAW_INLINE_THRESHOLD_BYTES:
+                content_hash = hashlib.sha256(raw_json.encode("utf-8")).hexdigest()
+                raw_path = os.path.join(self.attachments_dir("raw"), f"{content_hash}.json")
+                if not os.path.exists(raw_path):
+                    with open(raw_path, "w", encoding="utf-8") as f:
+                        f.write(raw_json)
+                stored_payload = f"raw_ref:{content_hash}.json"
+
             digest_input = (
                 f"{prev_hash}|{actor}|{action}|{target_value or ''}|"
-                f"{raw_json}|{timestamp}"
+                f"{stored_payload}|{timestamp}"
             )
             entry_hash = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
 
@@ -1061,7 +1081,7 @@ class WorkspaceManager(DatabaseEngine):
                     actor,
                     action,
                     target_value,
-                    raw_json,
+                    stored_payload,
                     timestamp,
                 ),
             )
@@ -1073,9 +1093,24 @@ class WorkspaceManager(DatabaseEngine):
                 "actor": actor,
                 "action": action,
                 "target_value": target_value,
-                "raw_payload": raw_json,
+                "raw_payload": stored_payload,
                 "timestamp": timestamp,
             }
+
+    def read_raw_payload(self, raw_payload: str) -> str:
+        """Resolve a ledger row's ``raw_payload`` column to its actual content.
+
+        Small payloads are stored inline and returned unchanged. Payloads
+        that exceeded ``RAW_INLINE_THRESHOLD_BYTES`` were archived as a file
+        under ``attachments_dir("raw")`` and are referenced here as
+        ``raw_ref:<hash>.json``; this reads that file back transparently.
+        """
+        if isinstance(raw_payload, str) and raw_payload.startswith("raw_ref:"):
+            filename = raw_payload[len("raw_ref:"):]
+            raw_path = os.path.join(self.attachments_dir("raw"), filename)
+            with open(raw_path, "r", encoding="utf-8") as f:
+                return f.read()
+        return raw_payload
 
     def get_ledger_entries(self, limit: int | None = None) -> list[dict]:
         cursor = self.conn.cursor()
@@ -1153,7 +1188,7 @@ class WorkspaceManager(DatabaseEngine):
         if status is not None:
             updates.append("status = ?")
             params.append(status)
-            if status in ("completed", "failed", "cancelled"):
+            if status in ("completed", "failed", "cancelled", "skipped"):
                 updates.append("ended_at = CURRENT_TIMESTAMP")
         if progress is not None:
             updates.append("progress = ?")
