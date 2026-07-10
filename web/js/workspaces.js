@@ -14,6 +14,8 @@ import {
 import { toggleTimelinePlay, initTimeline } from "./timeline.js";
 import { renderTables } from "./graph.js";
 import { loadSuggestions, pollAISuggestionsStatus } from "./settings.js";
+import { fetchJobs } from "./jobs.js";
+import { openWorkspaceScopeModal } from "./scope.js";
 
 export async function fetchWorkspaces() {
     try {
@@ -43,6 +45,7 @@ export function renderWorkspaces() {
             <div class="workspace-header-actions">
                 <div class="workspace-name">${w.name}</div>
                 <div class="workspace-actions">
+                    <button class="icon-btn btn-ws-scope" data-name="${w.name}" title="Manage Scope"><i class="fa-solid fa-shield-halved"></i></button>
                     <button class="icon-btn btn-ws-edit" data-name="${w.name}" title="Rename Workspace"><i class="fa-solid fa-pen"></i></button>
                     <button class="icon-btn btn-ws-delete" data-name="${w.name}" title="Delete Workspace" style="color: var(--error);"><i class="fa-solid fa-trash"></i></button>
                 </div>
@@ -88,6 +91,13 @@ export function renderWorkspaces() {
             inputRenameWs.value = wsName;
             inputRenameWs.dataset.oldName = wsName;
             modalRenameWs.classList.add('active');
+        };
+    });
+
+    document.querySelectorAll('.btn-ws-scope').forEach(btn => {
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            openWorkspaceScopeModal(btn.dataset.name);
         };
     });
 }
@@ -152,6 +162,7 @@ export async function selectWorkspace(name) {
         initTimeline();
         loadSuggestions();
         pollAISuggestionsStatus(name);
+        fetchJobs();
 
         // Note: we don't call fetchWorkspaces() here anymore to avoid infinite loops,
         // since fetchWorkspaces recreates DOM elements. Just update stats manually if needed.
