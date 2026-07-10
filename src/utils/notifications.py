@@ -173,3 +173,58 @@ async def dispatch_job_notification(config: Any, job: dict) -> None:
             logger.bind(module="notifications").warning(
                 f"Failed to send job notification via '{channel}'"
             )
+
+
+def _channel_missing_config(channel: str, config: Any) -> str | None:
+    """Return a human-readable reason ``channel`` can't send yet, or None if it's ready.
+
+    The senders themselves silently no-op on missing config (so a real job
+    completion never raises just because a channel isn't set up) -- that's
+    the wrong behavior for a connectivity test, where silence would look
+    identical to success. This duplicates each sender's own presence check
+    so the test can tell "not configured" apart from "configured but failed".
+    """
+    if channel == "telegram":
+        if not config.get_api_key("telegram_bot_token"):
+            return "Missing telegram_bot_token API key"
+        if not config.get_preference("telegram_chat_id"):
+            return "Missing telegram_chat_id preference"
+    elif channel == "discord":
+        if not config.get_api_key("discord_webhook_url"):
+            return "Missing discord_webhook_url API key"
+    elif channel == "slack":
+        if not config.get_api_key("slack_webhook_url"):
+            return "Missing slack_webhook_url API key"
+    elif channel == "email":
+        if not config.get_preference("smtp_host") or not config.get_preference("smtp_to"):
+            return "Missing smtp_host/smtp_to preference"
+    return None
+
+
+async def send_test_notification(config: Any) -> dict:
+    """Send a synthetic test message to every configured channel, bypassing
+    the ``_should_notify`` gate (a failure/duration check makes no sense for
+    an on-demand connectivity test). Returns ``{channel: {"ok": bool, "error": str|None}}``
+    for each channel in ``notify_channels`` so the caller (the Web UI's
+    "Send Test" button) can report exactly which ones are misconfigured.
+    """
+    channels_pref = config.get_preference("notify_channels") or ""
+    channels = [c.strip().lower() for c in channels_pref.split(",") if c.strip()]
+
+    message = "[Keen] This is a test notification from your Integrations settings."
+    results: dict = {}
+    for channel in channels:
+        sender = _SENDERS.get(channel)
+        if not sender:
+            results[channel] = {"ok": False, "error": "Unknown channel"}
+            continue
+        missing = _channel_missing_config(channel, config)
+        if missing:
+            results[channel] = {"ok": False, "error": missing}
+            continue
+        try:
+            await sender(config, message)
+            results[channel] = {"ok": True, "error": None}
+        except Exception as e:
+            results[channel] = {"ok": False, "error": str(e)}
+    return results
