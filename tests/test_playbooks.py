@@ -14,6 +14,7 @@ from src.core.playbooks import (
     load_playbook,
     render_template,
     safe_eval_condition,
+    validate_playbook,
 )
 
 TEST_DIR = os.path.expanduser("~/.keen_test_playbooks_tmp")
@@ -300,5 +301,140 @@ async def test_playbook_step_runs_record_job_history(monkeypatch):
         assert len(jobs) == 1
         assert jobs[0]["target_value"] == "example.com"
         assert jobs[0]["status"] == "completed"
+    finally:
+        _teardown(ws, config)
+
+
+# --------------------------------------------------------------------------
+# validate_playbook
+# --------------------------------------------------------------------------
+
+
+def test_validate_playbook_accepts_well_formed_playbook(monkeypatch):
+    monkeypatch.setattr("src.core.playbooks.load_modules", _fake_load_modules)
+    playbook = {
+        "steps": [
+            {"id": "dns_sweep", "module": "discovery/dns_sweep", "inputs": {"TARGET": "{{ trigger.value }}"}},
+            {
+                "id": "shodan_ports",
+                "module": "intel/shodan_ports",
+                "depends_on": "dns_sweep",
+                "condition": "node.type == 'ipv4-addr'",
+            },
+        ]
+    }
+    result = validate_playbook(playbook)
+    assert result == {"errors": [], "warnings": []}
+
+
+def test_validate_playbook_rejects_missing_steps():
+    assert validate_playbook({"name": "no steps"})["errors"]
+    assert validate_playbook("not a dict")["errors"]
+
+
+def test_validate_playbook_rejects_step_missing_id_or_module():
+    result = validate_playbook({"steps": [{"module": "x"}]})
+    assert any("id" in e for e in result["errors"])
+
+
+def test_validate_playbook_rejects_duplicate_step_ids():
+    result = validate_playbook(
+        {"steps": [{"id": "a", "module": "x"}, {"id": "a", "module": "y"}]}
+    )
+    assert any("Duplicate" in e for e in result["errors"])
+
+
+def test_validate_playbook_rejects_unknown_depends_on():
+    result = validate_playbook(
+        {"steps": [{"id": "a", "module": "x", "depends_on": "nonexistent"}]}
+    )
+    assert any("unknown step" in e for e in result["errors"])
+
+
+def test_validate_playbook_detects_cycle():
+    result = validate_playbook(
+        {
+            "steps": [
+                {"id": "a", "module": "x", "depends_on": "b"},
+                {"id": "b", "module": "x", "depends_on": "a"},
+            ]
+        }
+    )
+    assert any("cycle" in e.lower() for e in result["errors"])
+
+
+def test_validate_playbook_warns_on_unknown_module(monkeypatch):
+    monkeypatch.setattr("src.core.playbooks.load_modules", _fake_load_modules)
+    result = validate_playbook({"steps": [{"id": "a", "module": "does/not_exist"}]})
+    assert result["errors"] == []
+    assert any("unknown module" in w for w in result["warnings"])
+
+
+def test_validate_playbook_warns_on_invalid_condition_syntax(monkeypatch):
+    monkeypatch.setattr("src.core.playbooks.load_modules", _fake_load_modules)
+    result = validate_playbook(
+        {"steps": [{"id": "a", "module": "discovery/dns_sweep", "condition": "node.type =="}]}
+    )
+    assert result["errors"] == []
+    assert any("invalid condition" in w for w in result["warnings"])
+
+
+# --------------------------------------------------------------------------
+# PlaybookEngine._event_sink / _emit
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_playbook_run_emits_step_lifecycle_events(monkeypatch):
+    ws, config = _setup(monkeypatch)
+    try:
+        shell = MockShell(ws, config)
+        engine = PlaybookEngine(shell, config)
+        events: list = []
+        engine._event_sink = events.append
+        playbook = {
+            "steps": [
+                {
+                    "id": "dns_sweep",
+                    "module": "discovery/dns_sweep",
+                    "inputs": {"TARGET": "{{ trigger.value }}"},
+                }
+            ]
+        }
+        await engine.run(playbook, "example.com")
+
+        types = [e["type"] for e in events]
+        assert types == ["playbook_started", "step_started", "step_completed", "playbook_finished"]
+        completed = events[2]
+        assert completed["step_id"] == "dns_sweep"
+        assert completed["status"] == "completed"
+        assert completed["node_count"] == 2
+    finally:
+        _teardown(ws, config)
+
+
+@pytest.mark.asyncio
+async def test_playbook_run_survives_broken_event_sink(monkeypatch):
+    ws, config = _setup(monkeypatch)
+    try:
+        shell = MockShell(ws, config)
+        engine = PlaybookEngine(shell, config)
+
+        def _boom(_event):
+            raise RuntimeError("sink is broken")
+
+        engine._event_sink = _boom
+        playbook = {
+            "steps": [
+                {
+                    "id": "dns_sweep",
+                    "module": "discovery/dns_sweep",
+                    "inputs": {"TARGET": "{{ trigger.value }}"},
+                }
+            ]
+        }
+        # Must not raise even though every _emit() call's sink throws.
+        results = await engine.run(playbook, "example.com")
+        assert len(results["dns_sweep"]) == 2
     finally:
         _teardown(ws, config)
