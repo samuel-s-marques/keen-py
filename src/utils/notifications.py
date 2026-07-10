@@ -196,9 +196,29 @@ def _channel_missing_config(channel: str, config: Any) -> str | None:
         if not config.get_api_key("slack_webhook_url"):
             return "Missing slack_webhook_url API key"
     elif channel == "email":
-        if not config.get_preference("smtp_host") or not config.get_preference("smtp_to"):
+        if not config.get_preference("smtp_host") or not config.get_preference(
+            "smtp_to"
+        ):
             return "Missing smtp_host/smtp_to preference"
     return None
+
+
+async def notify_job_completion(config: Any, workspace: Any, job_id: str) -> None:
+    """Best-effort: look up ``job_id`` and dispatch a completion notification.
+
+    The one shared call every job-terminating call site should use (CLI
+    ``run``, magic/playbook execution via ``run_module_on_target``, and the
+    web ``_stream_run`` endpoint) instead of each duplicating the
+    lookup-then-dispatch pattern -- and each guarding it with its own
+    try/except. Never raises: a broken notification channel must not break
+    the run whose completion it's reporting on.
+    """
+    try:
+        job = workspace.get_job(job_id) if workspace else None
+        if job:
+            await dispatch_job_notification(config, job)
+    except Exception:
+        pass
 
 
 async def send_test_notification(config: Any) -> dict:
