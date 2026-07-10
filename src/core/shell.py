@@ -1476,6 +1476,53 @@ class Shell(Cmd):
                 "Usage: scope <list | add <type> <value> [consent_basis] | remove <id> | quarantined>"
             )
 
+    def do_merge(self, arg: str) -> None:
+        """Merge nodes into one identity (Entity Resolution, see internal/BEYOND_MALTEGO.md §2.4).
+
+        Re-points every edge from the absorbed node(s) onto the canonical
+        node, unions their metadata, and logs one provenance ledger entry.
+        This is always a deliberate, explicit operator action -- nothing in
+        Keen merges nodes automatically.
+
+        Usage:
+            merge <canonical_value> <absorbed_value> [absorbed_value...]
+        """
+        if not self.workspace:
+            error("No active workspace. Use 'workspace select <name>' first.")
+            return
+
+        try:
+            import shlex
+
+            args = shlex.split(arg.strip())
+        except ValueError as e:
+            error(f"Error parsing arguments: {e}")
+            return
+
+        if len(args) < 2:
+            error("Usage: merge <canonical_value> <absorbed_value> [absorbed_value...]")
+            return
+
+        canonical_value, absorbed_values = args[0], args[1:]
+
+        canonical_id = self.workspace.get_node_id(canonical_value)
+        if canonical_id is None:
+            error(f"No node found with value '{canonical_value}'.")
+            return
+
+        absorbed_ids = []
+        for value in absorbed_values:
+            node_id = self.workspace.get_node_id(value)
+            if node_id is None:
+                error(f"No node found with value '{value}'.")
+                return
+            absorbed_ids.append(node_id)
+
+        if self.workspace.merge_nodes(canonical_id, absorbed_ids, actor="operator"):
+            success(f"Merged {len(absorbed_ids)} node(s) into '{canonical_value}'.")
+        else:
+            error("Merge failed -- canonical node not found or no absorbed nodes matched.")
+
     def do_web(self, arg: str) -> None:
         """Start the Keen API web server.
 
