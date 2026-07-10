@@ -93,6 +93,9 @@ import {
     checkServerStatus,
 } from "./settings.js";
 import { fetchProxies, initProxyListeners } from "./proxies.js";
+import { initJobsListeners } from "./jobs.js";
+import { fetchIntegrationSettings, initIntegrationsListeners } from "./integrations.js";
+import { clearWsScopeRows, collectWsScopeRows, initScopeListeners } from "./scope.js";
 import { termPrint, showSnackbar, updateSnackbar } from "./notifications.js";
 import { addPropertyField, createEditPropField, parseMetaValue } from "./modals.js";
 import { toggleTimelinePlay, updateTimelineFilter } from "./timeline.js";
@@ -177,6 +180,7 @@ btnNewWs.addEventListener('click', () => {
     inputWsName.value = '';
     inputWsDesc.value = '';
     wsNameWarning.style.display = 'none';
+    clearWsScopeRows();
     modalNewWs.classList.add('active');
 });
 btnSettings.addEventListener('click', () => {
@@ -185,6 +189,7 @@ btnSettings.addEventListener('click', () => {
     fetchPreferences();
     fetchProxies();
     loadAISettings();
+    fetchIntegrationSettings();
 });
 
 closeModals.forEach(btn => btn.addEventListener('click', () => {
@@ -194,6 +199,8 @@ closeModals.forEach(btn => btn.addEventListener('click', () => {
     document.getElementById('modal-create-node').classList.remove('active');
     document.getElementById('modal-edit-node').classList.remove('active');
     document.getElementById('modal-edit-edge').classList.remove('active');
+    document.getElementById('modal-job-logs').classList.remove('active');
+    document.getElementById('modal-workspace-scope').classList.remove('active');
     wsNameWarning.style.display = 'none';
 }));
 
@@ -337,6 +344,9 @@ btnSavePreferences.addEventListener('click', async () => {
 
 // Call init listeners when loaded
 initProxyListeners();
+initJobsListeners();
+initIntegrationsListeners();
+initScopeListeners();
 
 // Workspace Management
 btnCreateWs.addEventListener('click', async () => {
@@ -344,15 +354,21 @@ btnCreateWs.addEventListener('click', async () => {
     const desc = inputWsDesc.value.trim();
     if (!name) return;
 
+    const scope = collectWsScopeRows();
+
     try {
-        const res = await KeenAPI.post(`/workspaces`, { name, description: desc });
+        const res = await KeenAPI.post(`/workspaces`, { name, description: desc, scope });
         if (res.ok) {
             modalNewWs.classList.remove('active');
             inputWsName.value = '';
             inputWsDesc.value = '';
             wsNameWarning.style.display = 'none';
+            clearWsScopeRows();
             await fetchWorkspaces();
             selectWorkspace(name);
+        } else {
+            const err = await res.json();
+            alert(`Failed to create workspace: ${err.detail || err.error || 'Unknown error'}`);
         }
     } catch (e) {
         console.error('Failed to create workspace', e);
