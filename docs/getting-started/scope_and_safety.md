@@ -82,7 +82,13 @@ keen[John Doe] > scope quarantined
 
 Quarantined nodes are also excluded from Magic Chaining and playbook auto-pivoting -- an out-of-scope discovery stops the crawl there instead of silently expanding it further.
 
-### Web UI / REST API
+### Web UI
+
+The **New Workspace** modal has an optional **Scope** section: click the **+** next to it to add a row (type, value, and a consent-basis field for `person` entries), one row per entry. Leaving it empty behaves exactly like `workspace create` with no `--scope` flag -- enforcement stays opted out.
+
+To view or edit an existing workspace's scope, click the shield icon on its entry in the sidebar workspace list (next to rename/delete). That opens a modal listing current entries (each removable), a form to add new ones, and the workspace's quarantined nodes below it -- the same information `scope list`/`scope quarantined` show in the CLI, kept live as you add/remove entries.
+
+### REST API
 
 Scope can be declared inline when creating a workspace via `POST /api/workspaces`, by including a `scope` list alongside `name`/`description`:
 
