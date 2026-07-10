@@ -93,10 +93,19 @@ async def auth_middleware(request: Request, call_next):
 
 os.makedirs("web", exist_ok=True)
 
+_VALID_SCOPE_TYPES = ("domain", "ip", "cidr", "organization", "person")
+
+
+class ScopeEntryCreate(BaseModel):
+    scope_type: str
+    value: str
+    consent_basis: str = ""
+
 
 class WorkspaceCreate(BaseModel):
     name: str
     description: str = ""
+    scope: List[ScopeEntryCreate] = []
 
 
 class ModuleRunRequest(BaseModel):
@@ -361,6 +370,21 @@ def create_workspace(
         config.add_workspace(name, db_file, req.description or "")
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+    if req.scope:
+        for entry in req.scope:
+            if entry.scope_type not in _VALID_SCOPE_TYPES:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid scope_type '{entry.scope_type}'. Must be one of: {', '.join(_VALID_SCOPE_TYPES)}.",
+                )
+        wm = WorkspaceManager(db_file, name=name)
+        try:
+            for entry in req.scope:
+                wm.add_scope_entry(entry.scope_type, entry.value, entry.consent_basis)
+        finally:
+            wm.close()
+
     return {"success": True, "name": name, "path": db_file}
 
 
@@ -1148,6 +1172,20 @@ def submit_suggestion_feedback(
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
+@app.post("/api/notifications/test")
+async def test_notifications(config: ConfigManager = Depends(get_config)) -> Dict[str, Any]:
+    """Send a synthetic test message to every channel in ``notify_channels``.
+
+    Distinguishes "not configured" from "configured but failed" per channel
+    (see ``send_test_notification``) so the Integrations settings tab can
+    show exactly what's wrong instead of a single opaque pass/fail.
+    """
+    from src.utils.notifications import send_test_notification
+
+    results = await send_test_notification(config)
+    return {"success": True, "results": results}
+
+
 @app.post("/api/config/ai/test")
 async def test_ai_connection(req: AITestRequest) -> Dict[str, Any]:
     """Test connection to the LLM provider using temporary or saved config."""
@@ -1340,6 +1378,50 @@ async def detect_ai_models(req: AITestRequest) -> Dict[str, Any]:
                     }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@app.get("/api/workspaces/{name}/scope", response_model=None)
+def get_workspace_scope(
+    wm: WorkspaceManager = Depends(get_workspace_manager),
+) -> Union[List[Dict[str, Any]], JSONResponse]:
+    """List the workspace's declared scope entries (empty = enforcement opted out)."""
+    try:
+        return wm.list_scope()
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/workspaces/{name}/scope", response_model=None)
+def create_workspace_scope_entry(
+    entry: ScopeEntryCreate, wm: WorkspaceManager = Depends(get_workspace_manager)
+) -> Union[Dict[str, Any], JSONResponse]:
+    if entry.scope_type not in _VALID_SCOPE_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid scope_type '{entry.scope_type}'. Must be one of: {', '.join(_VALID_SCOPE_TYPES)}.",
+        )
+    entry_id = wm.add_scope_entry(entry.scope_type, entry.value, entry.consent_basis)
+    return {"success": True, "id": entry_id}
+
+
+@app.delete("/api/workspaces/{name}/scope/{entry_id}", response_model=None)
+def delete_workspace_scope_entry(
+    entry_id: int, wm: WorkspaceManager = Depends(get_workspace_manager)
+) -> Union[Dict[str, Any], JSONResponse]:
+    if not wm.remove_scope_entry(entry_id):
+        return JSONResponse(status_code=404, content={"error": "Scope entry not found"})
+    return {"success": True}
+
+
+@app.get("/api/workspaces/{name}/quarantined-nodes", response_model=None)
+def get_workspace_quarantined_nodes(
+    wm: WorkspaceManager = Depends(get_workspace_manager),
+) -> Union[List[Dict[str, Any]], JSONResponse]:
+    """List nodes flagged as outside the workspace's declared scope."""
+    try:
+        return wm.get_quarantined_nodes()
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/workspaces/{name}/jobs", response_model=None)
