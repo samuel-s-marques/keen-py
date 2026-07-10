@@ -265,9 +265,87 @@ export async function fetchModules() {
         const res = await KeenAPI.get(`/modules`);
         KeenStore.modulesData = await res.json();
         buildModuleDropdown();
+        populateKnownApiServicesDatalist();
     } catch (e) {
         console.error('Failed to fetch modules', e);
     }
+}
+
+function populateKnownApiServicesDatalist() {
+    const datalist = document.getElementById('known-api-services');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    for (const name of [...getKnownApiServices()].sort()) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        datalist.appendChild(opt);
+    }
+}
+
+// Mirrors BaseModule.API_KEY_OPTION_SUFFIXES in src/core/base_module.py — the
+// option-name suffixes that mark a stored-credential option.
+const API_KEY_OPTION_SUFFIXES = ['_APIKEY', '_API_KEY', '_TOKEN'];
+
+// Provider names accepted by the AI Thinking Partner settings (saved as
+// lowercase service names, separate from module option names).
+const AI_PROVIDER_SERVICES = ['openai', 'anthropic', 'local', 'ollama', 'koboldcpp', 'custom'];
+
+// Every service name a module (or the AI settings) will actually pick up:
+// the full option name (e.g. SHODAN_APIKEY), its short form (SHODAN), or an
+// AI provider name (openai). Derived from the live module catalog so it
+// can't drift out of sync as modules are added.
+export function getKnownApiServices() {
+    const names = new Set(AI_PROVIDER_SERVICES);
+    for (const mod of Object.values(KeenStore.modulesData || {})) {
+        if (!mod.options) continue;
+        for (const key of Object.keys(mod.options)) {
+            const upper = key.toUpperCase();
+            const suffix = API_KEY_OPTION_SUFFIXES.find(s => upper.endsWith(s));
+            if (suffix) {
+                names.add(upper);
+                names.add(upper.slice(0, -suffix.length));
+            }
+        }
+    }
+    return names;
+}
+
+export function isKnownApiService(service) {
+    const upper = service.toUpperCase();
+    for (const name of getKnownApiServices()) {
+        if (name.toUpperCase() === upper) return true;
+    }
+    return false;
+}
+
+function levenshtein(a, b) {
+    const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+    for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            dp[i][j] = a[i - 1] === b[j - 1]
+                ? dp[i - 1][j - 1]
+                : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+        }
+    }
+    return dp[a.length][b.length];
+}
+
+// Closest known service name to a mistyped one (e.g. SHODAN_API_KEY -> SHODAN_APIKEY),
+// or null if nothing is close enough to be a useful suggestion.
+export function findClosestApiService(service) {
+    const upper = service.toUpperCase();
+    let best = null;
+    let bestDist = Infinity;
+    for (const name of getKnownApiServices()) {
+        const dist = levenshtein(upper, name.toUpperCase());
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = name;
+        }
+    }
+    return bestDist <= 4 ? best : null;
 }
 
 export function runMagicChainingImmediately(targetValue) {

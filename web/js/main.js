@@ -92,7 +92,7 @@ import {
 } from "./dom.js";
 import { makeResizable } from "./layout.js";
 import { fetchWorkspaces, selectWorkspace, renderWorkspaces } from "./workspaces.js";
-import { fetchModules, executeModule } from "./modules.js";
+import { fetchModules, executeModule, isKnownApiService, findClosestApiService } from "./modules.js";
 import {
     fetchApiKeys,
     fetchPreferences,
@@ -340,6 +340,15 @@ btnSaveApiKey.addEventListener('click', async () => {
     const service = document.getElementById('input-api-service').value.trim().toUpperCase();
     const api_key = document.getElementById('input-api-key').value.trim();
     if (!service || !api_key) return;
+
+    if (!isKnownApiService(service)) {
+        const suggestion = findClosestApiService(service);
+        const hint = suggestion ? ` Did you mean "${suggestion}"?` : '';
+        const proceed = confirm(
+            `"${service}" doesn't match any module's expected API key option name.${hint}\n\nSave it anyway?`
+        );
+        if (!proceed) return;
+    }
 
     await KeenAPI.post(`/config/keys`, { service, api_key });
     document.getElementById('input-api-service').value = '';

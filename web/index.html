@@ -416,7 +416,8 @@
                 </div>
 
                 <div class="form-group">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                         <label style="margin-bottom: 0;">Scope <span
                                 style="color: var(--text-secondary); font-weight: 400;">(optional)</span></label>
                         <button type="button" id="btn-add-ws-scope-row" class="icon-btn" title="Add scope entry"
@@ -471,8 +472,7 @@
                         <option value="organization">Organization</option>
                         <option value="person">Person</option>
                     </select>
-                    <input type="text" id="scope-modal-value" placeholder="Value" style="flex: 1;"
-                        autocomplete="off">
+                    <input type="text" id="scope-modal-value" placeholder="Value" style="flex: 1;" autocomplete="off">
                     <input type="text" id="scope-modal-consent" placeholder="Consent basis (person)" style="flex: 1;"
                         autocomplete="off">
                     <button id="btn-scope-modal-add" class="icon-btn" title="Add entry"
@@ -546,8 +546,9 @@
                             <div class="form-group">
                                 <label>Add/Update API Key</label>
                                 <div style="display:flex; gap: 8px;">
-                                    <input type="text" id="input-api-service"
-                                        placeholder="Service (e.g. SHODAN_API_KEY)" style="flex:1;" autocomplete="off">
+                                    <input type="text" id="input-api-service" placeholder="Service (e.g. SHODAN_APIKEY)"
+                                        style="flex:1;" autocomplete="off" list="known-api-services">
+                                    <datalist id="known-api-services"></datalist>
                                     <input type="password" id="input-api-key" placeholder="Key" style="flex:2;"
                                         autocomplete="off">
                                 </div>
@@ -742,8 +743,10 @@
                         <p class="section-desc">Pace outgoing requests to external APIs so a module run doesn't trip a
                             provider's rate limit. Applies per-service, before a module's first request each run.</p>
 
-                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.4;">
-                            <i class="fa-solid fa-circle-info" style="color: var(--accent-cyan); margin-right: 4px;"></i>
+                        <div
+                            style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.4;">
+                            <i class="fa-solid fa-circle-info"
+                                style="color: var(--accent-cyan); margin-right: 4px;"></i>
                             Value is <strong>requests per second</strong>. Set to <code>0</code> to disable pacing for
                             that service.
                         </div>
@@ -1235,7 +1238,8 @@
                         style="flex:1; display:flex; align-items:center; justify-content:center; color: var(--text-secondary); font-size: 0.9rem; text-align:center;">
                         Select a playbook on the left, or create a new one.
                     </div>
-                    <div id="playbook-editor" class="hidden" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+                    <div id="playbook-editor" class="hidden"
+                        style="flex:1; display:flex; flex-direction:column; min-height:0;">
                         <div class="playbook-editor-header">
                             <input type="text" id="playbook-name-input" placeholder="Playbook name">
                             <div class="pb-tabs" style="border-bottom:none; margin-bottom:0;">
@@ -1250,7 +1254,8 @@
                                 </button>
                             </div>
                             <div style="display:flex; gap:8px;">
-                                <button id="btn-save-playbook" class="btn-primary" style="padding: 8px 16px;">Save</button>
+                                <button id="btn-save-playbook" class="btn-primary"
+                                    style="padding: 8px 16px;">Save</button>
                                 <button id="btn-delete-playbook" class="icon-btn" title="Delete Playbook">
                                     <i class="fa-solid fa-trash"></i>
                                 </button>
@@ -1272,8 +1277,11 @@
                                     </div>
                                     <div id="pb-step-inputs-fields"></div>
                                     <div class="form-group">
-                                        <label>Condition <span style="color:var(--text-secondary); font-weight:400;">(optional, only used if this step depends on another)</span></label>
-                                        <input type="text" id="pb-step-condition-input" placeholder="node.type == 'ipv4-addr'">
+                                        <label>Condition <span
+                                                style="color:var(--text-secondary); font-weight:400;">(optional, only
+                                                used if this step depends on another)</span></label>
+                                        <input type="text" id="pb-step-condition-input"
+                                            placeholder="node.type == 'ipv4-addr'">
                                     </div>
                                     <div style="display:flex; gap:8px; margin-top:12px;">
                                         <button id="btn-pb-step-confirm" class="btn-primary full-width">Confirm</button>
@@ -1282,8 +1290,10 @@
                                 </div>
                             </div>
                             <div style="font-size:0.75rem; color: var(--text-secondary); margin-top:8px;">
-                                <i class="fa-solid fa-circle-info" style="color: var(--accent-cyan); margin-right:4px;"></i>
-                                Use the canvas toolbar to add steps and drag between them to set dependencies (an arrow from A to B means "B depends_on A").
+                                <i class="fa-solid fa-circle-info"
+                                    style="color: var(--accent-cyan); margin-right:4px;"></i>
+                                Use the canvas toolbar to add steps and drag between them to set dependencies (an arrow
+                                from A to B means "B depends_on A").
                             </div>
                         </div>
 
@@ -1299,7 +1309,8 @@
                                 <label for="playbook-trigger-value">Trigger Value</label>
                                 <input type="text" id="playbook-trigger-value" placeholder="e.g. example.com">
                             </div>
-                            <button id="btn-run-playbook" class="btn-primary" style="align-self:flex-start; padding: 8px 20px;">
+                            <button id="btn-run-playbook" class="btn-primary"
+                                style="align-self:flex-start; padding: 8px 20px;">
                                 <i class="fa-solid fa-play"></i> Run
                             </button>
                             <div id="playbook-run-status" style="margin-top:10px; font-size:0.85rem;"></div>
