@@ -332,6 +332,94 @@ def test_workspace_merge_nodes_endpoint():
                 pass
 
 
+def test_workspace_media_endpoints():
+    """Upload/list/serve media via the web API -- the web equivalent of the
+    CLI's `media import <path>`/`media list` commands (see src.core.media_import)."""
+    import shutil
+
+    config_db = os.path.expanduser("~/.keen_test_server_media_config.db")
+    if os.path.exists(config_db):
+        try:
+            os.remove(config_db)
+        except OSError:
+            pass
+
+    def get_config_override():
+        config = ConfigManager(config_db)
+        try:
+            yield config
+        finally:
+            config.close()
+
+    app.dependency_overrides[get_config] = get_config_override
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/workspaces",
+            json={"name": "media_test_ws", "description": "Media endpoint test"},
+        )
+        assert response.status_code == 200
+
+        # Upload
+        response = client.post(
+            "/api/workspaces/media_test_ws/media",
+            files={"file": ("avatar.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        node_id = body["node_id"]
+        assert node_id is not None
+
+        # Re-uploading identical bytes dedups onto the same node (keyed on SHA-256)
+        response = client.post(
+            "/api/workspaces/media_test_ws/media",
+            files={"file": ("avatar_copy.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+        )
+        assert response.status_code == 200
+        assert response.json()["node_id"] == node_id
+
+        # Empty upload is rejected
+        response = client.post(
+            "/api/workspaces/media_test_ws/media",
+            files={"file": ("empty.jpg", b"", "image/jpeg")},
+        )
+        assert response.status_code == 400
+
+        # List
+        response = client.get("/api/workspaces/media_test_ws/media")
+        assert response.status_code == 200
+        media_list = response.json()
+        assert len(media_list) == 1
+        assert media_list[0]["media_type"] == "image"
+        assert media_list[0]["has_attachment"] is True
+
+        # Serve the raw bytes back
+        response = client.get(f"/api/workspaces/media_test_ws/media/{node_id}/file")
+        assert response.status_code == 200
+        assert response.content == b"fake-jpeg-bytes"
+
+        # Nonexistent media node -> 404, not a 500
+        response = client.get("/api/workspaces/media_test_ws/media/999999/file")
+        assert response.status_code == 404
+
+        print("[OK] Workspace media endpoints verified successfully!")
+    finally:
+        if os.path.exists(config_db):
+            try:
+                os.remove(config_db)
+            except OSError:
+                pass
+        if os.path.exists("cases/media_test_ws.keen"):
+            try:
+                os.remove("cases/media_test_ws.keen")
+            except OSError:
+                pass
+        if os.path.exists("cases/media_test_ws_attachments"):
+            shutil.rmtree("cases/media_test_ws_attachments", ignore_errors=True)
+
+
 def test_notifications_test_endpoint():
     """No channels configured -> success with an empty results map (not an error)."""
     config_db = os.path.expanduser("~/.keen_test_server_notify_config.db")
