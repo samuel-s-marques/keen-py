@@ -29,3 +29,18 @@ export function getNodeStyle(type) {
     }
     return DEFAULT_STYLE;
 }
+
+/**
+ * URL to a media node's own stored image bytes, or null if this node isn't
+ * an image with a retrievable attachment. Shared by both renderers so a
+ * node showing hundreds of imported photos/avatars reads as thumbnails at a
+ * glance instead of an undifferentiated wall of hash/id labels the operator
+ * would otherwise have to click through one at a time.
+ */
+export function mediaImageUrl(node) {
+    if (!node || node.type !== 'media' || !KeenStore.activeWorkspace) return null;
+    const meta = (node.metadata && typeof node.metadata === 'object') ? node.metadata : {};
+    if (meta.media_type !== 'image' || !meta.attachment_ref) return null;
+    if (!node.id) return null;
+    return `${KeenAPI.API_BASE}/workspaces/${KeenStore.activeWorkspace}/media/${node.id}/file`;
+}
