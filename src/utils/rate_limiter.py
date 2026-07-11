@@ -31,6 +31,12 @@ DEFAULT_RPS = {
     "crtsh": 1.0,
     "hibp": 1.5,
     "malshare": 2.0,
+    # archive.org's Save API throttles anonymous callers aggressively --
+    # paced more conservatively than the generic 2.0 rps fallback.
+    "archive_org": 0.5,
+    # ipapi.co's free tier has no documented per-second limit, but its daily
+    # cap (1,000/day) means a conservative pace is worth defaulting to.
+    "ipapi_co": 1.0,
 }
 
 
