@@ -14,7 +14,7 @@
 import { networkCanvas, contextMenu } from "./dom.js";
 import { showSnackbar } from "./notifications.js";
 import { selectWorkspace } from "./workspaces.js";
-import { getNodeStyle } from "./graph-styles.js";
+import { getNodeStyle, mediaImageUrl } from "./graph-styles.js";
 import { showContextMenu, renderSelectionSummary } from "./graph.js";
 
 // cytoscape/cytoscape-fcose/dagre/cytoscape-dagre load as classic <script>
@@ -96,6 +96,10 @@ function buildElements(nodes, edges, { groupByType = false } = {}) {
                 concentric: concentricLevel(n.type),
             },
         };
+        const imageUrl = mediaImageUrl(n);
+        if (imageUrl) {
+            el.data.imageUrl = imageUrl;
+        }
         if (groupByType) {
             const groupId = `group:${n.type}`;
             groupIds.add(groupId);
@@ -150,6 +154,22 @@ function buildStyle() {
                 'height': 26,
                 'border-width': 2,
                 'border-color': light ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)',
+            },
+        },
+        {
+            // Media nodes with a retrievable image attachment render the
+            // actual thumbnail instead of a plain color dot -- with hundreds
+            // of imported photos/avatars, a hash/id label alone gives the
+            // operator nothing to visually scan for.
+            selector: 'node[imageUrl]',
+            style: {
+                'background-image': 'data(imageUrl)',
+                'background-fit': 'cover',
+                'background-clip': 'node',
+                'width': 34,
+                'height': 34,
+                'border-width': 2,
+                'border-color': light ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.25)',
             },
         },
         {
