@@ -16,6 +16,7 @@ import { renderTables } from "./graph.js";
 import { loadSuggestions, pollAISuggestionsStatus } from "./settings.js";
 import { fetchJobs } from "./jobs.js";
 import { openWorkspaceScopeModal } from "./scope.js";
+import { refreshWorldMap } from "./map.js";
 
 export async function fetchWorkspaces() {
     try {
@@ -160,6 +161,7 @@ export async function selectWorkspace(name) {
         renderTables();
 
         initTimeline();
+        refreshWorldMap();
         loadSuggestions();
         pollAISuggestionsStatus(name);
         fetchJobs();
