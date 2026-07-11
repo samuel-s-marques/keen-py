@@ -71,6 +71,8 @@ import {
     btnConfirmEditEdge,
     modalEditNode,
     modalEditEdge,
+    modalMergeNodes,
+    btnConfirmMergeNodes,
     btnExportWs,
     exportMenu,
     timelineSlider,
@@ -89,6 +91,8 @@ import {
     btnPlaybooks,
     modalPlaybooks,
     btnNewPlaybook,
+    btnToggleGraphEngine,
+    graphEngineLabel,
 } from "./dom.js";
 import { makeResizable } from "./layout.js";
 import { fetchWorkspaces, selectWorkspace, renderWorkspaces } from "./workspaces.js";
@@ -108,7 +112,7 @@ import { clearWsScopeRows, collectWsScopeRows, initScopeListeners } from "./scop
 import { termPrint, showSnackbar, updateSnackbar } from "./notifications.js";
 import { addPropertyField, createEditPropField, parseMetaValue } from "./modals.js";
 import { toggleTimelinePlay, updateTimelineFilter } from "./timeline.js";
-import { renderTables } from "./graph.js";
+import { renderTables, getMergeSelection, drawGraph } from "./graph.js";
 import { fetchPlaybooksList, newPlaybook } from "./playbooks.js";
 
 // Theme setup
@@ -137,6 +141,47 @@ btnThemeToggle.addEventListener('click', () => {
     }
     if (KeenStore.activeWorkspace) selectWorkspace(KeenStore.activeWorkspace); // Redraw graph to apply theme
 });
+
+// Graph rendering engine setup (Cytoscape.js default -- faster on large
+// graphs; vis-network is the legacy renderer, kept for anyone who prefers it.
+// Persisted client-side like theme.
+KeenStore.graphEngine = localStorage.getItem('keen-graph-engine') || 'cytoscape';
+function applyGraphEngineButtonState() {
+    if (!btnToggleGraphEngine || !graphEngineLabel) return;
+    graphEngineLabel.textContent = KeenStore.graphEngine;
+    btnToggleGraphEngine.classList.toggle('active', KeenStore.graphEngine === 'cytoscape');
+}
+applyGraphEngineButtonState();
+if (btnToggleGraphEngine) {
+    btnToggleGraphEngine.addEventListener('click', () => {
+        const switchingToVis = KeenStore.graphEngine === 'cytoscape';
+        if (switchingToVis) {
+            const confirmed = confirm(
+                "Switch to the vis-network renderer? It's the legacy engine and has " +
+                "noticeably worse performance on large graphs than Cytoscape.js."
+            );
+            if (!confirmed) return;
+        }
+        KeenStore.graphEngine = switchingToVis ? 'vis' : 'cytoscape';
+        localStorage.setItem('keen-graph-engine', KeenStore.graphEngine);
+        applyGraphEngineButtonState();
+        if (KeenStore.network) {
+            KeenStore.network.destroy();
+            KeenStore.network = null;
+        }
+        // vis and Cytoscape each track their own minimap state separately
+        if (KeenStore.minimap) {
+            KeenStore.minimap.destroy();
+            KeenStore.minimap = null;
+        }
+        networkCanvas.innerHTML = '';
+        const minimapCanvasEl = document.getElementById('minimap-canvas');
+        if (minimapCanvasEl) minimapCanvasEl.innerHTML = '';
+        if (KeenStore.activeWorkspace) {
+            drawGraph(KeenStore.currentNodes, KeenStore.currentEdges);
+        }
+    });
+}
 
 // --- Layout Resizing System ---
 // Load persisted sizes
@@ -216,6 +261,7 @@ closeModals.forEach(btn => btn.addEventListener('click', () => {
     document.getElementById('modal-create-node').classList.remove('active');
     document.getElementById('modal-edit-node').classList.remove('active');
     document.getElementById('modal-edit-edge').classList.remove('active');
+    document.getElementById('modal-merge-nodes').classList.remove('active');
     document.getElementById('modal-job-logs').classList.remove('active');
     document.getElementById('modal-workspace-scope').classList.remove('active');
     modalPlaybooks.classList.remove('active');
@@ -319,8 +365,7 @@ btnUnlockSettings.addEventListener('click', async () => {
         KeenStore.setConfigUnlocked(true);
         // Persist the session token returned by unlock. Used as a bearer
         // token when the server runs with KEEN_REQUIRE_AUTH enabled; harmless
-        // otherwise. (window.keenAuthToken is read by future authenticated
-        // request helpers.)
+        // otherwise.
         try {
             const data = await res.json();
             if (data && data.token) {
@@ -680,6 +725,38 @@ if (btnConfirmEditEdge) {
             }
         } catch (e) {
             showSnackbar('Edges', 'Failed to update edge. Check server connection.', 'error', 5000);
+        }
+    });
+}
+
+if (btnConfirmMergeNodes) {
+    btnConfirmMergeNodes.addEventListener('click', async () => {
+        const selection = getMergeSelection();
+        if (!selection) {
+            showSnackbar('Merge', 'Select a canonical node to merge into.', 'error', 4000);
+            return;
+        }
+
+        try {
+            const res = await KeenAPI.post(`/workspaces/${KeenStore.activeWorkspace}/nodes/merge`, {
+                canonical_id: selection.canonicalId,
+                absorbed_ids: selection.absorbedIds,
+            });
+            if (res.ok) {
+                modalMergeNodes.classList.remove('active');
+                KeenStore.lastSelection = { nodes: [], edges: [] };
+                if (KeenStore.network) {
+                    KeenStore.network.setSelection({ nodes: [], edges: [] });
+                    KeenStore.network.updateSelectionDisplay([], []);
+                }
+                selectWorkspace(KeenStore.activeWorkspace);
+                termPrint(`Merged ${selection.absorbedIds.length} node(s) into node #${selection.canonicalId}`, 'sys-msg');
+            } else {
+                const err = await res.json();
+                showSnackbar('Merge', `Failed to merge nodes: ${err.error || 'Unknown error'}`, 'error', 5000);
+            }
+        } catch (e) {
+            showSnackbar('Merge', 'Failed to merge nodes. Check server connection.', 'error', 5000);
         }
     });
 }
