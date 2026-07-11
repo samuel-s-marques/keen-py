@@ -157,7 +157,22 @@ class InputValidator:
         Returns:
             bool: True if value matches a known hash length in hex, False otherwise.
         """
-        pattern = r"^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{128}$"
+        pattern = (
+            r"^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{128}$"
+        )
+        return re.match(pattern, value.strip()) is not None
+
+    @staticmethod
+    def is_valid_btc_address(value: str) -> bool:
+        """Validate a Bitcoin address's format (legacy P2PKH/P2SH base58, or bech32 SegWit).
+
+        Args:
+            value (str): Address string to validate.
+
+        Returns:
+            bool: True if value matches a recognized Bitcoin address shape, False otherwise.
+        """
+        pattern = r"^(bc1[a-z0-9]{25,90}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$"
         return re.match(pattern, value.strip()) is not None
 
     VALIDATORS = {
@@ -171,4 +186,5 @@ class InputValidator:
         "name": is_valid_name,
         "bool": is_valid_boolean,
         "hash": is_valid_hash,
+        "btc_address": is_valid_btc_address,
     }
