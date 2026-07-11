@@ -23,9 +23,13 @@ nav:
                   - Notifications: getting-started/notifications.md
                   - Web Server: getting-started/web.md
                   - AI Partner: getting-started/ai_partner.md
+                  - Media & Forensic Analysis: getting-started/media_forensics.md
         - Modules:
                   - Selecting and Using a Module: modules/index.md
                   - Analysis:
+                            - Avatar Correlation: modules/analysis/avatar_correlation.md
+                            - Crypto Tracer: modules/analysis/crypto_tracer.md
+                            - EXIF Extractor: modules/analysis/exif_extractor.md
                             - Hudson Rock: modules/analysis/hudson_rock.md
                             - Leak Check: modules/analysis/leak_check.md
                   - Discovery:
@@ -44,8 +48,11 @@ nav:
                             - User Scanner: modules/enumeration/user_scanner.md
                   - Web:
                             - WAF/CDN Detection: modules/web/waf_detection.md
+                            - Wayback Snapshot: modules/web/wayback_snapshot.md
                   - Helpers:
+                            - Domain to IP: modules/helpers/domain_to_ip.md
                             - Email to Username: modules/helpers/email_to_username.md
+                            - IP Geolocation: modules/helpers/ip_geolocation.md
                             - Org to Domain: modules/helpers/org_to_domain.md
                             - URL to Domain: modules/helpers/url_to_domain.md
         - Developer:
