@@ -24,6 +24,8 @@ export const countEdges = document.getElementById("count-edges");
 export const nodesTbody = document.getElementById("nodes-tbody");
 export const edgesTbody = document.getElementById("edges-tbody");
 export const networkCanvas = document.getElementById("network-canvas");
+export const btnToggleGraphEngine = document.getElementById("btn-toggle-graph-engine");
+export const graphEngineLabel = document.getElementById("graph-engine-label");
 
 // Module panel
 export const moduleSelect = document.getElementById("module-select");
@@ -130,6 +132,12 @@ export const editEdgeRelationshipInput = document.getElementById("edit-edge-rela
 export const editEdgePropsFields = document.getElementById("edit-edge-props-fields");
 export const btnAddEditEdgeProp = document.getElementById("btn-add-edit-edge-prop");
 export const btnConfirmEditEdge = document.getElementById("btn-confirm-edit-edge");
+
+// Merge-nodes modal
+export const modalMergeNodes = document.getElementById("modal-merge-nodes");
+export const mergeNodesList = document.getElementById("merge-nodes-list");
+export const mergePreview = document.getElementById("merge-preview");
+export const btnConfirmMergeNodes = document.getElementById("btn-confirm-merge-nodes");
 
 // Snackbar / status
 export const snackbarContainer = document.getElementById("snackbar-container");
