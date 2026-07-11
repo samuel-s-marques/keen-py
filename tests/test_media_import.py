@@ -39,7 +39,9 @@ def test_import_media_file_creates_media_node_and_attachment():
 
         expected_hash = hashlib.sha256(data).hexdigest()
         cursor = ws.conn.cursor()
-        cursor.execute("SELECT type, value, metadata FROM nodes WHERE id = ?", (node_id,))
+        cursor.execute(
+            "SELECT type, value, metadata FROM nodes WHERE id = ?", (node_id,)
+        )
         row = cursor.fetchone()
         assert row["type"] == "media"
         assert row["value"] == expected_hash
@@ -87,7 +89,9 @@ def test_import_media_file_dedupes_identical_content():
 def test_import_media_file_missing_path_returns_none():
     ws = _make_workspace("import_missing")
     try:
-        assert import_media_file(ws, os.path.join(TEST_DIR, "does_not_exist.jpg")) is None
+        assert (
+            import_media_file(ws, os.path.join(TEST_DIR, "does_not_exist.jpg")) is None
+        )
         assert ws.get_node_count() == 0
     finally:
         ws.close()
