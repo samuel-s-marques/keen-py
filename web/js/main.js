@@ -24,6 +24,9 @@ import {
     modalRenameWs,
     nodeTypeSelect,
     nodeValueInput,
+    nodeValueGroup,
+    nodeMediaFileGroup,
+    nodeMediaFileInput,
     nodePropsFields,
     nodePropsContainer,
     modalCreateNode,
@@ -115,6 +118,7 @@ import { toggleTimelinePlay, updateTimelineFilter } from "./timeline.js";
 import { renderTables, getMergeSelection, drawGraph } from "./graph.js";
 import { fetchPlaybooksList, newPlaybook } from "./playbooks.js";
 import { invalidateWorldMapSize } from "./map.js";
+import { initMediaUploadListeners, uploadMediaFile } from "./media.js";
 
 // Theme setup
 const themeIcon = btnThemeToggle ? btnThemeToggle.querySelector('i') : null;
@@ -296,6 +300,9 @@ document.getElementById('btn-add-node').addEventListener('click', () => {
     // Reset form
     nodeTypeSelect.value = '';
     nodeValueInput.value = '';
+    nodeMediaFileInput.value = '';
+    nodeValueGroup.style.display = '';
+    nodeMediaFileGroup.style.display = 'none';
     nodePropsFields.innerHTML = '';
     nodePropsContainer.style.display = 'none';
     modalCreateNode.classList.add('active');
@@ -305,6 +312,18 @@ nodeTypeSelect.addEventListener('change', () => {
     const selected = nodeTypeSelect.selectedOptions[0];
     const propsStr = selected.dataset.props || '';
     nodePropsFields.innerHTML = '';
+
+    if (selected.value === 'media') {
+        // A media node's value is a content hash computed server-side from
+        // the uploaded bytes -- there's no free-text value or custom
+        // metadata for the operator to fill in here.
+        nodeValueGroup.style.display = 'none';
+        nodeMediaFileGroup.style.display = 'block';
+        nodePropsContainer.style.display = 'none';
+        return;
+    }
+    nodeValueGroup.style.display = '';
+    nodeMediaFileGroup.style.display = 'none';
 
     if (propsStr || selected.value === 'custom') {
         nodePropsContainer.style.display = 'block';
@@ -325,9 +344,27 @@ btnAddCustomProp.addEventListener('click', () => {
 
 btnConfirmCreateNode.addEventListener('click', async () => {
     const type = nodeTypeSelect.value;
+    if (!type) {
+        showSnackbar('Nodes', 'Please select a type.', 'error', 5000);
+        return;
+    }
+
+    if (type === 'media') {
+        const file = nodeMediaFileInput.files[0];
+        if (!file) {
+            showSnackbar('Nodes', 'Please choose a file to import.', 'error', 5000);
+            return;
+        }
+        const uploaded = await uploadMediaFile(file);
+        if (uploaded) {
+            modalCreateNode.classList.remove('active');
+        }
+        return;
+    }
+
     const value = nodeValueInput.value.trim();
-    if (!type || !value) {
-        showSnackbar('Nodes', 'Please select a type and enter a value.', 'error', 5000);
+    if (!value) {
+        showSnackbar('Nodes', 'Please enter a value.', 'error', 5000);
         return;
     }
 
@@ -432,6 +469,7 @@ initProxyListeners();
 initJobsListeners();
 initIntegrationsListeners();
 initScopeListeners();
+initMediaUploadListeners();
 
 // Workspace Management
 btnCreateWs.addEventListener('click', async () => {
