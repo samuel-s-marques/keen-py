@@ -419,6 +419,17 @@ async def run_module_on_target(
     try:
         # Execute
         await module_instance.run()
+    except asyncio.CancelledError:
+        # Cancellation (a caller's asyncio.wait_for() timeout, an external
+        # `jobs cancel`, or a disconnected WebSocket client) delivers
+        # CancelledError, which is a BaseException in Python 3.8+ and would
+        # otherwise slip past `except Exception` below -- leaving this job's
+        # row stuck at status="running" forever instead of ever finalizing.
+        if job_id and job_workspace:
+            job_workspace.update_job(
+                job_id, status="cancelled", error_message="Cancelled or timed out"
+            )
+        raise
     except Exception as e:
         if job_id and job_workspace:
             job_workspace.update_job(job_id, status="failed", error_message=str(e))
