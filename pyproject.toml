@@ -20,8 +20,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-# Runtime dependencies. This is the canonical dependency list — requirements*.txt
-# and requirements*.lock.txt mirror it for convenience only (see docs/IMPROVEMENT_RECOMMENDATIONS.md §4.3).
+# Runtime dependencies.
 dependencies = [
     "beautifulsoup4==4.14.3",
     "cmd2==3.5.1",

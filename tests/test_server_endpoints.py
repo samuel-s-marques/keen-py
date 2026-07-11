@@ -187,7 +187,11 @@ def test_workspace_scope_endpoints():
                 "name": "scope_test_ws",
                 "description": "Scope endpoint test",
                 "scope": [
-                    {"scope_type": "domain", "value": "example.com", "consent_basis": "signed SOW"}
+                    {
+                        "scope_type": "domain",
+                        "value": "example.com",
+                        "consent_basis": "signed SOW",
+                    }
                 ],
             },
         )
@@ -261,7 +265,7 @@ def test_workspace_scope_endpoints():
 def test_workspace_merge_nodes_endpoint():
     """POST /api/workspaces/{name}/nodes/merge is the operator-facing entry
     point for WorkspaceManager.merge_nodes -- otherwise the primitive is
-    unreachable from the running product (see internal/ARCHITECTURE_ROADMAP.md §1.3)."""
+    unreachable from the running product."""
     config_db = os.path.expanduser("~/.keen_test_server_merge_config.db")
     if os.path.exists(config_db):
         try:
