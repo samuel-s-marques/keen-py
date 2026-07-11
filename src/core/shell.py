@@ -14,6 +14,164 @@ from src.utils.banner import get_banner
 from src.utils.logger import set_debug_mode
 from src.utils.print_utils import error, info, success
 
+# Local-file media import (`do_media`) classifies files by extension so it
+# knows which attachments_dir() subtype to file them under; a file whose
+# extension isn't recognized still imports fine, just as a generic "document".
+_MEDIA_EXTENSIONS = {
+    "image": {
+        "jpg",
+        "jpeg",
+        "png",
+        "gif",
+        "bmp",
+        "tiff",
+        "tif",
+        "webp",
+        "heic",
+        "heif",
+    },
+    "video": {"mp4", "mov", "avi", "mkv", "webm"},
+    "audio": {"mp3", "wav", "m4a", "ogg", "flac"},
+}
+
+
+def _classify_media_extension(ext: str) -> str:
+    ext = ext.lower().lstrip(".")
+    for media_type, extensions in _MEDIA_EXTENSIONS.items():
+        if ext in extensions:
+            return media_type
+    return "document"
+
+
+def import_media_file(workspace: WorkspaceManager, path: str) -> int | None:
+    """Import a local file as a 'media' graph node, keyed on its SHA-256 hash."""
+    import hashlib
+
+    from src.core.result_builder import NodeFactory
+
+    if not os.path.isfile(path):
+        error(f"No such file: '{path}'.")
+        return None
+
+    with open(path, "rb") as f:
+        data = f.read()
+
+    sha256 = hashlib.sha256(data).hexdigest()
+    ext = os.path.splitext(path)[1].lower().lstrip(".")
+    media_type = _classify_media_extension(ext)
+
+    stored_name = f"{sha256}.{ext}" if ext else sha256
+    subtype = f"{media_type}s"
+    dest_dir = workspace.attachments_dir(subtype)
+    dest_path = os.path.join(dest_dir, stored_name)
+    if not os.path.exists(dest_path):
+        with open(dest_path, "wb") as f:
+            f.write(data)
+
+    node = NodeFactory.media(
+        sha256,
+        media_type=media_type,
+        original_filename=os.path.basename(path),
+        size_bytes=len(data),
+        attachment_ref=os.path.join(subtype, stored_name),
+    )
+    node_id = workspace.get_or_add_node(node["type"], node["value"], node["metadata"])
+    workspace.append_ledger_entry(
+        actor="operator",
+        action="media_import",
+        target_value=sha256,
+        raw_payload={
+            "original_filename": os.path.basename(path),
+            "size_bytes": len(data),
+            "media_type": media_type,
+        },
+    )
+    return node_id
+
+
+def _list_media(workspace: WorkspaceManager) -> None:
+    import json
+
+    cursor = workspace.conn.cursor()
+    cursor.execute(
+        "SELECT id, value, metadata FROM nodes WHERE type = 'media' ORDER BY id"
+    )
+    rows = cursor.fetchall()
+    if not rows:
+        info("No media nodes in this workspace. Use 'media import <path>' first.")
+        return
+
+    table = Table(
+        show_header=True,
+        header_style="bold blue",
+        title="Media Nodes",
+        title_style="bold cyan",
+        show_lines=True,
+        expand=True,
+    )
+    table.add_column("ID", justify="right", style="cyan")
+    table.add_column("Hash", justify="left", style="white")
+    table.add_column("Type", justify="left", style="magenta")
+    table.add_column("Filename", justify="left", style="white")
+    for row in rows:
+        try:
+            meta = json.loads(row["metadata"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            meta = {}
+        table.add_row(
+            str(row["id"]),
+            row["value"][:16] + "...",
+            meta.get("media_type", ""),
+            meta.get("stix2", {}).get("name", ""),
+        )
+    console = Console()
+    console.print(table)
+
+
+def _run_timestamp_analysis(workspace: WorkspaceManager, create_edges: bool) -> None:
+    from src.core.timestamp_analysis import run_timestamp_clustering
+
+    result = run_timestamp_clustering(workspace, create_edges=create_edges)
+    clusters = result["clusters"]
+
+    if not clusters:
+        info(
+            "No hour-of-day clusters found (need 2+ nodes with a 'captured_at' "
+            "metadata timestamp sharing the same UTC hour)."
+        )
+        return
+
+    table = Table(
+        show_header=True,
+        header_style="bold blue",
+        title="Timestamp Routine Clusters (hour-of-day, UTC)",
+        title_style="bold cyan",
+        show_lines=True,
+        expand=True,
+    )
+    table.add_column("Hour (UTC)", justify="right", style="cyan")
+    table.add_column("Nodes", justify="right", style="magenta")
+    table.add_column("Values", justify="left", style="white")
+    for cluster in clusters:
+        values = ", ".join(cluster["node_values"][:5])
+        if cluster["count"] > 5:
+            values += f" (+{cluster['count'] - 5} more)"
+        table.add_row(f"{cluster['hour_utc']:02d}:00", str(cluster["count"]), values)
+    console = Console()
+    console.print(table)
+
+    if create_edges:
+        success(
+            f"Created {result['edges_created']} 'temporally-correlated-with' "
+            f"suggestion edge(s) (confidence 0.3)."
+        )
+        if result["skipped_oversized_clusters"]:
+            info(
+                f"Skipped {result['skipped_oversized_clusters']} oversized "
+                "cluster(s) to avoid a combinatorial edge explosion -- see "
+                "the report above for their node counts."
+            )
+
 
 class Shell(Cmd):
     def __init__(self, debug_mode: bool = False) -> None:
@@ -1540,6 +1698,85 @@ class Shell(Cmd):
             error(
                 "Merge failed -- canonical node not found or no absorbed nodes matched."
             )
+
+    def do_media(self, arg: str) -> None:
+        """Import a local media file into the active workspace as a graph node.
+
+        Reads the file, computes its SHA-256 hash, copies the bytes under the
+        workspace's attachments directory, and creates a 'media' graph node
+        keyed on that hash -- the entry point for modules that operate on
+        local files (EXIF extraction, avatar/image correlation) rather than
+        a value the magic engine discovered over the network. Existing
+        modules chain off this node's type via 'magic_consumes'.
+
+        Usage:
+            media import <path>
+            media list
+        """
+        if not self.workspace:
+            error("No active workspace. Use 'workspace select <name>' first.")
+            return
+
+        try:
+            import shlex
+
+            args = shlex.split(arg.strip())
+        except ValueError as e:
+            error(f"Error parsing arguments: {e}")
+            return
+
+        if not args:
+            error("Usage: media <import <path> | list>")
+            return
+
+        subcommand = args[0].lower()
+        if subcommand == "import":
+            if len(args) < 2:
+                error("Usage: media import <path>")
+                return
+            node_id = import_media_file(self.workspace, " ".join(args[1:]))
+            if node_id is not None:
+                success(f"Imported as node #{node_id}.")
+        elif subcommand == "list":
+            _list_media(self.workspace)
+        else:
+            error("Usage: media <import <path> | list>")
+
+    def do_analysis(self, arg: str) -> None:
+        """Run a whole-graph analysis over the active workspace.
+
+        Unlike a module (one target, one external lookup), an analysis
+        command reads every node already ingested into the case -- pure
+        local computation, no network calls, no execution_safety gate.
+
+        Usage:
+            analysis timestamps [--no-edges]
+                Group nodes carrying a 'captured_at' metadata timestamp
+                (currently populated by the EXIF extractor module) by
+                hour-of-day (UTC). A same-hour cluster across otherwise
+                unrelated nodes is a routine/timezone-leakage signal --
+                surfaced as a weak, confidence-scored
+                'temporally-correlated-with' suggestion edge (never an
+                automatic merge). Pass --no-edges to only print the report.
+        """
+        if not self.workspace:
+            error("No active workspace. Use 'workspace select <name>' first.")
+            return
+
+        try:
+            import shlex
+
+            args = shlex.split(arg.strip())
+        except ValueError as e:
+            error(f"Error parsing arguments: {e}")
+            return
+
+        if not args or args[0].lower() != "timestamps":
+            error("Usage: analysis timestamps [--no-edges]")
+            return
+
+        create_edges = "--no-edges" not in args[1:]
+        _run_timestamp_analysis(self.workspace, create_edges)
 
     def do_web(self, arg: str) -> None:
         """Start the Keen API web server.
