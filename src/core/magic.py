@@ -155,6 +155,10 @@ class MagicEngine:
         if _HASH_RE.match(value):
             return "x-hash"
 
+        # Bitcoin address (legacy/P2SH/bech32)
+        if InputValidator.is_valid_btc_address(value):
+            return "x-crypto-address"
+
         # Username / Account Target
         if _USERNAME_RE.match(value):
             return "user-account"
@@ -294,9 +298,9 @@ class MagicEngine:
 
     async def _run_module(self, mod_class, target_value: str, depth: int) -> list:
         """Instantiates and executes a module class, intercepting and returning its post_run results."""
-        auto_confirm_active = self.config.get_preference(
-            "magic_allow_active_modules"
-        ) == "true"
+        auto_confirm_active = (
+            self.config.get_preference("magic_allow_active_modules") == "true"
+        )
         return await run_module_on_target(
             mod_class,
             target_value,
@@ -336,13 +340,17 @@ async def run_module_on_target(
     and playbook-driven module runs show up in `jobs list`/the Web UI task
     panel too, not just direct top-level `run` invocations.
     """
-    friendly_name = getattr(mod_class, "metadata", {}).get("name", "") or mod_class.__name__
+    friendly_name = (
+        getattr(mod_class, "metadata", {}).get("name", "") or mod_class.__name__
+    )
     msg = f"{log_prefix}: running '{friendly_name}' on '{target_value}'"
     info(msg)
     print(msg)
 
     job_workspace = getattr(shell, "workspace", None)
-    job_id = job_workspace.create_job(friendly_name, target_value) if job_workspace else None
+    job_id = (
+        job_workspace.create_job(friendly_name, target_value) if job_workspace else None
+    )
 
     module_instance = mod_class()
     module_instance.shell = shell
