@@ -10,9 +10,14 @@ import {
     moduleDetails,
     nodesTbody,
     edgesTbody,
+    modalMergeNodes,
+    mergeNodesList,
+    mergePreview,
 } from "./dom.js";
 import { showSnackbar } from "./notifications.js";
 import { selectWorkspace } from "./workspaces.js";
+import { getNodeStyle } from "./graph-styles.js";
+import { drawGraphCytoscape } from "./graph-cytoscape.js";
 import {
     NODE_TO_VALIDATOR_MAP,
     buildModuleDropdown,
@@ -81,24 +86,23 @@ export function renderTables() {
     }
 }
 
+// Dispatches to whichever engine is active (KeenStore.graphEngine, defaults
+// to 'vis'). Every caller (timeline.js, workspaces.js) just calls drawGraph()
+// -- this is the one place that needs to know two engines exist.
 export function drawGraph(nodes, edges) {
+    if (KeenStore.graphEngine === 'cytoscape') {
+        drawGraphCytoscape(nodes, edges);
+        return;
+    }
+    drawGraphVis(nodes, edges);
+}
+
+function drawGraphVis(nodes, edges) {
     let allHavePositions = nodes.length > 0;
     KeenStore.lastSelection = { nodes: [], edges: [] };
 
     const visNodes = nodes.map(n => {
-        let icon = ''; // fa-circle default
-        let color = '#8b92a5';
-
-        if (n.type.includes('email')) { icon = ''; color = '#0072ff'; }
-        else if (n.type.includes('domain')) { icon = ''; color = '#00f0ff'; }
-        else if (n.type.includes('ip')) { icon = ''; color = '#ff00ff'; }
-        else if (n.type.includes('phone')) { icon = ''; color = '#00e676'; }
-        else if (n.type.includes('person')) { icon = ''; color = '#ff6f61'; }
-        else if (n.type.includes('user-account')) { icon = ''; color = '#ab47bc'; }
-        else if (n.type.includes('organization')) { icon = ''; color = '#ffb300'; }
-        else if (n.type.includes('url')) { icon = ''; color = '#26c6da'; }
-        else if (n.type.includes('breach')) { icon = ''; color = '#ff5252'; }
-        else if (n.type.includes('service')) { icon = ''; color = '#ffa726'; }
+        const { icon, color } = getNodeStyle(n.type);
 
         const fullText = n.label || n.value;
         const shortText = fullText.length > 20 ? fullText.substring(0, 18) + '...' : fullText;
@@ -230,12 +234,17 @@ export function drawGraph(nodes, edges) {
     };
 
     const options = {
-        edges: { smooth: false },
+        // 'dynamic' bends each edge along its own invisible support node, so
+        // multiple edges between the same two nodes (or edges that happen to
+        // cross the same area) fan out instead of stacking into one solid,
+        // near-black line -- straight edges (smooth: false) is what made
+        // overlapping edges visually merge.
+        edges: { smooth: { enabled: true, type: 'dynamic', roundness: 0.5 } },
         layout: { improvedLayout: false },
         physics: {
             enabled: !allHavePositions,
-            barnesHut: { gravitationalConstant: -3000 },
-            stabilization: { iterations: 150 }
+            barnesHut: { gravitationalConstant: -6000, avoidOverlap: 1, springLength: 150 },
+            stabilization: { iterations: 200 }
         },
         interaction: { hover: true, multiselect: true },
         manipulation: {
@@ -551,6 +560,62 @@ export function drawGraph(nodes, edges) {
     });
 
     function updateSelectionDisplay(selectedNodeIds, selectedEdgeIds) {
+        renderSelectionSummary(selectedNodeIds, selectedEdgeIds);
+
+        // Update labels for all nodes based on selectedNodeIds -- vis-specific
+        // (a Cytoscape engine does this itself; see graph-cytoscape.js).
+        const allNodes = data.nodes.get();
+        const updates = [];
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+
+        allNodes.forEach(node => {
+            const isSelected = selectedNodeIds.includes(node.id);
+            if (isSelected && node.fullLabel && node.label !== node.fullLabel) {
+                updates.push({
+                    id: node.id,
+                    label: node.fullLabel,
+                    font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: isLight ? '#ffffff' : '#111318' }
+                });
+            } else if (!isSelected && node.shortLabel && node.label !== node.shortLabel) {
+                updates.push({
+                    id: node.id,
+                    label: node.shortLabel,
+                    font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: 'transparent' }
+                });
+            }
+        });
+
+        if (updates.length > 0) {
+            data.nodes.update(updates);
+        }
+    }
+    KeenStore.network.updateSelectionDisplay = updateSelectionDisplay;
+
+    // Always track the current selection from vis.js (handles both click and drag)
+    KeenStore.network.on('select', function (params) {
+        KeenStore.lastSelection = { nodes: params.nodes, edges: params.edges };
+        updateSelectionDisplay(params.nodes, params.edges);
+    });
+
+    KeenStore.network.on('click', function (params) {
+        if (btnAddEdge && btnAddEdge.classList.contains('active')) {
+            // If user clicks without drawing an edge, abort edge mode
+            btnAddEdge.classList.remove('active');
+            networkCanvas.style.cursor = 'default';
+            KeenStore.network.disableEditMode();
+        }
+
+        contextMenu.classList.add('hidden');
+    });
+}
+
+// Builds the right-panel "Info" tab content for the current node/edge
+// selection (single node, single edge, multi-node, multi-edge, or empty).
+// Engine-agnostic -- both drawGraphVis and drawGraphCytoscape's selection
+// handlers call this, then apply their own engine-specific visual follow-up
+// (e.g. vis's full/short label toggle on selected nodes, which needs its own
+// DataSet API and has no Cytoscape equivalent worth sharing).
+export function renderSelectionSummary(selectedNodeIds, selectedEdgeIds) {
         const totalSelected = selectedNodeIds.length + selectedEdgeIds.length;
         const infoEmpty = document.getElementById('node-info-empty');
         const infoContent = document.getElementById('node-info-content');
@@ -577,6 +642,7 @@ export function drawGraph(nodes, edges) {
                 html += `<span class="badge">${val}</span>`;
             });
             html += `</div>`;
+            html += `<button id="btn-merge-selected-nodes" class="btn-primary" style="margin-bottom: 12px;"><i class="fa-solid fa-code-merge"></i> Merge Nodes</button>`;
 
             if (selectedEdgeIds.length > 0) {
                 html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
@@ -590,6 +656,9 @@ export function drawGraph(nodes, edges) {
             }
 
             infoContent.innerHTML = html;
+
+            const mergeBtn = document.getElementById('btn-merge-selected-nodes');
+            if (mergeBtn) mergeBtn.onclick = () => openMergeNodesModal(selectedNodeIds);
 
             // Auto-switch to Info tab
             const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
@@ -639,51 +708,6 @@ export function drawGraph(nodes, edges) {
             moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
             moduleDetails.classList.add('hidden');
         }
-
-        // Update labels for all nodes based on selectedNodeIds
-        const allNodes = data.nodes.get();
-        const updates = [];
-        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-
-        allNodes.forEach(node => {
-            const isSelected = selectedNodeIds.includes(node.id);
-            if (isSelected && node.fullLabel && node.label !== node.fullLabel) {
-                updates.push({
-                    id: node.id,
-                    label: node.fullLabel,
-                    font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: isLight ? '#ffffff' : '#111318' }
-                });
-            } else if (!isSelected && node.shortLabel && node.label !== node.shortLabel) {
-                updates.push({
-                    id: node.id,
-                    label: node.shortLabel,
-                    font: { color: isLight ? '#1a1c23' : '#f0f2f8', background: 'transparent' }
-                });
-            }
-        });
-
-        if (updates.length > 0) {
-            data.nodes.update(updates);
-        }
-    }
-    KeenStore.network.updateSelectionDisplay = updateSelectionDisplay;
-
-    // Always track the current selection from vis.js (handles both click and drag)
-    KeenStore.network.on('select', function (params) {
-        KeenStore.lastSelection = { nodes: params.nodes, edges: params.edges };
-        updateSelectionDisplay(params.nodes, params.edges);
-    });
-
-    KeenStore.network.on('click', function (params) {
-        if (btnAddEdge && btnAddEdge.classList.contains('active')) {
-            // If user clicks without drawing an edge, abort edge mode
-            btnAddEdge.classList.remove('active');
-            networkCanvas.style.cursor = 'default';
-            KeenStore.network.disableEditMode();
-        }
-
-        contextMenu.classList.add('hidden');
-    });
 }
 
 export function populateNodeInfo(item, isEdge = false) {
@@ -923,4 +947,86 @@ export function showContextMenu(x, y, node, edgeId = null) {
     contextMenu.style.left = `${x}px`;
     contextMenu.style.top = `${y}px`;
     contextMenu.classList.remove('hidden');
+}
+
+// --- Entity resolution (node merging) ---
+// merge_nodes() on the backend (managers.py) is whole-node precedence, not
+// field-level: the canonical node always wins metadata conflicts, absorbed
+// nodes only fill keys canonical lacks. The preview below mirrors that fold
+// exactly so there's no surprise between what's shown and what the server does.
+
+let mergeCandidateNodes = [];
+
+function parseNodeMeta(node) {
+    if (!node || !node.metadata) return {};
+    try {
+        const meta = typeof node.metadata === 'string' ? JSON.parse(node.metadata) : node.metadata;
+        return (meta && typeof meta === 'object') ? meta : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+export function openMergeNodesModal(selectedNodeIds) {
+    mergeCandidateNodes = selectedNodeIds
+        .map(id => KeenStore.currentNodes.find(n => String(n.id) === String(id) || n.value === id))
+        .filter(Boolean);
+
+    if (mergeCandidateNodes.length < 2) {
+        showSnackbar('Merge', 'Select at least two nodes to merge.', 'error', 4000);
+        return;
+    }
+
+    mergeNodesList.innerHTML = '';
+    mergeCandidateNodes.forEach((node, i) => {
+        const row = document.createElement('label');
+        row.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;';
+        row.innerHTML = `
+            <input type="radio" name="merge-canonical" value="${node.id}" ${i === 0 ? 'checked' : ''}>
+            <span class="badge">${node.type}</span>
+            <span style="word-break: break-all;">${node.label || node.value}</span>
+        `;
+        mergeNodesList.appendChild(row);
+    });
+
+    mergeNodesList.querySelectorAll('input[name="merge-canonical"]').forEach(input => {
+        input.addEventListener('change', renderMergePreview);
+    });
+
+    renderMergePreview();
+    modalMergeNodes.classList.add('active');
+}
+
+function renderMergePreview() {
+    const checked = mergeNodesList.querySelector('input[name="merge-canonical"]:checked');
+    const canonicalNode = checked
+        ? mergeCandidateNodes.find(n => String(n.id) === String(checked.value))
+        : null;
+
+    if (!canonicalNode) {
+        mergePreview.textContent = '';
+        return;
+    }
+
+    const absorbedNodes = mergeCandidateNodes.filter(n => n !== canonicalNode);
+    let merged = parseNodeMeta(canonicalNode);
+    const mergedFrom = Array.isArray(merged.merged_from) ? [...merged.merged_from] : [];
+    for (const absorbed of absorbedNodes) {
+        merged = { ...parseNodeMeta(absorbed), ...merged };
+        mergedFrom.push(absorbed.label || absorbed.value);
+    }
+    merged = { ...merged, merged_from: mergedFrom };
+
+    mergePreview.textContent = JSON.stringify(merged, null, 2);
+}
+
+export function getMergeSelection() {
+    const checked = mergeNodesList.querySelector('input[name="merge-canonical"]:checked');
+    if (!checked) return null;
+    const canonicalId = checked.value;
+    const absorbedIds = mergeCandidateNodes
+        .filter(n => String(n.id) !== String(canonicalId))
+        .map(n => n.id);
+    if (absorbedIds.length === 0) return null;
+    return { canonicalId: Number(canonicalId), absorbedIds: absorbedIds.map(Number) };
 }
