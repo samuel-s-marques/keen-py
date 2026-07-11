@@ -37,6 +37,10 @@ DEFAULT_RPS = {
     # ipapi.co's free tier has no documented per-second limit, but its daily
     # cap (1,000/day) means a conservative pace is worth defaulting to.
     "ipapi_co": 1.0,
+    # Blockstream's public Esplora API has no documented per-IP limit, but
+    # it's a shared free resource -- paced conservatively rather than
+    # assumed unlimited.
+    "blockstream": 2.0,
 }
 
 
