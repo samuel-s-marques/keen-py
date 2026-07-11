@@ -39,6 +39,10 @@
     <!-- js-yaml (Playbooks visual builder <-> YAML conversion) -->
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 
+    <!-- Leaflet (World View tab -- plots any node carrying stix2 lat/lon) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -115,6 +119,8 @@
                                     id="count-nodes">0</span>)</button>
                             <button class="tab" data-target="tab-edges" style="padding: 10px 16px;">Edges (<span
                                     id="count-edges">0</span>)</button>
+                            <button class="tab" data-target="tab-worldview" style="padding: 10px 16px;"><i
+                                    class="fa-solid fa-earth-americas"></i> World View</button>
                         </div>
                     </div>
                 </div>
@@ -229,6 +235,19 @@
                                 <!-- Edges loaded here -->
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-worldview">
+                    <div class="graph-wrapper"
+                        style="position: relative; width: 100%; height: 100%; display: flex; flex: 1; flex-direction: column;">
+                        <div id="world-map-canvas" class="graph-container"></div>
+                        <div id="world-map-empty" class="world-map-empty">
+                            <i class="fa-solid fa-earth-americas"></i>
+                            <p>No geolocated nodes in this case yet.</p>
+                            <p class="world-map-empty-hint">Nodes gain coordinates from modules like the EXIF
+                                extractor (GPS tags on imported images).</p>
+                        </div>
                     </div>
                 </div>
             </main>
