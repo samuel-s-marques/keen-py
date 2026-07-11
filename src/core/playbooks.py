@@ -15,11 +15,12 @@ A playbook is a small DAG of steps, each invoking one Keen module:
         condition: "node.type == 'ipv4-addr' and not node.is_private"
 
 Steps with no ``depends_on`` run immediately, seeded from ``trigger.value``.
-A step with ``depends_on`` runs once per node its dependency discovered
-(optionally filtered by ``condition``, evaluated with that node bound to
-``node``), re-rendering its ``inputs`` templates against that specific node
-each time. Steps whose dependencies are already satisfied run concurrently,
-mirroring MagicEngine's per-depth concurrency.
+A step with ``depends_on`` runs once per node any of its dependencies
+discovered -- a fan-in union across parents, deduped by node value, not a
+cartesian product -- (optionally filtered by ``condition``, evaluated with
+that node bound to ``node``), re-rendering its ``inputs`` templates against
+that specific node each time. Steps whose dependencies are already satisfied
+run concurrently, mirroring MagicEngine's per-depth concurrency.
 
 Execution itself goes through :func:`src.core.magic.run_module_on_target` --
 the same shared, safety-gated module-execution path MagicEngine uses -- so a
@@ -265,6 +266,28 @@ def validate_playbook(playbook: Any) -> dict:
                 except SyntaxError as e:
                     warnings.append(f"Step '{step_id}' has an invalid condition: {e}")
 
+            timeout = step.get("timeout_seconds")
+            if timeout is not None and (not isinstance(timeout, (int, float)) or timeout <= 0):
+                warnings.append(
+                    f"Step '{step_id}' has an invalid 'timeout_seconds' (must be a positive number)"
+                )
+
+            retry_cfg = step.get("retry")
+            if retry_cfg is not None:
+                if not isinstance(retry_cfg, dict):
+                    warnings.append(f"Step '{step_id}' has an invalid 'retry' block (must be a mapping)")
+                else:
+                    max_attempts = retry_cfg.get("max_attempts", 1)
+                    if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or max_attempts < 1:
+                        warnings.append(
+                            f"Step '{step_id}' has an invalid retry.max_attempts (must be a positive integer)"
+                        )
+                    backoff = retry_cfg.get("backoff_seconds", 0)
+                    if not isinstance(backoff, (int, float)) or isinstance(backoff, bool) or backoff < 0:
+                        warnings.append(
+                            f"Step '{step_id}' has an invalid retry.backoff_seconds (must be >= 0)"
+                        )
+
     return {"errors": errors, "warnings": warnings}
 
 
@@ -334,15 +357,43 @@ class PlaybookEngine:
         auto_confirm_active = (
             self.config.get_preference("magic_allow_active_modules") == "true"
         )
-        return await run_module_on_target(
-            mod_class,
-            target_value,
-            self.shell,
-            self.config,
-            log_prefix=f"[playbook] step '{step['id']}'",
-            auto_confirm_active=auto_confirm_active,
-            extra_options=inputs,
-        )
+
+        timeout = step.get("timeout_seconds")
+        retry_cfg = step.get("retry") or {}
+        max_attempts = max(1, int(retry_cfg.get("max_attempts", 1)))
+        backoff = float(retry_cfg.get("backoff_seconds", 0))
+
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                coro = run_module_on_target(
+                    mod_class,
+                    target_value,
+                    self.shell,
+                    self.config,
+                    log_prefix=f"[playbook] step '{step['id']}'",
+                    auto_confirm_active=auto_confirm_active,
+                    extra_options=inputs,
+                )
+                if timeout:
+                    return await asyncio.wait_for(coro, timeout=float(timeout))
+                return await coro
+            except asyncio.TimeoutError as e:
+                last_exc = e
+                warn(
+                    f"[playbook] step '{step['id']}' timed out after {timeout}s "
+                    f"(attempt {attempt}/{max_attempts})"
+                )
+            except Exception as e:
+                last_exc = e
+                warn(
+                    f"[playbook] step '{step['id']}' failed (attempt {attempt}/{max_attempts}): {e}"
+                )
+            if attempt < max_attempts and backoff > 0:
+                await asyncio.sleep(backoff)
+
+        assert last_exc is not None
+        raise last_exc
 
     async def _run_step(self, step: dict, context: dict, prior_results: dict) -> list:
         mod_class = self._resolve_module(step["module"])
@@ -354,23 +405,39 @@ class PlaybookEngine:
         if not deps:
             return await self._run_step_once(step, mod_class, context)
 
-        # Depends on a prior step: run once per node it discovered (only the
-        # first dependency's nodes are iterated -- multi-dependency joins are
-        # unsupported for now, matching what the roadmap's own examples need).
-        dep_nodes = prior_results.get(deps[0], [])
+        # Depends on one or more prior steps: run once per node discovered by
+        # ANY of them (fan-in union, not a cartesian product across parents --
+        # e.g. "run shodan_scan on every IP discovered by DNS enum *or* cert
+        # transparency"), deduped by node value so a node surfaced by more
+        # than one parent only triggers this step once. Each iteration binds
+        # the current node under EVERY declared dependency's name (not just
+        # whichever parent actually produced it), so an `inputs` template
+        # like `{{ dns_sweep.node_value }}` resolves correctly no matter which
+        # parent supplied the node currently being processed -- otherwise a
+        # step depending on multiple parents could only ever template against
+        # whichever dep happens to be listed first.
         condition = step.get("condition")
         discovered: list = []
-        for node in dep_nodes:
-            if condition:
-                try:
-                    if not safe_eval_condition(condition, {"node": node}):
-                        continue
-                except UnsafeExpressionError as e:
-                    warn(f"[playbook] Rejecting condition in step '{step['id']}': {e}")
-                    return discovered
-            step_context = dict(context)
-            step_context[deps[0]] = {"node_value": node.get("value"), "node": node}
-            discovered.extend(await self._run_step_once(step, mod_class, step_context))
+        seen_values: set = set()
+        for dep in deps:
+            for node in prior_results.get(dep, []):
+                value = node.get("value")
+                if value is not None and value in seen_values:
+                    continue
+                if condition:
+                    try:
+                        if not safe_eval_condition(condition, {"node": node}):
+                            continue
+                    except UnsafeExpressionError as e:
+                        warn(f"[playbook] Rejecting condition in step '{step['id']}': {e}")
+                        return discovered
+                if value is not None:
+                    seen_values.add(value)
+                node_ctx = {"node_value": node.get("value"), "node": node}
+                step_context = dict(context)
+                for d in deps:
+                    step_context[d] = node_ctx
+                discovered.extend(await self._run_step_once(step, mod_class, step_context))
         return discovered
 
     async def run(self, playbook: dict, trigger_value: str) -> dict:
