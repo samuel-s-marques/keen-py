@@ -33,6 +33,7 @@
         // Shared mutable app state (formerly loose `let`s in the app.js closure).
         // Feature modules read/write these as KeenStore.<name>.
         modulesData: {},
+        graphEngine: 'cytoscape', // 'cytoscape' (default) or 'vis'
         network: null,
         nodesDataSet: null,
         edgesDataSet: null,
