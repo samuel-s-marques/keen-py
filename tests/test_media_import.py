@@ -6,7 +6,8 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.core.managers import WorkspaceManager
-from src.core.shell import _classify_media_extension, import_media_file
+from src.core.media_import import classify_media_extension as _classify_media_extension
+from src.core.media_import import import_media_file
 
 TEST_DIR = os.path.expanduser("~/.keen_test_media_import_tmp")
 
