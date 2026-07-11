@@ -62,6 +62,17 @@
         get: function (path, opts) {
             return request("GET", path, null, opts);
         },
+        /**
+         * Upload a FormData body (e.g. a file) without JSON-encoding it.
+         * The browser sets the multipart Content-Type (with boundary) itself
+         * when `body` is a FormData instance -- setting it manually here
+         * would omit the boundary and break parsing server-side.
+         */
+        upload: function (path, formData, opts) {
+            opts = opts || {};
+            const headers = _headers(opts.headers);
+            return fetch(API_BASE + path, { method: "POST", headers: headers, body: formData });
+        },
         post: function (path, body, opts) {
             return request("POST", path, body, opts);
         },
