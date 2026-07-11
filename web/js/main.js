@@ -114,6 +114,7 @@ import { addPropertyField, createEditPropField, parseMetaValue } from "./modals.
 import { toggleTimelinePlay, updateTimelineFilter } from "./timeline.js";
 import { renderTables, getMergeSelection, drawGraph } from "./graph.js";
 import { fetchPlaybooksList, newPlaybook } from "./playbooks.js";
+import { invalidateWorldMapSize } from "./map.js";
 
 // Theme setup
 const themeIcon = btnThemeToggle ? btnThemeToggle.querySelector('i') : null;
@@ -493,6 +494,12 @@ document.querySelectorAll('.tab').forEach(tab => {
         if (tab.dataset.target === 'tab-graph' && KeenStore.network) {
             KeenStore.network.redraw();
             KeenStore.network.fit();
+        }
+
+        // Leaflet sizes its tiles off the container's dimensions at init/resize
+        // time -- a map (re)shown from a previously-hidden tab needs a nudge.
+        if (tab.dataset.target === 'tab-worldview') {
+            invalidateWorldMapSize();
         }
     });
 });
