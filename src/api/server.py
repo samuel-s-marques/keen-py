@@ -12,8 +12,10 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     FastAPI,
+    File,
     HTTPException,
     Request,
+    UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
@@ -93,6 +95,11 @@ async def auth_middleware(request: Request, call_next):
 os.makedirs("web", exist_ok=True)
 
 _VALID_SCOPE_TYPES = ("domain", "ip", "cidr", "organization", "person")
+
+# Uploads are read fully into memory (see upload_workspace_media) before being
+# hashed and written to disk -- capped so an unbounded upload can't exhaust
+# server memory.
+MAX_MEDIA_UPLOAD_BYTES = 100 * 1024 * 1024
 
 
 class ScopeEntryCreate(BaseModel):
@@ -1160,6 +1167,114 @@ def update_node_positions(
         return {"success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/workspaces/{name}/media", response_model=None)
+async def upload_workspace_media(
+    file: UploadFile = File(...),
+    wm: WorkspaceManager = Depends(get_workspace_manager),
+) -> Union[Dict[str, Any], JSONResponse]:
+    """Import an uploaded file as a 'media' graph node.
+
+    Web equivalent of the CLI's `media import <path>` -- the entry point for
+    modules that operate on local files (EXIF extraction, avatar/image
+    correlation) rather than a value discovered over the network. Shares its
+    core logic with the CLI command via `src.core.media_import`.
+    """
+    from src.core.media_import import import_media_bytes
+
+    data = await file.read()
+    if not data:
+        return JSONResponse(status_code=400, content={"error": "Uploaded file is empty."})
+    if len(data) > MAX_MEDIA_UPLOAD_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={
+                "error": f"File exceeds the {MAX_MEDIA_UPLOAD_BYTES // (1024 * 1024)}MB upload limit."
+            },
+        )
+
+    try:
+        node_id = import_media_bytes(
+            wm, file.filename or "upload.bin", data, actor="web"
+        )
+        return {"success": True, "node_id": node_id}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/workspaces/{name}/media", response_model=None)
+def get_workspace_media(
+    wm: WorkspaceManager = Depends(get_workspace_manager),
+) -> Union[List[Dict[str, Any]], JSONResponse]:
+    """List media nodes in a workspace (web equivalent of the CLI's `media list`)."""
+    try:
+        cursor = wm.conn.cursor()
+        cursor.execute(
+            "SELECT id, value, metadata FROM nodes WHERE type = 'media' ORDER BY id"
+        )
+        results = []
+        for row in cursor.fetchall():
+            try:
+                meta = json.loads(row["metadata"] or "{}")
+            except (json.JSONDecodeError, TypeError):
+                meta = {}
+            stix2 = meta.get("stix2") or {}
+            results.append(
+                {
+                    "id": row["id"],
+                    "value": row["value"],
+                    "media_type": meta.get("media_type", ""),
+                    "filename": stix2.get("name", ""),
+                    "size_bytes": stix2.get("size"),
+                    "has_attachment": bool(meta.get("attachment_ref")),
+                }
+            )
+        return results
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/workspaces/{name}/media/{node_id}/file")
+def get_workspace_media_file(
+    node_id: int, wm: WorkspaceManager = Depends(get_workspace_manager)
+) -> Any:
+    """Serve a media node's stored attachment bytes, for preview/download in the web UI."""
+    from fastapi.responses import FileResponse
+
+    cursor = wm.conn.cursor()
+    cursor.execute(
+        "SELECT metadata FROM nodes WHERE id = ? AND type = 'media'", (node_id,)
+    )
+    row = cursor.fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Media node not found"})
+
+    try:
+        meta = json.loads(row["metadata"] or "{}")
+    except (json.JSONDecodeError, TypeError):
+        meta = {}
+
+    attachment_ref = meta.get("attachment_ref")
+    if not attachment_ref:
+        return JSONResponse(
+            status_code=404, content={"error": "No stored attachment for this media node"}
+        )
+
+    attachments_root = os.path.normpath(wm.attachments_dir())
+    file_path = os.path.normpath(os.path.join(attachments_root, attachment_ref))
+    # Defense in depth: attachment_ref is normally server-generated, but a
+    # node's metadata can be edited via PUT /nodes/{id} -- don't trust it to
+    # stay inside the attachments directory.
+    if (
+        os.path.commonpath([attachments_root, file_path]) != attachments_root
+        or not os.path.isfile(file_path)
+    ):
+        return JSONResponse(status_code=404, content={"error": "Attachment file not found"})
+
+    stix2 = meta.get("stix2") or {}
+    filename = stix2.get("name") or os.path.basename(file_path)
+    return FileResponse(path=file_path, filename=filename)
 
 
 @app.get("/api/workspaces/{name}/suggestions", response_model=None)
