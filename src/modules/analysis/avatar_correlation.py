@@ -15,6 +15,26 @@ from src.core.result_builder import ResultBuilder
 from src.utils.print_utils import error, success
 
 
+def _phash_from_file(file_path: str) -> str | None:
+    """Compute a pHash straight from a file path, no module instance needed.
+
+    Free function (not a class/static method) so ``_find_similar`` --
+    itself a ``@staticmethod`` with no ``self`` -- can compute a missing
+    comparison target's pHash on the fly without any self-binding ambiguity.
+    """
+    try:
+        import imagehash
+        from PIL import Image
+    except ImportError:
+        return None
+
+    try:
+        with Image.open(file_path) as img:
+            return str(imagehash.phash(img))
+    except Exception:
+        return None
+
+
 class AvatarCorrelation(BaseModule):
     metadata = {
         "name": "Avatar_Correlation",
@@ -101,19 +121,10 @@ class AvatarCorrelation(BaseModule):
         await self._save_results(target, matches)
 
     def _compute_phash(self, file_path: str) -> str | None:
-        try:
-            import imagehash
-            from PIL import Image
-        except ImportError:
-            self.logger.error("Pillow/imagehash are not installed.")
-            return None
-
-        try:
-            with Image.open(file_path) as img:
-                return str(imagehash.phash(img))
-        except Exception as e:
-            self.logger.error(f"Failed to compute pHash for {file_path}: {e}")
-            return None
+        result = _phash_from_file(file_path)
+        if result is None:
+            self.logger.error(f"Could not compute a perceptual hash for {file_path}.")
+        return result
 
     @staticmethod
     def _store_phash(workspace, target: str, phash_hex: str) -> None:
@@ -128,8 +139,16 @@ class AvatarCorrelation(BaseModule):
     def _find_similar(
         workspace, target: str, phash_hex: str, max_distance: int
     ) -> list[dict]:
-        """Compare ``phash_hex`` against every other image media node's stored
-        pHash already in the workspace.
+        """Compare ``phash_hex`` against every other image media node in the workspace.
+
+        A candidate's own pHash is normally already cached on its metadata
+        from a prior run of this module against it -- but requiring that
+        made a match's very existence depend on run order: two genuinely
+        identical images produced no edge at all if this module had only
+        ever been run against one of them (the other's metadata had no
+        ``phash`` yet, so it was silently skipped regardless of
+        ``max_distance``). Compute it on the fly from the stored attachment
+        bytes instead, and persist it back so later runs don't redo the work.
         """
         import imagehash
 
@@ -139,7 +158,7 @@ class AvatarCorrelation(BaseModule):
             return []
 
         cursor = workspace.conn.cursor()
-        cursor.execute("SELECT value, metadata FROM nodes WHERE type = 'media'")
+        cursor.execute("SELECT id, value, metadata FROM nodes WHERE type = 'media'")
 
         matches = []
         for row in cursor.fetchall():
@@ -152,9 +171,21 @@ class AvatarCorrelation(BaseModule):
                 continue
             if meta.get("media_type") != "image":
                 continue
+
             other_phash = meta.get("phash")
             if not other_phash:
-                continue
+                attachment_ref = meta.get("attachment_ref")
+                if not attachment_ref:
+                    continue
+                file_path = os.path.join(workspace.attachments_dir(), attachment_ref)
+                if not os.path.isfile(file_path):
+                    continue
+                other_phash = _phash_from_file(file_path)
+                if other_phash is None:
+                    continue
+                meta["phash"] = other_phash
+                workspace.update_node(row["id"], metadata=meta)
+
             try:
                 other_hash = imagehash.hex_to_hash(other_phash)
             except ValueError:
