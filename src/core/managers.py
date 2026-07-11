@@ -781,6 +781,18 @@ class WorkspaceManager(DatabaseEngine):
         result = cursor.fetchone()
         return result["id"] if result else None
 
+    def get_node_metadata(self, value) -> dict | None:
+        """Return a node's parsed metadata dict by value, or ``None`` if it doesn't exist."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT metadata FROM nodes WHERE value = ?", (value,))
+        result = cursor.fetchone()
+        if not result:
+            return None
+        try:
+            return json.loads(result["metadata"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
     def node_exists_by_id(self, node_id: int) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("SELECT 1 FROM nodes WHERE id = ?", (node_id,))
@@ -1059,7 +1071,9 @@ class WorkspaceManager(DatabaseEngine):
             stored_payload = raw_json
             if len(raw_json.encode("utf-8")) > self.RAW_INLINE_THRESHOLD_BYTES:
                 content_hash = hashlib.sha256(raw_json.encode("utf-8")).hexdigest()
-                raw_path = os.path.join(self.attachments_dir("raw"), f"{content_hash}.json")
+                raw_path = os.path.join(
+                    self.attachments_dir("raw"), f"{content_hash}.json"
+                )
                 if not os.path.exists(raw_path):
                     with open(raw_path, "w", encoding="utf-8") as f:
                         f.write(raw_json)
@@ -1106,7 +1120,7 @@ class WorkspaceManager(DatabaseEngine):
         ``raw_ref:<hash>.json``; this reads that file back transparently.
         """
         if isinstance(raw_payload, str) and raw_payload.startswith("raw_ref:"):
-            filename = raw_payload[len("raw_ref:"):]
+            filename = raw_payload[len("raw_ref:") :]
             raw_path = os.path.join(self.attachments_dir("raw"), filename)
             with open(raw_path, "r", encoding="utf-8") as f:
                 return f.read()
@@ -1247,7 +1261,9 @@ class WorkspaceManager(DatabaseEngine):
             job["logs"] = []
         return job
 
-    def list_jobs(self, status: str | None = None, limit: int | None = None) -> list[dict]:
+    def list_jobs(
+        self, status: str | None = None, limit: int | None = None
+    ) -> list[dict]:
         cursor = self.conn.cursor()
         query = "SELECT * FROM job_history"
         params: list[Any] = []
@@ -1261,7 +1277,9 @@ class WorkspaceManager(DatabaseEngine):
         jobs = []
         for row in cursor.fetchall():
             job = dict(row)
-            job.pop("logs", None)  # omit the potentially large log buffer from list views
+            job.pop(
+                "logs", None
+            )  # omit the potentially large log buffer from list views
             jobs.append(job)
         return jobs
 
