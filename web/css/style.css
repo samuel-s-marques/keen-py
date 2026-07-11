@@ -435,6 +435,50 @@ body {
     outline: none;
 }
 
+/* World View (Leaflet map of geolocated nodes) */
+#world-map-canvas {
+    z-index: 0;
+}
+
+.world-map-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-align: center;
+    color: var(--text-secondary);
+    background: var(--bg-panel);
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.world-map-empty i {
+    font-size: 2.5rem;
+    color: var(--accent-cyan);
+    opacity: 0.6;
+    margin-bottom: 4px;
+}
+
+.world-map-empty-hint {
+    font-size: 0.8rem;
+    max-width: 320px;
+    opacity: 0.8;
+}
+
+/* Dim the OpenStreetMap tiles to match the app's dark theme by default;
+   the light theme override below restores them to normal. */
+#world-map-canvas .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
+
+:root[data-theme="light"] #world-map-canvas .leaflet-tile-pane {
+    filter: none;
+}
+
 /* Forms & Inputs */
 .module-selector-container {
     padding: 20px 24px;
