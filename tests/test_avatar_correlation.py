@@ -13,9 +13,6 @@ from src.core.result_builder import NodeFactory
 from src.modules.analysis.avatar_correlation import AvatarCorrelation
 
 TEST_DIR = os.path.expanduser("~/.keen_test_avatar_correlation_tmp")
-FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
-FIXTURE_LARGE = os.path.join(FIXTURES_DIR, "81ed748d-3344-4341-94c6-4a7a0293e8c5.png")
-FIXTURE_SMALL = os.path.join(FIXTURES_DIR, "luis-menor.png")
 
 TARGET_SHA = "1" * 64
 OTHER_SHA = "2" * 64
@@ -48,6 +45,25 @@ def _teardown(ws: WorkspaceManager, config: ConfigManager) -> None:
     ws.close()
     config.close()
     shutil.rmtree(TEST_DIR)
+
+
+def _make_synthetic_image(path: str, size: tuple[int, int]) -> None:
+    """Render a small synthetic photo-like image to disk.
+
+    Flat-color squares hash identically regardless of content, so this draws
+    a couple of shapes to give pHash's DCT step actual structure to work
+    with -- good enough to stand in for a real photo without needing a
+    committed binary fixture.
+    """
+    from PIL import Image, ImageDraw
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    w, h = size
+    img = Image.new("RGB", size, color=(235, 235, 235))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([w * 0.1, h * 0.1, w * 0.6, h * 0.6], fill=(180, 60, 60))
+    draw.ellipse([w * 0.3, h * 0.4, w * 0.9, h * 0.9], fill=(60, 60, 180))
+    img.save(path)
 
 
 def _seed_image_node(ws: WorkspaceManager, sha: str, phash: str | None = None, attachment_ref="images/x.jpg"):
@@ -124,14 +140,12 @@ def test_find_similar_computes_missing_phash_on_the_fly():
             ws, OTHER_SHA, phash=None, attachment_ref="images/other.png"
         )
         real_path = os.path.join(ws.attachments_dir(), "images/other.png")
-        os.makedirs(os.path.dirname(real_path), exist_ok=True)
-        with open(FIXTURE_SMALL, "rb") as src, open(real_path, "wb") as dst:
-            dst.write(src.read())
+        _make_synthetic_image(real_path, (128, 128))
 
         import imagehash
         from PIL import Image
 
-        with Image.open(FIXTURE_SMALL) as img:
+        with Image.open(real_path) as img:
             expected_hash = str(imagehash.phash(img))
 
         matches = AvatarCorrelation._find_similar(
@@ -150,16 +164,28 @@ def test_find_similar_computes_missing_phash_on_the_fly():
 
 @pytest.mark.asyncio
 async def test_execute_detects_identical_images_regardless_of_run_order():
-    """End-to-end regression test using two real, genuinely-identical fixture
-    images at different resolutions (tests/fixtures) -- reproduces the
-    reported bug: running this module against only ONE of two visually
-    identical images must still surface the match, even though the other
-    image's node was never separately correlated.
+    """End-to-end regression test using two genuinely-identical images at
+    different resolutions (one generated, one a resize of the same source)
+    -- reproduces the reported bug: running this module against only ONE of
+    two visually identical images must still surface the match, even though
+    the other image's node was never separately correlated.
     """
     ws, config = _make_workspace()
     try:
-        large_id = import_media_file(ws, FIXTURE_LARGE)
-        small_id = import_media_file(ws, FIXTURE_SMALL)
+        from PIL import Image
+
+        large_path = os.path.join(TEST_DIR, "large.png")
+        small_path = os.path.join(TEST_DIR, "small.png")
+        _make_synthetic_image(large_path, (512, 512))
+        # Same visual content as large_path, saved at a different resolution
+        # -- distinct file bytes (and therefore a distinct SHA-256), which is
+        # exactly what a perceptual hash should still match despite a real
+        # cryptographic hash mismatch.
+        with Image.open(large_path) as img:
+            img.resize((128, 128)).save(small_path)
+
+        large_id = import_media_file(ws, large_path)
+        small_id = import_media_file(ws, small_path)
         assert large_id is not None
         assert small_id is not None
         assert large_id != small_id  # distinct content hashes, same visual image
