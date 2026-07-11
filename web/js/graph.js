@@ -16,7 +16,7 @@ import {
 } from "./dom.js";
 import { showSnackbar } from "./notifications.js";
 import { selectWorkspace } from "./workspaces.js";
-import { getNodeStyle } from "./graph-styles.js";
+import { getNodeStyle, mediaImageUrl } from "./graph-styles.js";
 import { drawGraphCytoscape } from "./graph-cytoscape.js";
 import {
     NODE_TO_VALIDATOR_MAP,
@@ -106,6 +106,7 @@ function drawGraphVis(nodes, edges) {
 
         const fullText = n.label || n.value;
         const shortText = fullText.length > 20 ? fullText.substring(0, 18) + '...' : fullText;
+        const imageUrl = mediaImageUrl(n);
 
         const visNode = {
             id: n.id || n.value,
@@ -114,16 +115,25 @@ function drawGraphVis(nodes, edges) {
             fullLabel: fullText,
             shortLabel: shortText,
             group: n.type,
-            shape: 'icon',
-            icon: {
+            font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#f0f2f8' }
+        };
+
+        if (imageUrl) {
+            visNode.shape = 'circularImage';
+            visNode.image = imageUrl;
+            visNode.size = 22;
+            visNode.borderWidth = 2;
+            visNode.color = { border: color };
+        } else {
+            visNode.shape = 'icon';
+            visNode.icon = {
                 face: '"Font Awesome 6 Free"',
                 code: icon,
                 size: 40,
                 color: color,
                 weight: "900"
-            },
-            font: { color: document.documentElement.getAttribute('data-theme') === 'light' ? '#1a1c23' : '#f0f2f8' }
-        };
+            };
+        }
 
         if (n.x !== null && n.x !== undefined && n.y !== null && n.y !== undefined) {
             visNode.x = n.x;
@@ -138,6 +148,7 @@ function drawGraphVis(nodes, edges) {
     const minimapVisNodes = visNodes.map(n => ({
         ...n,
         icon: n.icon ? { ...n.icon, size: 12 } : undefined,
+        size: n.shape === 'circularImage' ? 8 : n.size,
         font: { size: 0 }
     }));
 
@@ -611,77 +622,36 @@ function drawGraphVis(nodes, edges) {
 
 // Builds the right-panel "Info" tab content for the current node/edge
 // selection (single node, single edge, multi-node, multi-edge, or empty).
-// Engine-agnostic -- both drawGraphVis and drawGraphCytoscape's selection
-// handlers call this, then apply their own engine-specific visual follow-up
-// (e.g. vis's full/short label toggle on selected nodes, which needs its own
-// DataSet API and has no Cytoscape equivalent worth sharing).
 export function renderSelectionSummary(selectedNodeIds, selectedEdgeIds) {
-        const totalSelected = selectedNodeIds.length + selectedEdgeIds.length;
-        const infoEmpty = document.getElementById('node-info-empty');
-        const infoContent = document.getElementById('node-info-content');
+    const totalSelected = selectedNodeIds.length + selectedEdgeIds.length;
+    const infoEmpty = document.getElementById('node-info-empty');
+    const infoContent = document.getElementById('node-info-content');
 
-        if (!infoEmpty || !infoContent) return;
+    if (!infoEmpty || !infoContent) return;
 
-        if (selectedNodeIds.length === 1) {
-            const nodeId = selectedNodeIds[0];
-            const selectedNode = KeenStore.currentNodes.find(n => String(n.id) === String(nodeId) || n.value === nodeId);
-            if (selectedNode) {
-                handleNodeSelection(selectedNode);
-            }
-        } else if (selectedNodeIds.length > 1) {
-            // Multi-node select
-            infoEmpty.style.display = 'none';
-            infoContent.style.display = 'flex';
+    if (selectedNodeIds.length === 1) {
+        const nodeId = selectedNodeIds[0];
+        const selectedNode = KeenStore.currentNodes.find(n => String(n.id) === String(nodeId) || n.value === nodeId);
+        if (selectedNode) {
+            handleNodeSelection(selectedNode);
+        }
+    } else if (selectedNodeIds.length > 1) {
+        // Multi-node select
+        infoEmpty.style.display = 'none';
+        infoContent.style.display = 'flex';
 
-            let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
-            html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Nodes (${selectedNodeIds.length}):</strong></div>`;
-            html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
-            selectedNodeIds.forEach(id => {
-                const node = KeenStore.currentNodes.find(n => String(n.id) === String(id) || n.value === id);
-                const val = node ? (node.label || node.value) : id;
-                html += `<span class="badge">${val}</span>`;
-            });
-            html += `</div>`;
-            html += `<button id="btn-merge-selected-nodes" class="btn-primary" style="margin-bottom: 12px;"><i class="fa-solid fa-code-merge"></i> Merge Nodes</button>`;
+        let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
+        html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Nodes (${selectedNodeIds.length}):</strong></div>`;
+        html += `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;">`;
+        selectedNodeIds.forEach(id => {
+            const node = KeenStore.currentNodes.find(n => String(n.id) === String(id) || n.value === id);
+            const val = node ? (node.label || node.value) : id;
+            html += `<span class="badge">${val}</span>`;
+        });
+        html += `</div>`;
+        html += `<button id="btn-merge-selected-nodes" class="btn-primary" style="margin-bottom: 12px;"><i class="fa-solid fa-code-merge"></i> Merge Nodes</button>`;
 
-            if (selectedEdgeIds.length > 0) {
-                html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
-                html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
-                selectedEdgeIds.forEach(id => {
-                    const edge = KeenStore.currentEdges.find(e => String(e.id) === String(id));
-                    const rel = edge ? edge.relationship : id;
-                    html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
-                });
-                html += `</div>`;
-            }
-
-            infoContent.innerHTML = html;
-
-            const mergeBtn = document.getElementById('btn-merge-selected-nodes');
-            if (mergeBtn) mergeBtn.onclick = () => openMergeNodesModal(selectedNodeIds);
-
-            // Auto-switch to Info tab
-            const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
-            if (infoTab) infoTab.classList.add('active');
-            const infoPanel = document.getElementById('tab-node-info');
-            if (infoPanel) infoPanel.classList.add('active');
-
-            moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple nodes selected --</option>';
-            moduleDetails.classList.add('hidden');
-        } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 1) {
-            const edgeId = selectedEdgeIds[0];
-            const selectedEdge = KeenStore.currentEdges.find(e => String(e.id) === String(edgeId));
-            if (selectedEdge) {
-                populateNodeInfo(selectedEdge, true);
-                moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
-                moduleDetails.classList.add('hidden');
-            }
-        } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length > 1) {
-            // Multi-edge select
-            infoEmpty.style.display = 'none';
-            infoContent.style.display = 'flex';
-
-            let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
+        if (selectedEdgeIds.length > 0) {
             html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
             html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
             selectedEdgeIds.forEach(id => {
@@ -690,24 +660,61 @@ export function renderSelectionSummary(selectedNodeIds, selectedEdgeIds) {
                 html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
             });
             html += `</div>`;
+        }
 
-            infoContent.innerHTML = html;
+        infoContent.innerHTML = html;
 
-            // Auto-switch to Info tab
-            const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
-            if (infoTab) infoTab.classList.add('active');
-            const infoPanel = document.getElementById('tab-node-info');
-            if (infoPanel) infoPanel.classList.add('active');
+        const mergeBtn = document.getElementById('btn-merge-selected-nodes');
+        if (mergeBtn) mergeBtn.onclick = () => openMergeNodesModal(selectedNodeIds);
 
-            moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple edges selected --</option>';
-            moduleDetails.classList.add('hidden');
-        } else {
-            // totalSelected === 0
-            infoEmpty.style.display = 'flex';
-            infoContent.style.display = 'none';
+        // Auto-switch to Info tab
+        const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
+        if (infoTab) infoTab.classList.add('active');
+        const infoPanel = document.getElementById('tab-node-info');
+        if (infoPanel) infoPanel.classList.add('active');
+
+        moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple nodes selected --</option>';
+        moduleDetails.classList.add('hidden');
+    } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 1) {
+        const edgeId = selectedEdgeIds[0];
+        const selectedEdge = KeenStore.currentEdges.find(e => String(e.id) === String(edgeId));
+        if (selectedEdge) {
+            populateNodeInfo(selectedEdge, true);
             moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
             moduleDetails.classList.add('hidden');
         }
+    } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length > 1) {
+        // Multi-edge select
+        infoEmpty.style.display = 'none';
+        infoContent.style.display = 'flex';
+
+        let html = `<div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Selection Summary</div>`;
+        html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
+        html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
+        selectedEdgeIds.forEach(id => {
+            const edge = KeenStore.currentEdges.find(e => String(e.id) === String(id));
+            const rel = edge ? edge.relationship : id;
+            html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
+        });
+        html += `</div>`;
+
+        infoContent.innerHTML = html;
+
+        // Auto-switch to Info tab
+        const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
+        if (infoTab) infoTab.classList.add('active');
+        const infoPanel = document.getElementById('tab-node-info');
+        if (infoPanel) infoPanel.classList.add('active');
+
+        moduleSelect.innerHTML = '<option value="" disabled selected>-- Multiple edges selected --</option>';
+        moduleDetails.classList.add('hidden');
+    } else {
+        // totalSelected === 0
+        infoEmpty.style.display = 'flex';
+        infoContent.style.display = 'none';
+        moduleSelect.innerHTML = '<option value="" disabled selected>-- Select a node to run modules --</option>';
+        moduleDetails.classList.add('hidden');
+    }
 }
 
 export function populateNodeInfo(item, isEdge = false) {
@@ -764,9 +771,22 @@ export function populateNodeInfo(item, isEdge = false) {
             } else {
                 const displayValue = item.label || item.value;
                 const platformBadge = item.platform ? `<span class="badge" style="margin-left: 6px; background: rgba(171, 71, 188, 0.15); color: #ab47bc; border-color: rgba(171, 71, 188, 0.3);">${item.platform}</span>` : '';
+
+                let mediaHtml = '';
+                if (item.type === 'media' && KeenStore.activeWorkspace) {
+                    const imageUrl = mediaImageUrl(item);
+                    const fileUrl = `${KeenAPI.API_BASE}/workspaces/${KeenStore.activeWorkspace}/media/${item.id}/file`;
+                    if (imageUrl) {
+                        mediaHtml = `<img src="${imageUrl}" alt="media preview" style="max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 12px;">`;
+                    } else {
+                        mediaHtml = `<a href="${fileUrl}" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 6px; margin-bottom: 12px; text-decoration: none;"><i class="fa-solid fa-download"></i> Download attachment</a>`;
+                    }
+                }
+
                 infoContent.innerHTML = `
                     <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${displayValue}</div>
                     <div style="margin-bottom: 16px;"><span class="badge">${item.type}</span>${platformBadge}${item.timestamp ? `<span class="badge" style="margin-left: 6px;">${item.timestamp}</span>` : ''}</div>
+                    ${mediaHtml}
                     ${metadataHtml}
                 `;
             }
