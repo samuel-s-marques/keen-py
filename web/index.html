@@ -16,8 +16,16 @@
     <!-- Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- vis-network -->
+    <!-- vis-network (default graph renderer) -->
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+    <!-- Cytoscape.js (opt-in graph renderer) -->
+    <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+    <script src="https://unpkg.com/layout-base@2.0.1/layout-base.js"></script>
+    <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
+    <script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
+    <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+    <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
 
     <!-- Markdown renderer -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -121,6 +129,12 @@
                                     class="fa-solid fa-sitemap"></i></button>
                             <button id="btn-layout-circle" class="graph-btn" title="Circular Layout"><i
                                     class="fa-solid fa-circle-notch"></i></button>
+                            <button id="btn-layout-concentric" class="graph-btn"
+                                title="Concentric Layout (Cytoscape engine only)"><i
+                                    class="fa-solid fa-bullseye"></i></button>
+                            <button id="btn-group-by-type" class="graph-btn"
+                                title="Group nodes by type (Cytoscape engine only)"><i
+                                    class="fa-solid fa-layer-group"></i></button>
                             <div class="toolbar-divider"></div>
                             <button id="btn-add-node" class="graph-btn" title="Add New Node"
                                 style="color: var(--accent-cyan);"><i class="fa-solid fa-plus"></i></button>
@@ -135,6 +149,11 @@
                             <div class="toolbar-divider"></div>
                             <button id="btn-delete-selected" class="graph-btn" style="color:var(--error);"
                                 title="Delete Selected Node(s)/Edge(s)"><i class="fa-solid fa-trash"></i></button>
+                            <div class="toolbar-divider"></div>
+                            <button id="btn-toggle-graph-engine" class="graph-btn graph-engine-toggle"
+                                title="Rendering engine -- Cytoscape.js is faster on large graphs; vis-network is the legacy renderer">
+                                <i class="fa-solid fa-microchip"></i> <span id="graph-engine-label">cytoscape</span>
+                            </button>
                         </div>
                         <div id="network-canvas" class="graph-container"></div>
 
@@ -1199,6 +1218,38 @@
 
                 <button id="btn-confirm-edit-edge" class="btn-primary full-width" style="margin-top: 16px;">
                     <i class="fa-solid fa-floppy-disk"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Merge Nodes Modal -->
+    <div class="modal-overlay" id="modal-merge-nodes">
+        <div class="modal" style="max-width: 520px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-code-merge"></i> Merge Nodes</h3>
+                <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+                    Pick the canonical node below. Every other selected node is absorbed into it: their metadata
+                    fills in any keys the canonical node is missing (the canonical node's own values always win on
+                    conflicts), all edges are re-pointed onto it, and the absorbed nodes are deleted.
+                    <strong style="color: var(--text-primary);">This cannot be undone.</strong>
+                </p>
+                <div id="merge-nodes-list"
+                    style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">
+                        <i class="fa-solid fa-eye"></i> Resulting metadata preview
+                    </label>
+                    <div id="merge-preview"
+                        style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 220px; overflow-y: auto; font-family: var(--font-mono); font-size: 0.78rem; white-space: pre-wrap;">
+                    </div>
+                </div>
+                <button id="btn-confirm-merge-nodes" class="btn-primary full-width" style="margin-top: 16px;">
+                    <i class="fa-solid fa-code-merge"></i> Merge Nodes
                 </button>
             </div>
         </div>
