@@ -75,6 +75,8 @@ export function renderWorkspaces() {
                     if (KeenStore.network) KeenStore.network.destroy();
                     const exportDropdown = document.getElementById('export-dropdown');
                     if (exportDropdown) exportDropdown.style.display = 'none';
+                    const mediaImportContainer = document.getElementById('media-import-container');
+                    if (mediaImportContainer) mediaImportContainer.style.display = 'none';
                     const timelineContainer = document.getElementById('graph-timeline');
                     if (timelineContainer) timelineContainer.style.display = 'none';
                     const minimapEl = document.getElementById('graph-minimap');
@@ -116,6 +118,10 @@ export async function selectWorkspace(name) {
     const exportDropdown = document.getElementById('export-dropdown');
     if (exportDropdown) {
         exportDropdown.style.display = 'block';
+    }
+    const mediaImportContainer = document.getElementById('media-import-container');
+    if (mediaImportContainer) {
+        mediaImportContainer.style.display = 'block';
     }
 
     // Update UI active state
