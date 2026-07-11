@@ -827,6 +827,15 @@ input:focus {
     position: absolute;
     top: 16px;
     right: 16px;
+    /* Anchored from the right with no fixed width, this grows purely with
+       its buttons' content -- enough buttons (or one wide one, like the
+       text-label graph-engine-toggle) push the leftmost buttons past the
+       container's left edge, where .graph-container's overflow:hidden
+       clips them invisibly and unclickably. Cap the width and wrap instead
+       of silently overflowing off-screen. */
+    max-width: calc(100% - 32px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
     z-index: 1000;
     display: flex;
     gap: 6px;
@@ -868,6 +877,17 @@ input:focus {
     width: 1px;
     background: var(--border-color);
     margin: 2px 4px;
+}
+
+/* The graph-engine toggle carries a text label ("vis"/"cytoscape"), unlike
+   the icon-only .graph-btn siblings it's grouped with -- fixed 32px width
+   clips the label, so it needs to grow to fit its content instead. */
+.graph-btn.graph-engine-toggle {
+    width: auto;
+    padding: 0 10px;
+    gap: 6px;
+    font-size: 0.8rem;
+    white-space: nowrap;
 }
 
 /* Context Menu */
