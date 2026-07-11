@@ -33,6 +33,7 @@ class STIXNamespaces:
     DOMAIN = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa7")
     BREACH = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa8")
     DEVICE = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84fa9")
+    MEDIA = uuid.UUID("f070f381-8b38-5fdf-9730-802526e84faa")
 
 
 class NodeFactory:
@@ -144,17 +145,60 @@ class NodeFactory:
         return _build_node("url", value, stix2, misp, extra_metadata)
 
     @staticmethod
-    def location(name: str, **extra_metadata) -> dict[str, Any]:
-        """Create a location node."""
+    def location(
+        name: str,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        **extra_metadata,
+    ) -> dict[str, Any]:
+        """Create a location node.
+
+        ``latitude``/``longitude`` are optional (most existing callers only
+        have a place-name string, e.g. from a WHOIS registrant city). When
+        given, they're stored as native fields on the STIX 2.1 ``location``
+        object (which supports them directly) so anything that can plot
+        coordinates doesn't need a separate schema.
+        """
         obj_uuid = uuid.uuid5(STIXNamespaces.LOCATION, name)
-        stix2 = {
+        stix2: dict[str, Any] = {
             "type": "location",
             "id": f"location--{obj_uuid}",
             "spec_version": "2.1",
             "name": name,
         }
+        if latitude is not None:
+            stix2["latitude"] = latitude
+        if longitude is not None:
+            stix2["longitude"] = longitude
         misp = {"type": "target-location", "value": name}
         return _build_node("location", name, stix2, misp, extra_metadata)
+
+    @staticmethod
+    def media(
+        value: str,
+        media_type: str = "image",
+        original_filename: str | None = None,
+        size_bytes: int | None = None,
+        attachment_ref: str | None = None,
+        **extra_metadata,
+    ) -> dict[str, Any]:
+        """Create a media node (image/video/audio/document file)."""
+        obj_uuid = uuid.uuid5(STIXNamespaces.MEDIA, value)
+        stix2: dict[str, Any] = {
+            "type": "file",
+            "id": f"file--{obj_uuid}",
+            "spec_version": "2.1",
+            "hashes": {"SHA-256": value},
+        }
+        if original_filename:
+            stix2["name"] = original_filename
+        if size_bytes is not None:
+            stix2["size"] = size_bytes
+        misp = {"type": "attachment", "value": original_filename or value}
+        extra_metadata.setdefault("media_type", media_type)
+        if attachment_ref:
+            extra_metadata.setdefault("attachment_ref", attachment_ref)
+        return _build_node("media", value, stix2, misp, extra_metadata)
 
     @staticmethod
     def custom(
