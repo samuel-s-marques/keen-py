@@ -10,83 +10,10 @@ from rich.table import Table
 from src.core.base_module import BaseModule
 from src.core.loader import load_modules
 from src.core.managers import ConfigManager, WorkspaceManager
+from src.core.media_import import import_media_file
 from src.utils.banner import get_banner
 from src.utils.logger import set_debug_mode
 from src.utils.print_utils import error, info, success
-
-# Local-file media import (`do_media`) classifies files by extension so it
-# knows which attachments_dir() subtype to file them under; a file whose
-# extension isn't recognized still imports fine, just as a generic "document".
-_MEDIA_EXTENSIONS = {
-    "image": {
-        "jpg",
-        "jpeg",
-        "png",
-        "gif",
-        "bmp",
-        "tiff",
-        "tif",
-        "webp",
-        "heic",
-        "heif",
-    },
-    "video": {"mp4", "mov", "avi", "mkv", "webm"},
-    "audio": {"mp3", "wav", "m4a", "ogg", "flac"},
-}
-
-
-def _classify_media_extension(ext: str) -> str:
-    ext = ext.lower().lstrip(".")
-    for media_type, extensions in _MEDIA_EXTENSIONS.items():
-        if ext in extensions:
-            return media_type
-    return "document"
-
-
-def import_media_file(workspace: WorkspaceManager, path: str) -> int | None:
-    """Import a local file as a 'media' graph node, keyed on its SHA-256 hash."""
-    import hashlib
-
-    from src.core.result_builder import NodeFactory
-
-    if not os.path.isfile(path):
-        error(f"No such file: '{path}'.")
-        return None
-
-    with open(path, "rb") as f:
-        data = f.read()
-
-    sha256 = hashlib.sha256(data).hexdigest()
-    ext = os.path.splitext(path)[1].lower().lstrip(".")
-    media_type = _classify_media_extension(ext)
-
-    stored_name = f"{sha256}.{ext}" if ext else sha256
-    subtype = f"{media_type}s"
-    dest_dir = workspace.attachments_dir(subtype)
-    dest_path = os.path.join(dest_dir, stored_name)
-    if not os.path.exists(dest_path):
-        with open(dest_path, "wb") as f:
-            f.write(data)
-
-    node = NodeFactory.media(
-        sha256,
-        media_type=media_type,
-        original_filename=os.path.basename(path),
-        size_bytes=len(data),
-        attachment_ref=os.path.join(subtype, stored_name),
-    )
-    node_id = workspace.get_or_add_node(node["type"], node["value"], node["metadata"])
-    workspace.append_ledger_entry(
-        actor="operator",
-        action="media_import",
-        target_value=sha256,
-        raw_payload={
-            "original_filename": os.path.basename(path),
-            "size_bytes": len(data),
-            "media_type": media_type,
-        },
-    )
-    return node_id
 
 
 def _list_media(workspace: WorkspaceManager) -> None:
