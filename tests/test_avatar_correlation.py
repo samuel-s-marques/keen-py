@@ -8,10 +8,14 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.core.managers import ConfigManager, WorkspaceManager
+from src.core.media_import import import_media_file
 from src.core.result_builder import NodeFactory
 from src.modules.analysis.avatar_correlation import AvatarCorrelation
 
 TEST_DIR = os.path.expanduser("~/.keen_test_avatar_correlation_tmp")
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+FIXTURE_LARGE = os.path.join(FIXTURES_DIR, "81ed748d-3344-4341-94c6-4a7a0293e8c5.png")
+FIXTURE_SMALL = os.path.join(FIXTURES_DIR, "luis-menor.png")
 
 TARGET_SHA = "1" * 64
 OTHER_SHA = "2" * 64
@@ -101,6 +105,80 @@ def test_find_similar_skips_non_image_media():
 
         matches = AvatarCorrelation._find_similar(ws, TARGET_SHA, HASH_A, max_distance=64)
         assert matches == []
+    finally:
+        _teardown(ws, config)
+
+
+def test_find_similar_computes_missing_phash_on_the_fly():
+    """Regression test: a comparison target with no stored pHash yet (this
+    module was never run against it) must not be silently skipped -- its
+    pHash should be computed from the attachment bytes on the spot, not
+    treated as "no match" regardless of max_distance.
+    """
+    ws, config = _make_workspace()
+    try:
+        _seed_image_node(ws, TARGET_SHA, phash=HASH_A)
+        # OTHER_SHA has no phash in metadata and a real image file on disk --
+        # simulates a media node this module was never explicitly run on.
+        _seed_image_node(
+            ws, OTHER_SHA, phash=None, attachment_ref="images/other.png"
+        )
+        real_path = os.path.join(ws.attachments_dir(), "images/other.png")
+        os.makedirs(os.path.dirname(real_path), exist_ok=True)
+        with open(FIXTURE_SMALL, "rb") as src, open(real_path, "wb") as dst:
+            dst.write(src.read())
+
+        import imagehash
+        from PIL import Image
+
+        with Image.open(FIXTURE_SMALL) as img:
+            expected_hash = str(imagehash.phash(img))
+
+        matches = AvatarCorrelation._find_similar(
+            ws, TARGET_SHA, HASH_A, max_distance=64
+        )
+        assert len(matches) == 1
+        assert matches[0]["value"] == OTHER_SHA
+
+        # The computed hash should now be persisted on OTHER_SHA's own metadata.
+        meta = ws.get_node_metadata(OTHER_SHA)
+        assert meta is not None
+        assert meta["phash"] == expected_hash
+    finally:
+        _teardown(ws, config)
+
+
+@pytest.mark.asyncio
+async def test_execute_detects_identical_images_regardless_of_run_order():
+    """End-to-end regression test using two real, genuinely-identical fixture
+    images at different resolutions (tests/fixtures) -- reproduces the
+    reported bug: running this module against only ONE of two visually
+    identical images must still surface the match, even though the other
+    image's node was never separately correlated.
+    """
+    ws, config = _make_workspace()
+    try:
+        large_id = import_media_file(ws, FIXTURE_LARGE)
+        small_id = import_media_file(ws, FIXTURE_SMALL)
+        assert large_id is not None
+        assert small_id is not None
+        assert large_id != small_id  # distinct content hashes, same visual image
+
+        cursor = ws.conn.cursor()
+        cursor.execute("SELECT value FROM nodes WHERE id = ?", (small_id,))
+        small_sha = cursor.fetchone()["value"]
+
+        module = AvatarCorrelation()
+        module.shell = MockShell(ws, config)
+        module.set_option("TARGET", small_sha)
+        module.set_option("MAX_HAMMING_DISTANCE", "30")
+
+        await module.run()
+
+        cursor.execute(
+            "SELECT relationship FROM edge WHERE relationship = 'visually-similar-to'"
+        )
+        assert len(cursor.fetchall()) == 1
     finally:
         _teardown(ws, config)
 
