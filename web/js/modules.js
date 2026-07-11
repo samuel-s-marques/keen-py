@@ -18,6 +18,8 @@ export const NODE_TO_VALIDATOR_MAP = {
     'person': ['name', 'username'],
     'user-account': ['username'],
     'organization': ['name', 'domain'],
+    'media': ['hash'],
+    'x-hash': ['hash'],
 };
 
 // Tracks "moduleName:targetValue" strings to prevent duplicates
