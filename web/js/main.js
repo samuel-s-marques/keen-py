@@ -116,9 +116,9 @@ import { initJobsListeners } from "./jobs.js";
 import { fetchIntegrationSettings, initIntegrationsListeners } from "./integrations.js";
 import { clearWsScopeRows, collectWsScopeRows, initScopeListeners } from "./scope.js";
 import { termPrint, showSnackbar, updateSnackbar } from "./notifications.js";
-import { addPropertyField, createEditPropField, parseMetaValue } from "./modals.js";
+import { addPropertyField, createEditPropField, parseMetaValue, openCreateNodeModal } from "./modals.js";
 import { toggleTimelinePlay, updateTimelineFilter } from "./timeline.js";
-import { renderTables, getMergeSelection, drawGraph } from "./graph.js";
+import { renderTables, getMergeSelection, drawGraph, copySelectionToClipboard, pasteFromClipboard } from "./graph.js";
 import { fetchPlaybooksList, newPlaybook } from "./playbooks.js";
 import { invalidateWorldMapSize } from "./map.js";
 import { initMediaUploadListeners, uploadMediaFile } from "./media.js";
@@ -295,21 +295,7 @@ inputWsName.addEventListener('input', () => {
 });
 
 // Node Creation Modal
-document.getElementById('btn-add-node').addEventListener('click', () => {
-    if (!KeenStore.activeWorkspace) {
-        showSnackbar('Nodes', 'Please select a workspace first.', 'error', 5000);
-        return;
-    }
-    // Reset form
-    nodeTypeSelect.value = '';
-    nodeValueInput.value = '';
-    nodeMediaFileInput.value = '';
-    nodeValueGroup.style.display = '';
-    nodeMediaFileGroup.style.display = 'none';
-    nodePropsFields.innerHTML = '';
-    nodePropsContainer.style.display = 'none';
-    modalCreateNode.classList.add('active');
-});
+document.getElementById('btn-add-node').addEventListener('click', () => openCreateNodeModal());
 
 nodeTypeSelect.addEventListener('change', () => {
     const selected = nodeTypeSelect.selectedOptions[0];
@@ -689,6 +675,26 @@ window.addEventListener('keydown', (e) => {
                 KeenStore.network.updateSelectionDisplay(allNodeIds, []);
             }
         }
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+            return; // Don't intercept Ctrl+C when typing
+        }
+        const hasTextSelection = window.getSelection && window.getSelection().toString().length > 0;
+        if (hasTextSelection) return; // Let the browser copy the highlighted text normally
+        const selectedNodes = KeenStore.lastSelection ? KeenStore.lastSelection.nodes : [];
+        const selectedEdges = KeenStore.lastSelection ? KeenStore.lastSelection.edges : [];
+        if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
+        e.preventDefault();
+        copySelectionToClipboard(selectedNodes, selectedEdges);
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+            return; // Don't intercept Ctrl+V when typing -- let the normal browser paste happen
+        }
+        pasteFromClipboard();
     }
 });
 

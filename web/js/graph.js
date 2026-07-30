@@ -24,7 +24,193 @@ import {
     runModuleImmediately,
     runMagicChainingImmediately,
 } from "./modules.js";
-import { openEditEdgeModal, openEditNodeModal } from "./modals.js";
+import { openEditEdgeModal, openEditNodeModal, openCreateNodeModal } from "./modals.js";
+
+// --- Clipboard helpers ---
+
+function fallbackCopyToClipboard(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try {
+        ok = document.execCommand('copy');
+    } catch (e) {
+        ok = false;
+    }
+    document.body.removeChild(ta);
+    return ok;
+}
+
+export function copyTextToClipboard(text, label = 'Value') {
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+            .then(() => showSnackbar('Copied', `${label} copied to clipboard.`, 'success', 2000))
+            .catch(() => {
+                if (fallbackCopyToClipboard(text)) {
+                    showSnackbar('Copied', `${label} copied to clipboard.`, 'success', 2000);
+                } else {
+                    showSnackbar('Copy failed', 'Could not copy to clipboard.', 'error', 3000);
+                }
+            });
+    } else if (fallbackCopyToClipboard(text)) {
+        showSnackbar('Copied', `${label} copied to clipboard.`, 'success', 2000);
+    } else {
+        showSnackbar('Copy failed', 'Could not copy to clipboard.', 'error', 3000);
+    }
+}
+
+function edgeToText(edge) {
+    if (!edge) return '';
+    const sourceNode = KeenStore.currentNodes.find(n => n.id === edge.source_id) || { value: edge.source_id };
+    const targetNode = KeenStore.currentNodes.find(n => n.id === edge.target_id) || { value: edge.target_id };
+    return `${sourceNode.value} -[${edge.relationship}]-> ${targetNode.value}`;
+}
+
+// Stashes full node data (type/value/metadata) in the in-app clipboard so
+// Ctrl+V / "Paste Node" can recreate the node(s) -- the OS clipboard only
+// carries the plain-text value written by copyTextToClipboard, which isn't
+// enough to reconstruct a node.
+function stashNodesForPaste(nodes) {
+    KeenStore.nodeClipboard = nodes.map(n => ({
+        type: n.type,
+        value: n.value,
+        metadata: n.metadata || {},
+    }));
+}
+
+export function copyNodeToClipboard(node) {
+    if (!node) return;
+    stashNodesForPaste([node]);
+    copyTextToClipboard(node.clean_value || node.value, 'Node value');
+}
+
+export function copyEdgeToClipboard(edge) {
+    if (!edge) return;
+    // An edge needs both endpoints to recreate -- not pasteable, and stale
+    // node data in the clipboard would otherwise silently paste on Ctrl+V.
+    KeenStore.nodeClipboard = null;
+    copyTextToClipboard(edgeToText(edge), 'Edge');
+}
+
+// Copies the current node/edge selection to the clipboard. Nodes take
+// priority over edges when both are selected, matching the "nodes are the
+// primary selection" convention used elsewhere (renderSelectionSummary).
+export function copySelectionToClipboard(selectedNodeIds, selectedEdgeIds) {
+    if (selectedNodeIds && selectedNodeIds.length > 0) {
+        const nodes = selectedNodeIds
+            .map(id => KeenStore.currentNodes.find(n => String(n.id) === String(id) || n.value === id))
+            .filter(Boolean);
+        stashNodesForPaste(nodes);
+        const values = selectedNodeIds.map(id => {
+            const node = KeenStore.currentNodes.find(n => String(n.id) === String(id) || n.value === id);
+            return node ? (node.clean_value || node.value) : id;
+        });
+        copyTextToClipboard(values.join('\n'), values.length === 1 ? 'Node value' : `${values.length} node values`);
+    } else if (selectedEdgeIds && selectedEdgeIds.length > 0) {
+        KeenStore.nodeClipboard = null;
+        const values = selectedEdgeIds.map(id => {
+            const edge = KeenStore.currentEdges.find(e => String(e.id) === String(id));
+            return edge ? edgeToText(edge) : id;
+        });
+        copyTextToClipboard(values.join('\n'), values.length === 1 ? 'Edge' : `${values.length} edges`);
+    }
+}
+
+// Node values are globally unique per workspace (see get_or_add_node in
+// managers.py, which dedups by `value` alone) -- pasting a node whose value
+// already exists would otherwise silently no-op and just hand back the
+// existing id. Suffix the value so the paste actually creates a new,
+// distinguishable row instead of appearing to do nothing.
+function uniqueDuplicateValue(baseValue, existingValues) {
+    let n = 2;
+    let candidate = `${baseValue} (copy)`;
+    while (existingValues.has(candidate)) {
+        candidate = `${baseValue} (copy ${n})`;
+        n++;
+    }
+    return candidate;
+}
+
+// Ctrl+V / "Paste Node" entry point. Prefers the in-app node clipboard
+// (recreates full node data, including across workspaces); falls back to
+// whatever plain text is on the system clipboard and lets the user pick a
+// type for it via the create-node modal.
+export async function pasteFromClipboard() {
+    if (!KeenStore.activeWorkspace) {
+        showSnackbar('Paste', 'Please select a workspace first.', 'error', 4000);
+        return;
+    }
+
+    if (KeenStore.nodeClipboard && KeenStore.nodeClipboard.length > 0) {
+        const nodes = KeenStore.nodeClipboard;
+        // Sequential, not Promise.all -- pasting the same clipboard entry
+        // more than once in a row needs each iteration's synthesized value
+        // to account for the ones minted earlier in this same paste, not
+        // just what's already in KeenStore.currentNodes.
+        const existingValues = new Set(KeenStore.currentNodes.map(n => n.value));
+        let pastedCount = 0;
+        let duplicateCount = 0;
+        let failedCount = 0;
+        try {
+            for (const n of nodes) {
+                const metadata = { ...(n.metadata || {}), pasted: true };
+                let value = n.value;
+                let isDuplicate = false;
+                if (existingValues.has(value)) {
+                    value = uniqueDuplicateValue(value, existingValues);
+                    metadata.duplicate = true;
+                    metadata.duplicate_of = n.value;
+                    isDuplicate = true;
+                }
+                existingValues.add(value);
+                const res = await KeenAPI.post(`/workspaces/${KeenStore.activeWorkspace}/nodes`, {
+                    type: n.type,
+                    value,
+                    metadata,
+                });
+                if (res.ok) {
+                    pastedCount++;
+                    if (isDuplicate) duplicateCount++;
+                } else {
+                    failedCount++;
+                }
+            }
+            selectWorkspace(KeenStore.activeWorkspace);
+            const suffix = duplicateCount > 0
+                ? ` (${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''} of existing node${duplicateCount > 1 ? 's' : ''})`
+                : '';
+            if (pastedCount > 0) {
+                showSnackbar('Paste', `Pasted ${pastedCount} node(s)${suffix}.`, failedCount > 0 ? 'warning' : 'success', 3000);
+            }
+            if (failedCount > 0) {
+                showSnackbar('Paste', `Failed to paste ${failedCount} node(s).`, 'error', 4000);
+            }
+        } catch (e) {
+            showSnackbar('Paste', 'Failed to paste node(s).', 'error', 4000);
+        }
+        return;
+    }
+
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+        showSnackbar('Paste', 'Nothing to paste.', 'error', 3000);
+        return;
+    }
+    try {
+        const text = (await navigator.clipboard.readText()).trim();
+        if (!text) {
+            showSnackbar('Paste', 'Clipboard is empty.', 'error', 3000);
+            return;
+        }
+        openCreateNodeModal(text);
+    } catch (e) {
+        showSnackbar('Paste', 'Could not read clipboard. Grant clipboard permission and try again.', 'error', 4000);
+    }
+}
 
 export function renderTables() {
     const nodesSearchQuery = document.getElementById('search-nodes')?.value.toLowerCase() || '';
@@ -566,7 +752,7 @@ function drawGraphVis(nodes, edges) {
         } else if (edgeId) {
             showContextMenu(params.event.pageX, params.event.pageY, null, edgeId);
         } else {
-            contextMenu.classList.add('hidden');
+            showContextMenu(params.event.pageX, params.event.pageY, null, null);
         }
     });
 
@@ -649,7 +835,10 @@ export function renderSelectionSummary(selectedNodeIds, selectedEdgeIds) {
             html += `<span class="badge">${val}</span>`;
         });
         html += `</div>`;
-        html += `<button id="btn-merge-selected-nodes" class="btn-primary" style="margin-bottom: 12px;"><i class="fa-solid fa-code-merge"></i> Merge Nodes</button>`;
+        html += `<div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">`;
+        html += `<button id="btn-merge-selected-nodes" class="btn-primary"><i class="fa-solid fa-code-merge"></i> Merge Nodes</button>`;
+        html += `<button id="btn-copy-selected-nodes" class="btn-secondary" title="Copy node values (Ctrl+C)"><i class="fa-solid fa-copy"></i> Copy Nodes</button>`;
+        html += `</div>`;
 
         if (selectedEdgeIds.length > 0) {
             html += `<div style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Edges (${selectedEdgeIds.length}):</strong></div>`;
@@ -666,6 +855,8 @@ export function renderSelectionSummary(selectedNodeIds, selectedEdgeIds) {
 
         const mergeBtn = document.getElementById('btn-merge-selected-nodes');
         if (mergeBtn) mergeBtn.onclick = () => openMergeNodesModal(selectedNodeIds);
+        const copyNodesBtn = document.getElementById('btn-copy-selected-nodes');
+        if (copyNodesBtn) copyNodesBtn.onclick = () => copySelectionToClipboard(selectedNodeIds, []);
 
         // Auto-switch to Info tab
         const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
@@ -697,8 +888,12 @@ export function renderSelectionSummary(selectedNodeIds, selectedEdgeIds) {
             html += `<span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${rel}</span>`;
         });
         html += `</div>`;
+        html += `<button id="btn-copy-selected-edges" class="btn-secondary" style="margin-top: 12px;" title="Copy edges (Ctrl+C)"><i class="fa-solid fa-copy"></i> Copy Edges</button>`;
 
         infoContent.innerHTML = html;
+
+        const copyEdgesBtn = document.getElementById('btn-copy-selected-edges');
+        if (copyEdgesBtn) copyEdgesBtn.onclick = () => copySelectionToClipboard([], selectedEdgeIds);
 
         // Auto-switch to Info tab
         const infoTab = document.querySelector('.right-tab[data-target="tab-node-info"]');
@@ -765,7 +960,10 @@ export function populateNodeInfo(item, isEdge = false) {
                         <span style="color: var(--text-secondary); font-size: 0.9rem;"><i class="fa-solid fa-arrow-right-long"></i></span>
                         <span style="word-break: break-all;">${targetNode.value}</span>
                     </div>
-                    <div style="margin-bottom: 16px;"><span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${item.relationship}</span></div>
+                    <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span class="badge" style="background: rgba(255, 0, 255, 0.1); color: var(--accent-magenta); border-color: rgba(255, 0, 255, 0.2);">${item.relationship}</span>
+                        <button id="btn-copy-item" class="btn-secondary" title="Copy edge (Ctrl+C)"><i class="fa-solid fa-copy"></i> Copy</button>
+                    </div>
                     ${metadataHtml}
                 `;
             } else {
@@ -785,10 +983,24 @@ export function populateNodeInfo(item, isEdge = false) {
 
                 infoContent.innerHTML = `
                     <div style="font-size: 1.1rem; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">${displayValue}</div>
-                    <div style="margin-bottom: 16px;"><span class="badge">${item.type}</span>${platformBadge}${item.timestamp ? `<span class="badge" style="margin-left: 6px;">${item.timestamp}</span>` : ''}</div>
+                    <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span class="badge">${item.type}</span>${platformBadge}${item.timestamp ? `<span class="badge" style="margin-left: 6px;">${item.timestamp}</span>` : ''}
+                        <button id="btn-copy-item" class="btn-secondary" title="Copy node value (Ctrl+C)"><i class="fa-solid fa-copy"></i> Copy</button>
+                    </div>
                     ${mediaHtml}
                     ${metadataHtml}
                 `;
+            }
+
+            const copyItemBtn = document.getElementById('btn-copy-item');
+            if (copyItemBtn) {
+                copyItemBtn.onclick = () => {
+                    if (isEdge) {
+                        copyEdgeToClipboard(item);
+                    } else {
+                        copyNodeToClipboard(item);
+                    }
+                };
             }
 
             // Auto-switch to Info tab
@@ -822,6 +1034,40 @@ export function handleNodeSelection(node) {
 export function showContextMenu(x, y, node, edgeId = null) {
     contextMenuItems.innerHTML = '';
 
+    if (!node && edgeId === null) {
+        // Right-clicked empty canvas -- no node/edge under the cursor, so
+        // module-running/edit/delete don't apply. Offer canvas-level actions
+        // instead (create a node from scratch, or paste one from clipboard).
+        const addNodeItem = document.createElement('div');
+        addNodeItem.className = 'context-menu-item';
+        addNodeItem.innerHTML = `<i class="fa-solid fa-plus"></i> Add Node`;
+        addNodeItem.onclick = (e) => {
+            e.stopPropagation();
+            contextMenu.classList.add('hidden');
+            openCreateNodeModal();
+        };
+        contextMenuItems.appendChild(addNodeItem);
+
+        const hasNodeClipboard = KeenStore.nodeClipboard && KeenStore.nodeClipboard.length > 0;
+        const pasteItem = document.createElement('div');
+        pasteItem.className = 'context-menu-item';
+        const pasteLabel = hasNodeClipboard
+            ? (KeenStore.nodeClipboard.length > 1 ? `Paste ${KeenStore.nodeClipboard.length} Nodes` : 'Paste Node')
+            : 'Paste as New Node';
+        pasteItem.innerHTML = `<i class="fa-solid fa-paste"></i> ${pasteLabel}`;
+        pasteItem.onclick = (e) => {
+            e.stopPropagation();
+            contextMenu.classList.add('hidden');
+            pasteFromClipboard();
+        };
+        contextMenuItems.appendChild(pasteItem);
+
+        contextMenu.style.left = `${x}px`;
+        contextMenu.style.top = `${y}px`;
+        contextMenu.classList.remove('hidden');
+        return;
+    }
+
     if (edgeId !== null) {
         const editEdgeItem = document.createElement('div');
         editEdgeItem.className = 'context-menu-item';
@@ -832,6 +1078,17 @@ export function showContextMenu(x, y, node, edgeId = null) {
             openEditEdgeModal(edgeId);
         };
         contextMenuItems.appendChild(editEdgeItem);
+
+        const copyEdgeItem = document.createElement('div');
+        copyEdgeItem.className = 'context-menu-item';
+        copyEdgeItem.innerHTML = `<i class="fa-solid fa-copy"></i> Copy Edge`;
+        copyEdgeItem.onclick = (e) => {
+            e.stopPropagation();
+            contextMenu.classList.add('hidden');
+            const edge = KeenStore.currentEdges.find(ed => String(ed.id) === String(edgeId));
+            copyEdgeToClipboard(edge);
+        };
+        contextMenuItems.appendChild(copyEdgeItem);
 
         const deleteEdgeItem = document.createElement('div');
         deleteEdgeItem.className = 'context-menu-item';
@@ -947,6 +1204,16 @@ export function showContextMenu(x, y, node, edgeId = null) {
         openEditNodeModal(node);
     };
     contextMenuItems.appendChild(editItem);
+
+    const copyNodeItem = document.createElement('div');
+    copyNodeItem.className = 'context-menu-item';
+    copyNodeItem.innerHTML = `<i class="fa-solid fa-copy"></i> Copy Node`;
+    copyNodeItem.onclick = (e) => {
+        e.stopPropagation();
+        contextMenu.classList.add('hidden');
+        copyNodeToClipboard(node);
+    };
+    contextMenuItems.appendChild(copyNodeItem);
 
     const deleteItem = document.createElement('div');
     deleteItem.className = 'context-menu-item';

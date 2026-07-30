@@ -39,6 +39,10 @@
         edgesDataSet: null,
         currentWorkspace: null,
         lastSelection: { nodes: [], edges: [] },
+        // Full node data (type/value/metadata) for the last copied node(s) --
+        // lets Ctrl+V/"Paste Node" recreate them (including across
+        // workspaces), unlike the plain-text OS clipboard used for Ctrl+C.
+        nodeClipboard: null,
         minimap: null,
         minimapNodesDataSet: null,
         minimapEdgesDataSet: null,

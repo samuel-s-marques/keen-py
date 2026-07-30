@@ -12,7 +12,32 @@ import {
     editEdgeRelationshipInput,
     editEdgePropsFields,
     modalEditEdge,
+    modalCreateNode,
+    nodeTypeSelect,
+    nodeValueInput,
+    nodeValueGroup,
+    nodeMediaFileGroup,
+    nodeMediaFileInput,
+    nodePropsContainer,
 } from "./dom.js";
+import { showSnackbar } from "./notifications.js";
+
+// Shared by the toolbar "Add Node" button and the paste-into-empty-canvas
+// flow (Ctrl+V / context menu) so both reset the form the same way.
+export function openCreateNodeModal(prefillValue = '') {
+    if (!KeenStore.activeWorkspace) {
+        showSnackbar('Nodes', 'Please select a workspace first.', 'error', 5000);
+        return;
+    }
+    nodeTypeSelect.value = '';
+    nodeValueInput.value = prefillValue;
+    nodeMediaFileInput.value = '';
+    nodeValueGroup.style.display = '';
+    nodeMediaFileGroup.style.display = 'none';
+    nodePropsFields.innerHTML = '';
+    nodePropsContainer.style.display = 'none';
+    modalCreateNode.classList.add('active');
+}
 
 export function addPropertyField(name = '', value = '', removable = false) {
     const row = document.createElement('div');

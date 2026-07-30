@@ -268,7 +268,10 @@ function wireContextMenu() {
         showContextMenu(evt.originalEvent.pageX, evt.originalEvent.pageY, null, evt.target.data('rawId'));
     });
     cy.on('cxttap', (evt) => {
-        if (evt.target === cy) contextMenu.classList.add('hidden');
+        if (evt.target === cy) {
+            evt.originalEvent.preventDefault();
+            showContextMenu(evt.originalEvent.pageX, evt.originalEvent.pageY, null, null);
+        }
     });
     cy.on('tap', (evt) => {
         // Cytoscape fires a generic 'tap' alongside 'cxttap' for the same
