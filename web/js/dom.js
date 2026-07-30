@@ -80,6 +80,9 @@ export const ratelimitCensysRps = document.getElementById("ratelimit-censys-rps"
 export const ratelimitCrtshRps = document.getElementById("ratelimit-crtsh-rps");
 export const ratelimitHibpRps = document.getElementById("ratelimit-hibp-rps");
 export const ratelimitMalshareRps = document.getElementById("ratelimit-malshare-rps");
+export const ratelimitArchiveOrgRps = document.getElementById("ratelimit-archiveorg-rps");
+export const ratelimitIpApiRps = document.getElementById("ratelimit-ipapi-rps");
+export const ratelimitBlockstreamRps = document.getElementById("ratelimit-blockstream-rps");
 export const btnSaveRateLimits = document.getElementById("btn-save-rate-limits");
 
 // Playbooks modal

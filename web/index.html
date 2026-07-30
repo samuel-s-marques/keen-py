@@ -111,13 +111,6 @@
                                     <a href="#" data-format="json"><i class="fa-solid fa-code"></i> Raw JSON</a>
                                 </div>
                             </div>
-                            <div id="media-import-container" style="display: none;">
-                                <button class="btn-primary" id="btn-import-media" title="Import a local file as a media node"
-                                    style="padding: 8px 16px; font-size: 0.85rem; height: 36px; box-shadow: none;">
-                                    <i class="fa-solid fa-file-import"></i> Import Media
-                                </button>
-                                <input type="file" id="input-media-file" style="display: none;">
-                            </div>
                         </div>
                         <div class="tabs" style="margin-bottom: 0; border-bottom: none;">
                             <button class="tab active" data-target="tab-graph" style="padding: 10px 16px;">Graph
@@ -819,6 +812,21 @@
                         <div class="form-group" style="margin-bottom: 16px;">
                             <label for="ratelimit-malshare-rps">MalShare (req/s)</label>
                             <input type="number" id="ratelimit-malshare-rps" min="0" step="0.1" placeholder="2"
+                                style="width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label for="ratelimit-archiveorg-rps">Archive.org (req/s)</label>
+                            <input type="number" id="ratelimit-archiveorg-rps" min="0" step="0.1" placeholder="0.5"
+                                style="width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label for="ratelimit-ipapi-rps">IPapi.com (req/s)</label>
+                            <input type="number" id="ratelimit-ipapi-rps" min="0" step="0.1" placeholder="1"
+                                style="width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label for="ratelimit-blockstream-rps">Blockstream (req/s)</label>
+                            <input type="number" id="ratelimit-blockstream-rps" min="0" step="0.1" placeholder="2"
                                 style="width: 100%;">
                         </div>
 

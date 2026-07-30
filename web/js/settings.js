@@ -24,6 +24,9 @@ import {
     ratelimitCrtshRps,
     ratelimitHibpRps,
     ratelimitMalshareRps,
+    ratelimitArchiveOrgRps,
+    ratelimitIpApiRps,
+    ratelimitBlockstreamRps,
 } from "./dom.js";
 import { fetchProxies } from "./proxies.js";
 import { showSnackbar } from "./notifications.js";
@@ -135,6 +138,15 @@ export async function fetchPreferences() {
         }
         if (ratelimitMalshareRps) {
             ratelimitMalshareRps.value = prefs.rate_limit_malshare_rps || DEFAULT_RATE_LIMITS.malshare;
+        }
+        if (ratelimitArchiveOrgRps) {
+            ratelimitArchiveOrgRps.value = prefs.rate_limit_archiveorg_rps || DEFAULT_RATE_LIMITS.archiveorg;
+        }
+        if (ratelimitIpApiRps) {
+            ratelimitIpApiRps.value = prefs.rate_limit_ipapi_rps || DEFAULT_RATE_LIMITS.ipapi;
+        }
+        if (ratelimitBlockstreamRps) {
+            ratelimitBlockstreamRps.value = prefs.rate_limit_blockstream_rps || DEFAULT_RATE_LIMITS.blockstream;
         }
     }
 }

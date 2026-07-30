@@ -48,6 +48,9 @@ import {
     ratelimitCrtshRps,
     ratelimitHibpRps,
     ratelimitMalshareRps,
+    ratelimitArchiveOrgRps,
+    ratelimitIpApiRps,
+    ratelimitBlockstreamRps,
     btnSaveRateLimits,
     btnCreateWs,
     btnConfirmRenameWs,
@@ -458,6 +461,9 @@ btnSaveRateLimits.addEventListener('click', async () => {
         rate_limit_censys_rps: String(ratelimitCensysRps.value),
         rate_limit_crtsh_rps: String(ratelimitCrtshRps.value),
         rate_limit_hibp_rps: String(ratelimitHibpRps.value),
+        rate_limit_archiveorg_rps: String(ratelimitArchiveOrgRps.value),
+        rate_limit_ipapi_rps: String(ratelimitIpApiRps.value),
+        rate_limit_blockstream_rps: String(ratelimitBlockstreamRps.value),
         rate_limit_malshare_rps: String(ratelimitMalshareRps.value),
     };
     await KeenAPI.post(`/config/preferences`, payload);
